@@ -90,6 +90,54 @@ class ConvomailView
 	}
 
 	/**
+	 * The person a message is with: its sender, or for a message the user sent, its first other recipient
+	 *
+	 * @param  array<string,mixed> $message  Message (from, to, cc)
+	 * @param  string[]            $myemails The user's own addresses, lowercase
+	 * @return array{name:string,email:string}|null
+	 */
+	public static function correspondent(array $message, array $myemails)
+	{
+		$from = $message['from'][0] ?? null;
+		if ($from && !in_array(strtolower($from['email']), $myemails, true)) {
+			return $from;
+		}
+		foreach (array_merge($message['to'] ?? array(), $message['cc'] ?? array()) as $a) {
+			if (!in_array(strtolower($a['email']), $myemails, true)) {
+				return $a;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Core "new third party" form prefilled from an address, coming back to the message afterwards
+	 * (message.php, action=thirdpartycreated; core adds &socid=<new id>). A company domain gives the company name
+	 * and website; a public mail service (Gmail...) gives the person's name.
+	 *
+	 * @param  ConvomailAccount               $account Account
+	 * @param  string                         $folder  Folder
+	 * @param  int                            $uid     UID
+	 * @param  array{name:string,email:string} $person Address
+	 * @return string                                 URL
+	 */
+	public static function newThirdPartyUrl(ConvomailAccount $account, $folder, $uid, array $person)
+	{
+		$domain = strtolower((string) substr((string) strrchr($person['email'], '@'), 1));
+		$params = array('action' => 'create', 'email' => $person['email']);
+		if (ConvomailMatcher::isFreeMailDomain($domain)) {
+			$n = ConvomailMatcher::splitName($person['name'], $person['email']);
+			$params['name'] = trim($n['firstname'].' '.$n['lastname']);
+		} else {
+			$params['name'] = ConvomailMatcher::nameFromDomain($domain);
+			$params['url'] = 'https://'.preg_replace('/^(mail|smtp|email|mx)\./', '', $domain);
+		}
+		$params['backtopage'] = dol_buildpath('/convomail/message.php', 1).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid)
+			.'&action=thirdpartycreated&addr='.urlencode($person['email']).'&addrname='.urlencode($person['name']);
+		return DOL_URL_ROOT.'/societe/card.php?'.http_build_query($params);
+	}
+
+	/**
 	 * File a mailbox message on the agenda (Log to..., one-click project log, auto-filing)
 	 *
 	 * @param  DoliDB                 $db         Database
@@ -305,6 +353,26 @@ class ConvomailView
 			$h .= '<div><span class="cm-meta-label">'.$langs->trans('MailCC').'</span> '.self::addressesHtml($db, $message['cc'], $matched).'</div>';
 		}
 		$h .= '</div>';
+
+		// The person this message is with is not in Dolibarr: create the third party, or add them to the one using their domain
+		$person = self::correspondent($message, $myemails);
+		if ($person && !isset($matched[strtolower($person['email'])]) && isModEnabled('societe')) {
+			$actions = '';
+			$known = $matcher->thirdPartyForDomain((string) substr((string) strrchr($person['email'], '@'), 1), $user);
+			if ($known && $user->hasRight('societe', 'contact', 'creer')) {
+				$n = ConvomailMatcher::splitName($person['name'], $person['email']);
+				$contacturl = DOL_URL_ROOT.'/contact/card.php?'.http_build_query(array('action' => 'create', 'socid' => $known['socid'],
+					'lastname' => $n['lastname'], 'firstname' => $n['firstname'], 'email' => $person['email'], 'backtopage' => $pageurl));
+				$actions .= ' <a class="cm-btn cm-primary" href="'.dol_escape_htmltag($contacturl).'">'.img_picto('', 'contact', 'class="pictofixedwidth"').$langs->trans('ConvomailAddContactTo', dol_escape_htmltag($known['name'])).'</a>';
+			}
+			if ($user->hasRight('societe', 'creer')) {
+				$actions .= ' <a class="cm-btn'.($known ? '' : ' cm-primary').'" href="'.dol_escape_htmltag(self::newThirdPartyUrl($account, $folder, $uid, $person)).'">'.img_picto('', 'company', 'class="pictofixedwidth"').$langs->trans('ConvomailCreateThirdParty').'</a>';
+			}
+			if ($actions !== '') {
+				$h .= '<div class="cm-unknownline">'.img_picto('', 'fa-user-plus', 'class="pictofixedwidth opacitymedium"');
+				$h .= $langs->trans('ConvomailNotInDolibarr', dol_escape_htmltag($person['name'] !== '' ? $person['name'] : $person['email'])).$actions.'</div>';
+			}
+		}
 
 		// Project line
 		$h .= '<div class="cm-projectline">';

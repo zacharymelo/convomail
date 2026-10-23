@@ -303,12 +303,19 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 
 **Disconnect / delete:** deletes the account's token row, by its service key.
 
+### 6.9 Third party from an email
+1. `ConvomailView::render()` takes the correspondent (`correspondent()`: the sender, or the first other recipient of mail the user sent). If that address isn't mapped to a contact or third party, it shows `.cm-unknownline` with:
+   - **Add as contact of X**: core `contact/card.php?action=create` prefilled. Shown when `ConvomailMatcher::thirdPartyForDomain()` finds a visible third party using the domain (its email, website or a contact's address; not for free-mail domains). Needs `societe->contact->creer`;
+   - **Create third party**: core `societe/card.php?action=create` prefilled by `newThirdPartyUrl()`. Company: `nameFromDomain()` and `https://<domain>`. Free mail: the person's name. Needs `societe->creer`.
+2. Core creates the third party with all its own rules, then redirects to `backtopage` = `message.php?…&action=thirdpartycreated&addr&addrname`, adding `&socid=<new id>`. Cancel comes back without `socid`.
+3. `message.php` checks access to the third party (`restrictedArea`) and offers adding the person as a contact (`splitName()`, unless a contact has the address) and logging the email. POST `action=confirm_thirdparty` creates the contact (`Contact::create`) and calls `ConvomailView::logMessage()` with the third party and contact, then returns to the mailbox on that message.
+
 ## 7. Pages and endpoints
 
 | Path | Method | Parameters | Access | Output |
 |---|---|---|---|---|
 | `mailbox.php` | GET | `accountid, folder, role, search, searchbody, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
-| `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log, socid, projectid, contactids[], copyfiles` | same | Page |
+| `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log\|thirdpartycreated\|confirm_thirdparty, socid, projectid, contactids[], copyfiles, addr, addrname, addcontact, firstname, lastname, logit` | same | Page |
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
 | `project_emails.php` | GET | `id` | project read + private-project check + agenda read | Page |

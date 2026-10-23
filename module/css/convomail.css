@@ -83,6 +83,7 @@
 .cm-meta-label { display: inline-block; min-width: 38px; color: var(--cm-muted); }
 .cm-meta-from { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
 .cm-meta-date { margin-left: auto; color: var(--cm-muted); }
+.cm-unknownline { margin: 6px 16px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .92em; }
 .cm-projectline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 16px; }
 .cm-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 16px; }
 .cm-attachment { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--cm-border); border-radius: 4px; text-decoration: none; }

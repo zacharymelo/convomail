@@ -194,3 +194,13 @@ ConvomailOAuthRedirectUri = Redirect URL
 ConvomailOAuthRedirectUriDesc = Add this exact URL to the app's redirect URIs at Google (Credentials) or Microsoft (App registration - Authentication, platform Web).
 ConvomailRecentAddress = Recent correspondent
 ConvomailAccountsLoadError = Your mail accounts could not be loaded (%s). An administrator can disable and enable the Convomail module to repair its tables.
+
+# Third party from an email
+ConvomailNotInDolibarr = %s is not in Dolibarr.
+ConvomailCreateThirdParty = Create third party
+ConvomailAddContactTo = Add as contact of %s
+ConvomailThirdPartyCreated = %s was created
+ConvomailAddAsContact = Add as a contact
+ConvomailLogThisEmailOn = Log this email on %s
+ConvomailContactAdded = %s added as a contact.
+

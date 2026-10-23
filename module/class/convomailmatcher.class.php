@@ -174,4 +174,101 @@ class ConvomailMatcher
 		}
 		return $result;
 	}
+
+	/** Domains of public mail services: their users are people, not companies */
+	const FREE_MAIL_DOMAINS = array(
+		'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com',
+		'icloud.com', 'me.com', 'mac.com', 'aol.com', 'gmx.com', 'gmx.net', 'gmx.de', 'web.de', 'mail.com',
+		'proton.me', 'protonmail.com', 'zoho.com', 'yandex.com', 'yandex.ru', 'orange.fr', 'free.fr', 'laposte.net',
+		'sfr.fr', 'wanadoo.fr', 'hotmail.fr', 'live.fr', 'yahoo.fr', 'outlook.fr', 'libero.it', 'hotmail.co.uk', 'yahoo.co.uk',
+	);
+
+	/**
+	 * @param  string $domain Domain of an address
+	 * @return bool           True for public mail services (Gmail, Outlook.com...)
+	 */
+	public static function isFreeMailDomain($domain)
+	{
+		$domain = strtolower(trim((string) $domain));
+		return in_array($domain, self::FREE_MAIL_DOMAINS, true) || (bool) preg_match('/^(hotmail|outlook|live|yahoo|gmx)\.[a-z.]+$/', $domain);
+	}
+
+	/**
+	 * Company name guessed from a domain: "acme-hospital.co.uk" gives "Acme Hospital"
+	 *
+	 * @param  string $domain Domain
+	 * @return string
+	 */
+	public static function nameFromDomain($domain)
+	{
+		$labels = explode('.', strtolower(trim((string) $domain)));
+		$n = count($labels);
+		if ($n < 2) {
+			return ucwords(str_replace(array('-', '_'), ' ', (string) $labels[0]));
+		}
+		// "co.uk", "com.au"...: the name is the label before both
+		$secondlevel = in_array($labels[$n - 2], array('co', 'com', 'net', 'org', 'ac', 'gov', 'ne', 'or'), true) && strlen($labels[$n - 1]) === 2;
+		$label = $labels[max(0, $n - ($secondlevel && $n >= 3 ? 3 : 2))];
+		return ucwords(str_replace(array('-', '_'), ' ', $label));
+	}
+
+	/**
+	 * First name and last name from a display name, else from the address ("dana.rivera@" gives Dana / Rivera)
+	 *
+	 * @param  string $display Display name
+	 * @param  string $email   Address
+	 * @return array{firstname:string,lastname:string}
+	 */
+	public static function splitName($display, $email)
+	{
+		$display = trim(str_replace('"', '', (string) $display));
+		if ($display === '' || strpos($display, '@') !== false) {
+			$local = preg_replace('/[+].*$/', '', strstr((string) $email, '@', true) ?: (string) $email);
+			$display = ucwords(trim(preg_replace('/[._\-]+/', ' ', $local)));
+		}
+		if (strpos($display, ',') !== false) {
+			// "Rivera, Dana"
+			list($last, $first) = array_map('trim', explode(',', $display, 2));
+			return array('firstname' => $first, 'lastname' => $last);
+		}
+		$parts = preg_split('/\s+/u', $display);
+		if (count($parts) === 1) {
+			return array('firstname' => '', 'lastname' => $parts[0]);
+		}
+		$first = array_shift($parts);
+		return array('firstname' => $first, 'lastname' => implode(' ', $parts));
+	}
+
+	/**
+	 * A third party already using a domain (its email, website, or one of its contacts' addresses), among those
+	 * the user may see (sales representative restriction like core lists). Not for public mail services.
+	 *
+	 * @param  string $domain Domain
+	 * @param  User   $user   Current user
+	 * @return array{socid:int,name:string}|null
+	 */
+	public function thirdPartyForDomain($domain, User $user)
+	{
+		$domain = strtolower(trim((string) $domain));
+		if ($domain === '' || self::isFreeMailDomain($domain) || !$user->hasRight('societe', 'lire')) {
+			return null;
+		}
+		$d = $this->db->escape($this->db->escapeforlike($domain));
+		$sql = "SELECT s.rowid, s.nom FROM ".MAIN_DB_PREFIX."societe as s";
+		$sql .= " WHERE s.entity IN (".getEntity('societe').") AND s.status = 1";
+		$sql .= " AND (LOWER(s.email) LIKE '%@".$d."' OR LOWER(s.url) LIKE '%//".$d."%' OR LOWER(s.url) LIKE '%.".$d."%' OR LOWER(s.url) LIKE '".$d."%'";
+		$sql .= " OR EXISTS (SELECT 1 FROM ".MAIN_DB_PREFIX."socpeople as sp WHERE sp.fk_soc = s.rowid AND LOWER(sp.email) LIKE '%@".$d."'))";
+		if (!empty($user->socid)) {
+			$sql .= " AND s.rowid = ".((int) $user->socid);
+		} elseif (!$user->hasRight('societe', 'client', 'voir')) {
+			$sql .= " AND EXISTS (SELECT 1 FROM ".MAIN_DB_PREFIX."societe_commerciaux as sc WHERE sc.fk_soc = s.rowid AND sc.fk_user = ".((int) $user->id).")";
+		}
+		$sql .= " ORDER BY s.nom";
+		$sql .= $this->db->plimit(1);
+		$resql = $this->db->query($sql);
+		if ($resql && ($obj = $this->db->fetch_object($resql))) {
+			return array('socid' => (int) $obj->rowid, 'name' => (string) $obj->nom);
+		}
+		return null;
+	}
 }

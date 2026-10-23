@@ -65,6 +65,61 @@ if (GETPOST('cancel', 'alpha')) {
 	exit;
 }
 
+// Back from core's "new third party" form (see ConvomailView::newThirdPartyUrl()): add the person as a contact, log the email
+$newsocid = GETPOSTINT('socid');
+$addr = trim(GETPOST('addr', 'alphanohtml'));
+if (in_array($action, array('thirdpartycreated', 'confirm_thirdparty'), true)) {
+	if ($newsocid <= 0) {
+		// Form cancelled
+		$client->close();
+		header('Location: '.$selfurl);
+		exit;
+	}
+	restrictedArea($user, 'societe', $newsocid, '&societe', '', 'fk_soc', 'rowid');
+}
+
+if ($action == 'confirm_thirdparty') {
+	$contactids = array();
+	$error = 0;
+	if (GETPOSTINT('addcontact') && $user->hasRight('societe', 'contact', 'creer') && isValidEmail($addr)) {
+		$contact = new Contact($db);
+		$contact->socid = $newsocid;
+		$contact->lastname = GETPOST('lastname', 'alphanohtml');
+		$contact->firstname = GETPOST('firstname', 'alphanohtml');
+		$contact->email = $addr;
+		$contact->statut = 1;
+		$contact->priv = 0;
+		if ($contact->lastname === '') {
+			$contact->lastname = $addr;
+		}
+		if ($contact->create($user) > 0) {
+			$contactids[] = (int) $contact->id;
+		} else {
+			$error++;
+			setEventMessages($contact->error, $contact->errors, 'errors');
+		}
+	}
+	if (!$error && GETPOSTINT('logit')) {
+		$message = $client->fetchMessage($folder, $uid, false);
+		if ($message !== false) {
+			$eventid = ConvomailView::logMessage($db, $user, $account, $client, $folder, $uid, $message, $newsocid, 0, $contactids, true);
+			if ($eventid < 0) {
+				$error++;
+				setEventMessages(ConvomailView::$error, null, 'errors');
+			} elseif ($eventid > 0) {
+				setEventMessages($langs->trans('ConvomailLoggedOk'), null, 'mesgs');
+			}
+		}
+	}
+	if (!$error && !empty($contactids)) {
+		setEventMessages($langs->trans('ConvomailContactAdded', $addr), null, 'mesgs');
+	}
+	$client->close();
+	// Back to the mailbox, on this message
+	header('Location: '.$listurl.'&uid='.((int) $uid));
+	exit;
+}
+
 if ($action == 'confirm_log') {
 	$message = $client->fetchMessage($folder, $uid, false);
 	if ($message !== false) {
@@ -93,6 +148,40 @@ llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convom
 
 print '<div class="cm-page">';
 print '<a class="cm-back" href="'.dol_escape_htmltag($listurl).'">'.img_picto('', 'fa-arrow-left', 'class="pictofixedwidth"').$langs->trans('BackToList').'</a>';
+
+// After creating a third party from this email: offer the contact and the log
+if ($action == 'thirdpartycreated') {
+	$soc = new Societe($db);
+	if ($soc->fetch($newsocid) > 0) {
+		$message = $client->fetchMessage($folder, $uid, false);
+		$matcher = new ConvomailMatcher($db);
+		$existing = isValidEmail($addr) ? $matcher->mapEmails(array($addr)) : array();
+		$hascontact = !empty($existing[strtolower($addr)]['contactid']);
+		$logged = ($message !== false) && !empty($matcher->loggedEvents(array(ConvomailView::msgid($account, $folder, $uid, $message))));
+		$name = ConvomailMatcher::splitName(GETPOST('addrname', 'alphanohtml'), $addr);
+
+		print load_fiche_titre($langs->trans('ConvomailThirdPartyCreated', $soc->getNomUrl(1)), '', 'company');
+		print '<form method="POST" action="'.dol_escape_htmltag($selfurl).'">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="action" value="confirm_thirdparty">';
+		print '<input type="hidden" name="socid" value="'.((int) $soc->id).'">';
+		print '<input type="hidden" name="addr" value="'.dol_escape_htmltag($addr).'">';
+		print '<table class="border centpercent tableforfieldcreate">';
+		if (isValidEmail($addr) && !$hascontact && $user->hasRight('societe', 'contact', 'creer')) {
+			print '<tr><td class="titlefieldcreate"><label><input type="checkbox" name="addcontact" value="1" checked> '.$langs->trans('ConvomailAddAsContact').'</label></td><td>';
+			print '<input type="text" name="firstname" class="minwidth150" placeholder="'.dol_escape_htmltag($langs->trans('Firstname')).'" value="'.dol_escape_htmltag($name['firstname']).'"> ';
+			print '<input type="text" name="lastname" class="minwidth150" placeholder="'.dol_escape_htmltag($langs->trans('Lastname')).'" value="'.dol_escape_htmltag($name['lastname']).'"> ';
+			print '<span class="opacitymedium">'.dol_escape_htmltag($addr).'</span></td></tr>';
+		}
+		if ($message !== false && !$logged) {
+			print '<tr><td class="titlefieldcreate" colspan="2"><label><input type="checkbox" name="logit" value="1" checked> '.$langs->trans('ConvomailLogThisEmailOn', dol_escape_htmltag($soc->name)).'</label></td></tr>';
+		}
+		print '</table>';
+		print '<div class="center"><input type="submit" class="button button-save" value="'.dol_escape_htmltag($langs->trans('Save')).'"> ';
+		print '<a class="button button-cancel" href="'.dol_escape_htmltag($selfurl).'">'.$langs->trans('Cancel').'</a></div>';
+		print '</form><br>';
+	}
+}
 
 // Full "Log to..." form: third party, contacts and project pickers
 if ($action == 'log') {
