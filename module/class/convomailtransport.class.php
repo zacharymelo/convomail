@@ -162,6 +162,8 @@ class ConvomailTransport
 			return -1;
 		}
 
+		$this->dedupePastedImages($mailfile);
+
 		$result = $mailfile->sendfile();
 
 		$rawmime = '';
@@ -194,6 +196,45 @@ class ConvomailTransport
 		$this->copyToSent($account, $rawmime);
 
 		return 1;
+	}
+
+	/**
+	 * Core CMailFile (swiftmailer mode) turns each pasted image into two embedded copies plus a separate
+	 * attachment. Keep the embedded copy the HTML points to and drop the others (see UPSTREAM.md).
+	 *
+	 * @param  CMailFile $mailfile Built message, not sent yet
+	 * @return void
+	 */
+	private function dedupePastedImages($mailfile)
+	{
+		// @phan-suppress-next-line PhanUndeclaredProperty
+		if (empty($mailfile->html_images) || !isset($mailfile->message) || !($mailfile->message instanceof Swift_Message)) {
+			return;
+		}
+		$pasted = array();
+		foreach ($mailfile->html_images as $img) {
+			if (!empty($img['type']) && $img['type'] === 'cidfromdata' && !empty($img['name'])) {
+				$pasted[$img['name']] = true;
+			}
+		}
+		if (empty($pasted)) {
+			return;
+		}
+		$kept = array();
+		$embedded = array();
+		foreach ($mailfile->message->getChildren() as $child) {
+			$name = method_exists($child, 'getFilename') ? (string) $child->getFilename() : '';
+			if ($child instanceof Swift_EmbeddedFile && isset($pasted[$name])) {
+				if (isset($embedded[$name])) {
+					continue;	// second embedded copy, not referenced by the HTML
+				}
+				$embedded[$name] = true;
+			} elseif ($child instanceof Swift_Attachment && isset($pasted[$name])) {
+				continue;	// same image again as a plain attachment
+			}
+			$kept[] = $child;
+		}
+		$mailfile->message->setChildren($kept);
 	}
 
 	/**
@@ -265,6 +306,8 @@ class ConvomailTransport
 			'MAIN_MAIL_EMAIL_TLS_'.$ctx        => ($account->smtp_encryption === 'ssl' ? 1 : 0),
 			'MAIN_MAIL_EMAIL_STARTTLS_'.$ctx   => ($account->smtp_encryption === 'tls' ? 1 : 0),
 			'MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_'.$ctx => getDolGlobalInt('CONVOMAIL_ALLOW_SELF_SIGNED'),
+			// Pasted images (src="data:...") become inline attachments; many mail apps do not show data: images
+			'MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA' => 1,
 		);
 
 		$saved = array();

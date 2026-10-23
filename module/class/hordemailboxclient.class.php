@@ -323,8 +323,21 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 		}
 
+		$references = '';
+		$inreplyto = trim((string) $envelope->in_reply_to, " <>");
+		$refstext = (string) $data->getHeaders('refs');
+		if ($refstext !== '' && preg_match('/^References:[ \t]*(.*(?:\r?\n[ \t]+.*)*)/mi', $refstext, $m)) {
+			$references = trim(preg_replace('/\s+/', ' ', $m[1]));
+		}
+		// Some servers leave In-Reply-To out of ENVELOPE: read it from the header
+		if ($inreplyto === '' && $refstext !== '' && preg_match('/^In-Reply-To:[ \t]*<?([^>\s]+)>?/mi', $refstext, $m)) {
+			$inreplyto = $m[1];
+		}
+
 		return array(
 			'uid'             => (int) $uid,
+			'references'      => $references,
+			'snippet'         => '',
 			'msgid'           => trim((string) $envelope->message_id, " <>"),
 			'subject'         => (string) $envelope->subject,
 			'date'            => $date,
@@ -332,7 +345,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			'to'              => self::addresses($envelope->to),
 			'cc'              => self::addresses($envelope->cc),
 			'reply_to'        => self::addresses($envelope->reply_to),
-			'in_reply_to'     => trim((string) $envelope->in_reply_to, " <>"),
+			'in_reply_to'     => $inreplyto,
 			'seen'            => in_array('\\seen', $flags, true),
 			'answered'        => in_array('\\answered', $flags, true),
 			'flagged'         => in_array('\\flagged', $flags, true),
@@ -370,12 +383,22 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$fetchquery->flags();
 				$fetchquery->size();
 				$fetchquery->structure();
+				$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
 				$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($pageuids)));
+				$textparts = array();	// uid => array(part id, Horde_Mime_Part)
 				foreach ($pageuids as $uid) {
 					$data = $fetched[$uid];
 					if ($data) {
 						$messages[] = self::summary($uid, $data);
+						$found = self::firstTextPart($data->getStructure());
+						if ($found) {
+							$textparts[$uid] = $found;
+						}
 					}
+				}
+				$snippets = $this->snippets($folder, $textparts);
+				foreach ($messages as $i => $m) {
+					$messages[$i]['snippet'] = $snippets[$m['uid']] ?? '';
 				}
 			}
 
@@ -417,6 +440,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$message['references'] = '';
 			if (preg_match('/^References:[ \t]*(.*(?:\r?\n[ \t]+.*)*)/mi', $headertext, $m)) {
 				$message['references'] = trim(preg_replace('/\s+/', ' ', $m[1]));
+			}
+			if ($message['in_reply_to'] === '' && preg_match('/^In-Reply-To:[ \t]*<?([^>\s]+)>?/mi', $headertext, $m)) {
+				$message['in_reply_to'] = $m[1];
 			}
 
 			$message['parts'] = array();
@@ -512,6 +538,185 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$this->error = $e->getMessage();
 			return false;
 		}
+	}
+
+	/**
+	 * First displayable text part of a structure: text/plain preferred, else text/html
+	 *
+	 * @param  Horde_Mime_Part|null $structure Structure
+	 * @return array{0:string,1:Horde_Mime_Part}|null
+	 */
+	private static function firstTextPart($structure)
+	{
+		if (!($structure instanceof Horde_Mime_Part)) {
+			return null;
+		}
+		$html = null;
+		foreach ($structure->contentTypeMap() as $id => $type) {
+			$part = $structure->getPart($id);
+			if (!$part || $part->getDisposition() === 'attachment') {
+				continue;
+			}
+			if ($type === 'text/plain') {
+				return array((string) $id, $part);
+			}
+			if ($type === 'text/html' && $html === null) {
+				$html = array((string) $id, $part);
+			}
+		}
+		return $html;
+	}
+
+	/**
+	 * Short previews of a page of messages: one partial fetch per distinct part id
+	 *
+	 * @param  string                                   $folder    Folder
+	 * @param  array<int,array{0:string,1:Horde_Mime_Part}> $textparts uid => first text part
+	 * @return array<int,string>                        uid => snippet
+	 */
+	private function snippets($folder, array $textparts)
+	{
+		$byid = array();
+		foreach ($textparts as $uid => $found) {
+			$byid[$found[0]][] = $uid;
+		}
+		$out = array();
+		try {
+			$imap = $this->connect();
+			foreach ($byid as $partid => $uids) {
+				$query = new Horde_Imap_Client_Fetch_Query();
+				$query->bodyPart($partid, array('peek' => true, 'start' => 0, 'length' => 1200));
+				$fetched = $imap->fetch($folder, $query, array('ids' => new Horde_Imap_Client_Ids($uids)));
+
+				// Some servers return nothing for a partial fetch: then fetch small parts whole
+				$retry = array();
+				foreach ($uids as $uid) {
+					$data = $fetched[$uid];
+					if ((!$data || (string) $data->getBodyPart($partid) === '') && $textparts[$uid][1]->getBytes(true) < 65536) {
+						$retry[] = $uid;
+					}
+				}
+				$full = array();
+				if (!empty($retry)) {
+					$fullquery = new Horde_Imap_Client_Fetch_Query();
+					$fullquery->bodyPart($partid, array('peek' => true));
+					$full = $imap->fetch($folder, $fullquery, array('ids' => new Horde_Imap_Client_Ids($retry)));
+				}
+
+				foreach ($uids as $uid) {
+					$data = in_array($uid, $retry, true) ? $full[$uid] : $fetched[$uid];
+					if (!$data) {
+						continue;
+					}
+					$part = clone $textparts[$uid][1];
+					$raw = substr((string) $data->getBodyPart($partid), 0, 1200);
+					// A cut base64 block must end on a 4-character boundary to decode. Horde has no getter
+					// for the transfer encoding; base64 is only its alphabet and line breaks, text has spaces.
+					if (preg_match('/^[A-Za-z0-9+\/=\r\n]+$/', $raw) && strlen($raw) > 40) {
+						$raw = preg_replace('/[^A-Za-z0-9+\/=]/', '', $raw);
+						$raw = substr($raw, 0, intdiv(strlen($raw), 4) * 4);
+					}
+					$part->setContents($raw);
+					$text = (string) $part->getContents();
+					$charset = strtolower((string) $part->getCharset());
+					if ($charset !== '' && $charset !== 'utf-8' && $charset !== 'us-ascii') {
+						$converted = Horde_String::convertCharset($text, $charset, 'UTF-8');
+						$text = is_string($converted) ? $converted : $text;
+					}
+					if (!mb_check_encoding($text, 'UTF-8')) {
+						$text = mb_convert_encoding($text, 'UTF-8', 'ISO-8859-1');
+					}
+					if ($part->getSubType() === 'html') {
+						$text = preg_replace('#<(style|script|head)[^>]*>.*?</\1>#is', ' ', $text);
+						$text = html_entity_decode(strip_tags(preg_replace('#<br\s*/?>|</p>#i', "\n", $text)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+					}
+					// Drop quoted lines and "On ... wrote:" lines, then squeeze whitespace
+					$lines = array();
+					foreach (preg_split('/\r?\n/', $text) as $line) {
+						$line = trim($line);
+						if ($line === '' || $line[0] === '>' || preg_match('/wrote:$/i', $line)) {
+							continue;
+						}
+						$lines[] = $line;
+					}
+					$out[$uid] = dol_trunc(trim(preg_replace('/\s+/u', ' ', implode(' ', $lines))), 160, 'right', 'UTF-8', 1);
+				}
+			}
+		} catch (Exception $e) {
+			// Previews are optional
+		}
+		return $out;
+	}
+
+	/**
+	 * @param  string $folder Source folder
+	 * @param  int[]  $uids   UIDs
+	 * @param  string $dest   Destination folder
+	 * @return bool
+	 */
+	public function moveMessages($folder, array $uids, $dest)
+	{
+		$uids = array_values(array_filter(array_map('intval', $uids)));
+		if (empty($uids) || $dest === '' || $dest === $folder) {
+			return !empty($uids);
+		}
+		try {
+			$imap = $this->connect();
+			$imap->copy($folder, $dest, array('ids' => new Horde_Imap_Client_Ids($uids), 'move' => true));
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @param  string $flag   IMAP flag, for example \Flagged or \Seen
+	 * @param  bool   $on     Set or clear
+	 * @return bool
+	 */
+	public function setFlag($folder, array $uids, $flag, $on)
+	{
+		$uids = array_values(array_filter(array_map('intval', $uids)));
+		if (empty($uids)) {
+			return false;
+		}
+		try {
+			$imap = $this->connect();
+			$imap->store($folder, array(
+				'ids' => new Horde_Imap_Client_Ids($uids),
+				($on ? 'add' : 'remove') => array($flag),
+			));
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Folder with a role (trash, archive, sent...), created under $createName if the server has none
+	 *
+	 * @param  string $role       Role
+	 * @param  string $createName Name to create when missing ('' = do not create)
+	 * @return string             Folder name, '' if none
+	 */
+	public function findFolderByRole($role, $createName = '')
+	{
+		$folders = $this->listFolders();
+		if ($folders !== false) {
+			foreach ($folders as $f) {
+				if ($f['role'] === $role) {
+					return $f['name'];
+				}
+			}
+		}
+		if ($createName !== '' && $this->createFolder($createName)) {
+			return $createName;
+		}
+		return '';
 	}
 
 	/**

@@ -109,6 +109,18 @@ class ConvomailMessage extends CommonObject
 	}
 
 	/**
+	 * Number of email threads of a project (badge of the project Emails tab)
+	 *
+	 * @param  int $projectid Project id
+	 * @return int
+	 */
+	public function countForProject($projectid)
+	{
+		dol_include_once('/convomail/class/convomailview.class.php');
+		return count(ConvomailView::projectThreads($this->db, (int) $projectid));
+	}
+
+	/**
 	 * Load the row of an open-tracking key. Not filtered by entity: the key is random and
 	 * comes from a public URL, where the entity is not known yet.
 	 *

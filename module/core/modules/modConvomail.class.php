@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.3.0';
+		$this->version = '0.4.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -55,7 +55,7 @@ class modConvomail extends DolibarrModules
 		$this->config_page_url = array("setup.php@convomail");
 
 		$this->hidden = false;
-		$this->depends = array('modSociete', 'modAgenda');
+		$this->depends = array('modSociete', 'modAgenda', 'modFckeditor');
 		$this->requiredby = array();
 		$this->conflictwith = array();
 		$this->langfiles = array("convomail@convomail");
@@ -64,11 +64,17 @@ class modConvomail extends DolibarrModules
 		$this->warnings_activation = array();
 		$this->warnings_activation_ext = array();
 
-		$this->const = array();
+		// On by default; created when the module is enabled so the setup switches show the real state
+		$this->const = array(
+			0 => array('CONVOMAIL_AUTOFILE_REPLIES', 'chaine', '1', 'File replies to project threads automatically', 0, 'current', 0),
+			1 => array('CONVOMAIL_ADD_SIGNATURE', 'chaine', '1', 'Add the user signature when composing', 0, 'current', 0),
+		);
 
 		// Mail accounts tab on the user card
 		$this->tabs = array();
 		$this->tabs[] = array('data' => 'user:+convomail:MailAccounts,ConvomailAccount,/convomail/class/convomailaccount.class.php,countForUser:convomail@convomail:$user->hasRight(\'convomail\', \'account\', \'read\'):/convomail/user_accounts.php?id=__ID__');
+		// Emails tab on the project card: the project's email threads
+		$this->tabs[] = array('data' => 'project:+convomail_emails:ProjectEmails,ConvomailMessage,/convomail/class/convomailmessage.class.php,countForProject:convomail@convomail:$user->hasRight(\'convomail\', \'account\', \'read\'):/convomail/project_emails.php?id=__ID__');
 		// Tab in Home > Setup > Emails. Shown only once core calls complete_head_from_modules(..., 'email_admin') in add mode:
 		// see patches/dolibarr-email-admin-module-tabs.patch (proposed upstream). Without it, the setup page is reached from the module list.
 		$this->tabs[] = array('data' => 'email_admin:+convomail:ConvomailEmailTab:convomail@convomail:$user->admin:/convomail/admin/setup.php');

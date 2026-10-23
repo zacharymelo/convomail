@@ -179,3 +179,81 @@ function convomail_format_addresses(array $list, $withemail = false)
 	}
 	return implode(', ', $out);
 }
+
+/**
+ * Replace pasted images (src="data:...") by a short [image] text, for copies kept in the agenda
+ *
+ * @param  string $html HTML
+ * @return string
+ */
+function convomail_strip_data_images($html)
+{
+	return preg_replace_callback('#<img\b[^>]*\bsrc\s*=\s*["\']data:[^"\']*["\'][^>]*>#i', function ($m) {
+		return preg_match('#\balt\s*=\s*["\']([^"\']+)["\']#i', $m[0], $a) ? '['.$a[1].']' : '[image]';
+	}, (string) $html);
+}
+
+/**
+ * People to suggest as recipients for a project: its external contacts, then its third party's contacts
+ *
+ * @param  DoliDB $db        Database
+ * @param  int    $projectid Project id
+ * @return array<int,array{name:string,email:string,role:string}>
+ */
+function convomail_project_contacts($db, $projectid)
+{
+	global $langs;
+	require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
+
+	$out = array();
+	$project = new Project($db);
+	if ($projectid <= 0 || $project->fetch($projectid) <= 0) {
+		return $out;
+	}
+	foreach ((array) $project->liste_contact(-1, 'external') as $c) {
+		if (!empty($c['email']) && isValidEmail($c['email'])) {
+			$out[strtolower($c['email'])] = array('name' => trim($c['firstname'].' '.$c['lastname']), 'email' => $c['email'], 'role' => (string) $c['libelle']);
+		}
+	}
+	if ($project->socid > 0) {
+		$sql = "SELECT sp.firstname, sp.lastname, sp.email, sp.poste FROM ".MAIN_DB_PREFIX."socpeople as sp";
+		$sql .= " WHERE sp.fk_soc = ".((int) $project->socid)." AND sp.statut = 1 AND sp.email <> ''";
+		$sql .= " AND sp.entity IN (".getEntity('contact').")";
+		$sql .= " ORDER BY sp.lastname, sp.firstname";
+		$resql = $db->query($sql);
+		if ($resql) {
+			while ($obj = $db->fetch_object($resql)) {
+				$key = strtolower($obj->email);
+				if (!isset($out[$key]) && isValidEmail($obj->email)) {
+					$out[$key] = array('name' => trim($obj->firstname.' '.$obj->lastname), 'email' => $obj->email, 'role' => (string) $obj->poste);
+				}
+			}
+		}
+	}
+	return array_values($out);
+}
+
+/**
+ * Email templates the user may use in Convomail compose
+ *
+ * @param  DoliDB $db   Database
+ * @param  User   $user User
+ * @return array<int,string> Template id => label
+ */
+function convomail_email_templates($db, $user)
+{
+	$out = array();
+	$sql = "SELECT t.rowid, t.label, t.type_template FROM ".MAIN_DB_PREFIX."c_email_templates as t";
+	$sql .= " WHERE t.active = 1";
+	$sql .= " AND t.type_template IN ('all', 'thirdparty', 'contact', 'project', 'actioncomm')";
+	$sql .= " AND (t.private = 0 OR t.fk_user = ".((int) $user->id).")";
+	$sql .= " AND t.entity IN (".getEntity('c_email_templates').")";
+	$sql .= " ORDER BY t.position ASC, t.label ASC";
+	$resql = $db->query($sql);
+	if ($resql) {
+		while ($obj = $db->fetch_object($resql)) {
+			$out[(int) $obj->rowid] = (string) $obj->label;
+		}
+	}
+	return $out;
+}

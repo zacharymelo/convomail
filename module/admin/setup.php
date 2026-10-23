@@ -101,6 +101,14 @@ print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAllowSelfSigned').'</td
 print '<td>'.ajax_constantonoff('CONVOMAIL_ALLOW_SELF_SIGNED').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailAllowSelfSignedDesc').'</td></tr>';
 
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAutofileReplies').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_AUTOFILE_REPLIES').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailAutofileRepliesDesc').'</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAddSignature').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_ADD_SIGNATURE').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailAddSignatureDesc').'</td></tr>';
+
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailReadReceiptDefault').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_READ_RECEIPT_DEFAULT').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailReadReceiptDefaultDesc').'</td></tr>';

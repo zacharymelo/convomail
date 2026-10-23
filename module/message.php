@@ -10,9 +10,9 @@
 /**
  * \file    message.php
  * \ingroup convomail
- * \brief   One message of the mailbox: headers, safe body, attachments, reply/forward, "Log to..."
+ * \brief   One message on its own page (phones, direct links) and the full "Log to..." form
  *
- * GET parameters: accountid, folder, uid, showimages, action (log|unread)
+ * GET parameters: accountid, folder, uid, showimages, action (log)
  */
 
 $res = 0;
@@ -29,16 +29,8 @@ if (!$res) {
 	die("Include of main fails");
 }
 
-require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';
-require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
-require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
-dol_include_once('/convomail/class/convomailaccount.class.php');
-dol_include_once('/convomail/class/hordemailboxclient.class.php');
-dol_include_once('/convomail/class/convomailrenderer.class.php');
-dol_include_once('/convomail/class/convomailmatcher.class.php');
-dol_include_once('/convomail/class/convomaillogger.class.php');
-dol_include_once('/convomail/lib/convomail.lib.php');
+dol_include_once('/convomail/class/convomailview.class.php');
 
 $langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'agenda'));
 
@@ -60,111 +52,31 @@ $listurl = dol_buildpath('/convomail/mailbox.php', 1).'?accountid='.((int) $acco
 $selfurl = $_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
 
 $client = new ConvomailHordeMailboxClient($account);
-$message = $client->fetchMessage($folder, $uid, $action !== 'unread');
-if ($message === false) {
-	$client->close();
-	llxHeader('', $langs->trans('Mailbox'));
-	print '<div class="error">'.$langs->trans('ConvomailMessageNotFound').'</div>';
-	print '<a href="'.dol_escape_htmltag($listurl).'">'.$langs->trans('BackToList').'</a>';
-	llxFooter();
-	$db->close();
-	exit;
-}
-
-// Messages without a Message-ID get a stable one, so they can be logged once
-if ($message['msgid'] === '') {
-	$message['msgid'] = 'convomail-'.((int) $account->id).'-'.md5($folder.'|'.$uid.'|'.$message['date']).'@local';
-}
-
-$attachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
-$renderer = new ConvomailRenderer($client, $folder, $uid, $message, $attachmentbase);
-
-// Who is who: own addresses, known contacts and third parties
-$accountstatic = new ConvomailAccount($db);
-$myemails = array(strtolower($account->email));
-$myaccounts = $accountstatic->fetchAllForUser($user->id);
-if (is_array($myaccounts)) {
-	foreach ($myaccounts as $acc) {
-		$myemails[] = strtolower($acc->email);
-	}
-}
-$fromemail = $message['from'] ? $message['from'][0]['email'] : '';
-$outgoing = in_array($fromemail, $myemails, true);
-
-$alladdresses = array();
-foreach (array('from', 'to', 'cc') as $k) {
-	foreach ($message[$k] as $a) {
-		if (!in_array($a['email'], $myemails, true)) {
-			$alladdresses[] = $a['email'];
-		}
-	}
-}
-$matcher = new ConvomailMatcher($db);
-$matched = $matcher->mapEmails($alladdresses);
-$suggest = $matcher->matchRecipients($alladdresses);
-$logged = $matcher->loggedEvents(array($message['msgid']));
-$loggedeventid = $logged[$message['msgid']] ?? 0;
 
 
 /*
  * Actions
  */
 
-if ($action == 'unread') {
-	$client->setSeen($folder, $uid, false);
+// A posted Cancel must never log (0.3.0 bug: Cancel was a submit button of the same form)
+if (GETPOST('cancel', 'alpha')) {
 	$client->close();
-	header('Location: '.$listurl);
+	header('Location: '.$selfurl);
 	exit;
 }
 
-if ($action == 'confirm_log' && !$loggedeventid) {
-	$socid = GETPOSTINT('socid');
-	$projectid = GETPOSTINT('projectid');
-	$contactids = array_map('intval', GETPOST('contactids', 'array'));
-	$copyfiles = GETPOSTINT('copyfiles');
-
-	$files = array();
-	$tmpdir = $conf->convomail->dir_temp.'/log-'.((int) $user->id).'-'.dol_print_date(dol_now(), 'dayhourlog').'-'.mt_rand(1000, 9999);
-	if ($copyfiles) {
-		foreach ($renderer->attachments() as $att) {
-			$content = $client->fetchPart($folder, $uid, $att['id']);
-			if ($content !== false) {
-				dol_mkdir($tmpdir);
-				$name = dol_sanitizeFileName($att['name'] !== '' ? $att['name'] : 'part-'.$att['id']);
-				file_put_contents($tmpdir.'/'.$name, $content['data']);
-				$files[] = array('path' => $tmpdir.'/'.$name, 'name' => $name);
-			}
+if ($action == 'confirm_log') {
+	$message = $client->fetchMessage($folder, $uid, false);
+	if ($message !== false) {
+		$eventid = ConvomailView::logMessage($db, $user, $account, $client, $folder, $uid, $message,
+			GETPOSTINT('socid'), GETPOSTINT('projectid'), array_map('intval', GETPOST('contactids', 'array')), (bool) GETPOSTINT('copyfiles'));
+		if ($eventid > 0) {
+			setEventMessages($langs->trans('ConvomailLoggedOk'), null, 'mesgs');
+		} elseif ($eventid < 0) {
+			setEventMessages(ConvomailView::$error, null, 'errors');
 		}
 	}
-
-	$logger = new ConvomailLogger($db);
-	$eventid = $logger->logReceived($user, $account, array(
-		'msgid'       => $message['msgid'],
-		'in_reply_to' => $message['in_reply_to'],
-		'subject'     => $message['subject'],
-		'body'        => $renderer->cleanBody(false, true),
-		'from'        => convomail_format_addresses($message['from'], true),
-		'to'          => convomail_format_addresses($message['to'], true),
-		'cc'          => convomail_format_addresses($message['cc'], true),
-		'date'        => $message['date'],
-		'outgoing'    => $outgoing,
-		'socid'       => $socid,
-		'contactids'  => $contactids,
-		'projectid'   => $projectid,
-		'folder'      => $folder,
-		'uid'         => $uid,
-		'files'       => $files,
-	));
-	if (is_dir($tmpdir)) {
-		dol_delete_dir_recursive($tmpdir);
-	}
 	$client->close();
-
-	if ($eventid > 0) {
-		setEventMessages($langs->trans('ConvomailLoggedOk'), null, 'mesgs');
-	} else {
-		setEventMessages($logger->error, $logger->errors, 'errors');
-	}
 	header('Location: '.$selfurl);
 	exit;
 }
@@ -177,120 +89,63 @@ if ($action == 'confirm_log' && !$loggedeventid) {
 $form = new Form($db);
 $formproject = new FormProjets($db);
 
-/**
- * Address list as HTML, each known address followed by its contact or third party link
- *
- * @param  array<int,array{name:string,email:string}> $list    Addresses
- * @param  array<string,array{contactid:int,socid:int}> $matched Known addresses
- * @param  DoliDB                                        $db      Database
- * @return string
- */
-function convomail_addresses_html(array $list, array $matched, $db)
-{
-	$out = array();
-	foreach ($list as $a) {
-		$s = dol_escape_htmltag($a['name'] !== '' ? $a['name'].' <'.$a['email'].'>' : $a['email']);
-		if (isset($matched[$a['email']])) {
-			$hit = $matched[$a['email']];
-			if ($hit['contactid'] > 0) {
+llxHeader('', $langs->trans('Mailbox'), '', '', 0, 0, array('/convomail/js/convomail.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-message');
+
+print '<div class="cm-page">';
+print '<a class="cm-back" href="'.dol_escape_htmltag($listurl).'">'.img_picto('', 'fa-arrow-left', 'class="pictofixedwidth"').$langs->trans('BackToList').'</a>';
+
+// Full "Log to..." form: third party, contacts and project pickers
+if ($action == 'log') {
+	$message = $client->fetchMessage($folder, $uid, false);
+	if ($message !== false) {
+		$myemails = ConvomailView::myEmails($db, $user, $account);
+		$matched = (new ConvomailMatcher($db))->mapEmails(ConvomailView::otherAddresses($message, $myemails));
+		$resolver = new ConvomailProjectResolver($db);
+		$res = $resolver->resolve($message, $matched, $myemails);
+		$links = ConvomailView::defaultLinks($db, $message, $myemails, $res ? $res['socid'] : 0);
+		$suggestedproject = ($res && $res['projectid'] > 0) ? $res['projectid'] : 0;
+		$attachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
+		$attachments = (new ConvomailRenderer($client, $folder, $uid, $message, $attachmentbase))->attachments();
+
+		print load_fiche_titre($langs->trans('ConvomailLogTo').' '.dol_escape_htmltag($message['subject']), '', 'action');
+		print '<form method="POST" action="'.dol_escape_htmltag($selfurl).'">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="action" value="confirm_log">';
+		print '<table class="border centpercent tableforfieldcreate">';
+		print '<tr><td class="titlefieldcreate">'.$langs->trans('ThirdParty').'</td><td>'.img_picto('', 'company', 'class="pictofixedwidth"').$form->select_company($links['socid'], 'socid', '', 1, 0, 0, array(), 0, 'minwidth300').'</td></tr>';
+		if (!empty($links['contactids'])) {
+			print '<tr><td>'.$langs->trans('Contacts').'</td><td>';
+			foreach ($links['contactids'] as $contactid) {
 				$c = new Contact($db);
-				if ($c->fetch($hit['contactid']) > 0) {
-					$s .= ' '.$c->getNomUrl(1);
-				}
-			} elseif ($hit['socid'] > 0) {
-				$t = new Societe($db);
-				if ($t->fetch($hit['socid']) > 0) {
-					$s .= ' '.$t->getNomUrl(1);
+				if ($c->fetch($contactid) > 0) {
+					print '<label class="marginrightonly"><input type="checkbox" name="contactids[]" value="'.((int) $contactid).'" checked> '.dol_escape_htmltag($c->getFullName($langs)).' &lt;'.dol_escape_htmltag($c->email).'&gt;</label><br>';
 				}
 			}
+			print '</td></tr>';
 		}
-		$out[] = $s;
+		if (isModEnabled('project')) {
+			print '<tr><td>'.$langs->trans('Project').'</td><td>'.img_picto('', 'project', 'class="pictofixedwidth"').$formproject->select_projects(-1, $suggestedproject, 'projectid', 0, 0, 1, 1, 0, 0, 0, '', 1, 0, 'minwidth300').'</td></tr>';
+		}
+		if (!empty($attachments)) {
+			print '<tr><td>'.$langs->trans('MailFile').'</td><td><label><input type="checkbox" name="copyfiles" value="1" checked> '.$langs->trans('ConvomailCopyAttachments', count($attachments)).'</label></td></tr>';
+		}
+		print '</table>';
+		print '<div class="center"><input type="submit" class="button button-save" value="'.dol_escape_htmltag($langs->trans('ConvomailLogToConfirm')).'"> ';
+		print '<a class="button button-cancel" href="'.dol_escape_htmltag($selfurl).'">'.$langs->trans('Cancel').'</a></div>';
+		print '</form><br>';
 	}
-	return implode(', ', $out);
 }
 
-$document = $renderer->iframeDocument((bool) $showimages);
-$attachments = $renderer->attachments();
+$folders = convomail_folders($account, $client);
+$html = ConvomailView::render($account, $client, $folder, $uid, array('showimages' => $showimages, 'context' => 'page', 'folders' => $folders ?: array()));
 $client->close();
 
-llxHeader('', dol_escape_htmltag($message['subject']), '', '', 0, 0, array('/convomail/js/convomail.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-message');
-
-$linkback = '<a href="'.dol_escape_htmltag($listurl).'">'.$langs->trans('BackToList').'</a>';
-print load_fiche_titre(dol_escape_htmltag($message['subject'] !== '' ? $message['subject'] : $langs->trans('ConvomailNoSubject')), $linkback, 'email');
-
-print '<table class="border centpercent tableforfield convomail-headers">';
-print '<tr><td class="titlefield">'.$langs->trans('MailFrom').'</td><td>'.convomail_addresses_html($message['from'], $matched, $db).'</td></tr>';
-print '<tr><td>'.$langs->trans('MailTo').'</td><td>'.convomail_addresses_html($message['to'], $matched, $db).'</td></tr>';
-if (!empty($message['cc'])) {
-	print '<tr><td>'.$langs->trans('MailCC').'</td><td>'.convomail_addresses_html($message['cc'], $matched, $db).'</td></tr>';
-}
-print '<tr><td>'.$langs->trans('Date').'</td><td>'.($message['date'] ? dol_print_date($message['date'], 'dayhour', 'tzuserrel') : '').'</td></tr>';
-print '<tr><td>'.$langs->trans('ConvomailLogged').'</td><td>';
-if ($loggedeventid) {
-	print '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $loggedeventid).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLoggedOpenEvent').'</a>';
+if ($html === false) {
+	print '<div class="error">'.dol_escape_htmltag(ConvomailView::$error).'</div>';
 } else {
-	print '<span class="opacitymedium">'.$langs->trans('No').'</span>';
+	print $html;
 }
-print '</td></tr>';
-if (!empty($attachments)) {
-	print '<tr><td>'.$langs->trans('MailFile').'</td><td>';
-	foreach ($attachments as $att) {
-		$name = $att['name'] !== '' ? $att['name'] : $langs->trans('ConvomailUnnamedPart', $att['id']);
-		print '<a class="marginrightonly" href="'.dol_escape_htmltag($att['url']).'">'.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).'</a>';
-		print '<span class="opacitymedium marginrightonly">('.dol_print_size($att['size'], 1, 1).')</span> ';
-	}
-	print '</td></tr>';
-}
-print '</table>';
-
-// Actions
-$compose = dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
-print '<div class="tabsAction">';
-if ($user->hasRight('convomail', 'message', 'send')) {
-	print dolGetButtonAction('', $langs->trans('ConvomailReply'), 'default', $compose.'&mode=reply', '', true);
-	print dolGetButtonAction('', $langs->trans('ConvomailReplyAll'), 'default', $compose.'&mode=replyall', '', true);
-	print dolGetButtonAction('', $langs->trans('ConvomailForward'), 'default', $compose.'&mode=forward', '', true);
-}
-if (!$loggedeventid) {
-	print dolGetButtonAction('', $langs->trans('ConvomailLogTo'), 'default', $selfurl.'&action=log&token='.newToken(), '', true);
-}
-print dolGetButtonAction('', $langs->trans('ConvomailMarkUnread'), 'default', $selfurl.'&action=unread&token='.newToken(), '', true);
 print '</div>';
-
-// "Log to..." form
-if ($action == 'log' && !$loggedeventid) {
-	print load_fiche_titre($langs->trans('ConvomailLogTo'), '', 'action');
-	print '<form method="POST" action="'.dol_escape_htmltag($selfurl).'">';
-	print '<input type="hidden" name="token" value="'.newToken().'">';
-	print '<input type="hidden" name="action" value="confirm_log">';
-	print '<table class="border centpercent tableforfieldcreate">';
-	print '<tr><td class="titlefieldcreate">'.$langs->trans('ThirdParty').'</td><td>'.img_picto('', 'company', 'class="pictofixedwidth"').$form->select_company($suggest['socid'], 'socid', '', 1, 0, 0, array(), 0, 'minwidth300').'</td></tr>';
-	if (!empty($suggest['contacts'])) {
-		print '<tr><td>'.$langs->trans('Contacts').'</td><td>';
-		foreach (array_keys($suggest['contacts']) as $contactid) {
-			$c = new Contact($db);
-			if ($c->fetch($contactid) > 0) {
-				print '<label class="marginrightonly"><input type="checkbox" name="contactids[]" value="'.((int) $contactid).'" checked> '.dol_escape_htmltag($c->getFullName($langs)).' &lt;'.dol_escape_htmltag($c->email).'&gt;</label><br>';
-			}
-		}
-		print '</td></tr>';
-	}
-	if (isModEnabled('project')) {
-		print '<tr><td>'.$langs->trans('Project').'</td><td>'.img_picto('', 'project', 'class="pictofixedwidth"').$formproject->select_projects(-1, 0, 'projectid', 0, 0, 1, 1, 0, 0, 0, '', 1, 0, 'minwidth300').'</td></tr>';
-	}
-	if (!empty($attachments)) {
-		print '<tr><td>'.$langs->trans('MailFile').'</td><td><label><input type="checkbox" name="copyfiles" value="1" checked> '.$langs->trans('ConvomailCopyAttachments', count($attachments)).'</label></td></tr>';
-	}
-	print '</table>';
-	print $form->buttonsSaveCancel('ConvomailLogToConfirm', 'Cancel');
-	print '</form>';
-}
-
-// Body
-if ($renderer->blockedImages && !$showimages) {
-	print '<div class="info convomail-imagesblocked">'.$langs->trans('ConvomailImagesBlocked').' <a href="'.dol_escape_htmltag($selfurl.'&showimages=1').'">'.$langs->trans('ConvomailShowImages').'</a></div>';
-}
-print '<iframe class="convomail-body" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
 
 llxFooter();
 $db->close();

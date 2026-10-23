@@ -103,6 +103,36 @@ interface ConvomailMailboxClient
 	public function setSeen($folder, $uid, $seen);
 
 	/**
+	 * Move messages to another folder.
+	 *
+	 * @param  string $folder Source folder
+	 * @param  int[]  $uids   UIDs
+	 * @param  string $dest   Destination folder
+	 * @return bool
+	 */
+	public function moveMessages($folder, array $uids, $dest);
+
+	/**
+	 * Set or clear a flag on several messages.
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @param  string $flag   IMAP flag (\Flagged, \Seen...)
+	 * @param  bool   $on     Set or clear
+	 * @return bool
+	 */
+	public function setFlag($folder, array $uids, $flag, $on);
+
+	/**
+	 * Folder with a role (trash, archive, sent...), created if missing and a name is given.
+	 *
+	 * @param  string $role       Role
+	 * @param  string $createName Name to create when missing ('' = do not create)
+	 * @return string             Folder name, '' if none
+	 */
+	public function findFolderByRole($role, $createName = '');
+
+	/**
 	 * @return string Last error
 	 */
 	public function getError();

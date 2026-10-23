@@ -148,7 +148,8 @@ $sendtobcc = GETPOST('sendtobcc', 'alphawithlgt');
 $subject = GETPOST('subject', 'alphanohtml');
 // HTML goes through core's sanitizer. Plain text (editor off) is read raw because that sanitizer
 // collapses its line breaks; it is escaped before use, so it can never carry markup.
-$editorishtml = isModEnabled('fckeditor') && getDolGlobalInt('FCKEDITOR_ENABLE_MAIL');
+// Rich editor whenever FCKeditor is on (a Convomail dependency), whatever the global "WYSIWYG for emails" setting says
+$editorishtml = isModEnabled('fckeditor');
 $message = $editorishtml ? GETPOST('message', 'restricthtml') : GETPOST('message', 'none');
 
 // Receipts: defaults from setup when the form is first shown, the user's choice once posted
@@ -267,6 +268,17 @@ if ($action == '') {
 				$sendto = $soc->name.' <'.$soc->email.'>';
 			}
 		}
+	}
+
+	// Signature below the typing area and above any quote, inserted once when the form opens
+	if (getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature)) {
+		if ($editorishtml) {
+			$message = '<p>&nbsp;</p><div class="convomail-signature">-- <br>'.$user->signature.'</div>'.$message;
+		} else {
+			$message = "\n\n-- \n".dol_string_nohtmltag($user->signature, 2).$message;
+		}
+	} elseif ($editorishtml && $message === '') {
+		$message = '<p>&nbsp;</p>';
 	}
 }
 
@@ -394,7 +406,7 @@ if ($action == 'send') {
 				'msgid'       => $transport->msgid,
 				'in_reply_to' => $inreplyto,
 				'subject'     => $subject,
-				'body'        => $body,
+				'body'        => convomail_strip_data_images($body),
 				'to'          => $sendto,
 				'cc'          => $sendtocc,
 				'bcc'         => $sendtobcc,
@@ -444,7 +456,7 @@ if ($action == 'send') {
 $form = new Form($db);
 $formproject = new FormProjets($db);
 
-llxHeader('', $langs->trans('ComposeEmail'), '', '', 0, 0, '', '', '', 'mod-convomail page-compose');
+llxHeader('', $langs->trans('ComposeEmail'), '', '', 0, 0, array('/convomail/js/convomail-compose.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-compose');
 
 print load_fiche_titre($replyevent ? $langs->trans('ConvomailReply') : $langs->trans('ComposeEmail'), '', 'email');
 
@@ -484,7 +496,15 @@ print '<tr><td class="titlefieldcreate fieldrequired">'.$langs->trans('MailFrom'
 print $form->selectarray('accountid', $accountoptions, $accountid ?: $defaultaccountid, 0, 0, 0, '', 0, 0, 0, '', 'minwidth300');
 print '</td></tr>';
 
-print '<tr><td class="fieldrequired">'.$langs->trans('MailTo').'</td><td><input type="text" name="sendto" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendto).'"></td></tr>';
+print '<tr><td class="fieldrequired">'.$langs->trans('MailTo').'</td><td><input type="text" name="sendto" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendto).'">';
+print '<div class="cm-chips" id="cm-projectcontacts" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/projectcontacts.php', 1)).'" data-cc-label="'.dol_escape_htmltag($langs->trans('MailCC')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailProjectContactsHelp')).'">';
+if ($projectid > 0) {
+	foreach (convomail_project_contacts($db, $projectid) as $pc) {
+		$addr = $pc['name'] !== '' ? $pc['name'].' <'.$pc['email'].'>' : $pc['email'];
+		print '<span class="cm-chip" data-addr="'.dol_escape_htmltag($addr).'" title="'.dol_escape_htmltag($pc['role']).'">'.img_picto('', 'contact', 'class="pictofixedwidth"').dol_escape_htmltag($pc['name'] !== '' ? $pc['name'] : $pc['email']).'<a href="#" data-cc="1">'.dol_escape_htmltag($langs->trans('MailCC')).'</a></span>';
+	}
+}
+print '</div></td></tr>';
 print '<tr><td>'.$langs->trans('MailCC').'</td><td><input type="text" name="sendtocc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtocc).'"></td></tr>';
 print '<tr><td>'.$langs->trans('MailCCC').'</td><td><input type="text" name="sendtobcc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtobcc).'"></td></tr>';
 
@@ -504,6 +524,16 @@ if ($origin && $originid > 0) {
 	if (is_object($originobject) && method_exists($originobject, 'getNomUrl')) {
 		print '<tr><td>'.$langs->trans('LinkedObject').'</td><td>'.$originobject->getNomUrl(1).'</td></tr>';
 	}
+}
+
+$templates = convomail_email_templates($db, $user);
+if (!empty($templates) && $editorishtml) {
+	print '<tr><td>'.$langs->trans('EMailTemplates').'</td><td>';
+	print '<select id="cm-template" class="flat minwidth300" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/template.php', 1)).'"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailChooseTemplate')).'</option>';
+	foreach ($templates as $tid => $tlabel) {
+		print '<option value="'.((int) $tid).'">'.dol_escape_htmltag($tlabel).'</option>';
+	}
+	print '</select></td></tr>';
 }
 
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
@@ -529,7 +559,7 @@ if ($trackingavailable) {
 print '</td></tr>';
 
 print '<tr><td colspan="2">';
-$editor = new DolEditor('message', $message, '', 320, 'dolibarr_mailings', 'In', true, true, $editorishtml, 20, '90%');
+$editor = new DolEditor('message', $message, '', 360, 'dolibarr_mailings', 'In', true, true, $editorishtml, 20, '90%');
 print $editor->Create(1);
 print '</td></tr>';
 
