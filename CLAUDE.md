@@ -113,5 +113,6 @@ Only when asked:
 - IMAP access goes only through `ConvomailMailboxClient`. Horde objects never leave `ConvomailHordeMailboxClient`.
 - Every endpoint that touches a mailbox goes through `convomail_get_usable_account()`.
 - Writes are POST with a CSRF token; JSON endpoints return `{ok, message, ...}`.
+- Production runs `MAIN_SECURITY_CSRF_WITH_TOKEN=3`: every GET with an `action` (except create, edit, presend… see main.inc.php) needs `&token=`. Links we print carry `newToken()`; URLs core redirects to (`backtopage`) cannot, so they use a flag parameter instead of `action` (e.g. `newthirdparty=1`). Test such flows with level 3 on.
 - Strings go in `langs/en_US/convomail.lang`. CSS uses Dolibarr theme variables, so dark themes work.
 - Comments explain why, not what. Match the surrounding density.
