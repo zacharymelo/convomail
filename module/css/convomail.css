@@ -129,7 +129,8 @@
 .cm-conv-item.open .cm-conv-body { display: block; padding-top: 4px; }
 .cm-conv-body .cm-meta, .cm-conv-body .cm-attachments, .cm-conv-body .cm-imagesblocked { margin-left: 10px; margin-right: 10px; }
 .cm-conv-body .convomail-body { width: calc(100% - 20px); height: 40px; margin: 6px 10px 4px; min-height: 40px; }
-.cm-conv-open { padding: 0 10px 8px; font-size: .9em; }
+.cm-conv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 2px 6px 4px; border-bottom: 1px dashed var(--cm-border); margin-bottom: 4px; font-size: .92em; }
+.cm-conv-body .convomail-body { margin-bottom: 8px; }
 .cm-empty { padding: 30px 16px; text-align: center; color: var(--cm-muted); }
 .cm-pane-empty { margin-top: 15vh; }
 .cm-bigicon { font-size: 3em; opacity: .25; }
