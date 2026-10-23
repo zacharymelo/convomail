@@ -242,10 +242,24 @@ Before switching open tracking on:
 
 ## Replies and the Email Collector
 
-Received mail is logged when a user clicks **Log to…** in the Mailbox; automatic logging is planned (phase 3). Until then, Dolibarr's core **Email Collector** can log incoming replies automatically:
+Convomail logs received mail when a user clicks **Log to…**, and files replies to project threads automatically when the mailbox lists them. Dolibarr's core **Email Collector** can also record incoming mail, on a schedule and without anyone opening the mailbox:
 
 - Convomail puts a Dolibarr tracking code in each Message-ID, using the same format as core: `proj<id>`, `pro`/`ord`/`inv<id>`, `thi<id>` or `ctc<id>`.
 - Point an Email Collector at the user's mailbox with a "record event" operation. It recognises replies through their In-Reply-To and References headers and files them on the same project or third party.
+
+**Both can run on the same mailbox without duplicates.** Each email becomes one agenda event, whichever module gets it first. Both store the Message-ID on the event (`email_msgid`, same format) and check it before recording:
+- Email Collector skips an email Convomail already logged.
+- Convomail shows an email the collector recorded as **Logged in the agenda**, and *Log to…* answers "already in the agenda".
+- The same applies to mail sent from Convomail, if a collector also reads the Sent folder: the Sent copy keeps the delivered Message-ID.
+- An email received by several colleagues is logged once.
+
+This was checked in both orders with a real Email Collector run. Two cases can still give two events:
+- An email with no Message-ID at all (rare; mostly very old or broken senders).
+- Both recording the same email in the same instant: a user clicks *Log to…* while the collector is processing that very email.
+
+If the collector is set to move processed mail to another folder, the email leaves the Inbox your users read in Convomail, but it isn't duplicated.
+
+The event label differs ("Reception of Email - From …" from the collector, the subject from Convomail); the body, links and Message-ID are the same.
 
 ## Privacy and security notes
 
