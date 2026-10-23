@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.4.1)
+## Where it stands (0.5.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -15,19 +15,13 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | 2. Read and file | Mailbox (folders, list, message page), safe HTML display, reply / reply all / forward, Log to…, "server saves sent mail itself" | 0.3.0 |
 | 2c. Projects and webmail | Three-pane mailbox, bulk actions and shortcuts, project Emails tab, project detection (logged / thread / code / suggested), automatic filing of replies, rich-text compose with signature, templates, pasted images and project contact chips | 0.4.0 |
 | Fixes | Newest mail first on every IMAP server; list pane scrolls on small screens; messages per page per user (10–100); CSS/JS refreshed after upgrades | 0.4.1 |
+| 2b. OAuth | Sign in with Google or Microsoft 365: the admin picks a core OAuth app per provider, each owner connects their account (`oauth.php`), tokens in `llx_oauth_token` per account, XOAUTH2 for IMAP (Horde) and SMTP (`CMailFile`). IMAP protocol trace in Debug mode, with tokens masked | 0.5.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
 ## Next
 
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
-
-### 2b. OAuth for Google and Microsoft
-**Why:** Microsoft 365 tenants increasingly refuse password SMTP/IMAP, and Gmail needs app passwords. This is the main barrier for real users.
-- A per-user "Connect with Google / Microsoft" flow. Core's OAuth (`llx_oauth_token`, `core/modules/oauth/*`) has `fk_user`, but tokens are created only from an admin page (UPSTREAM item 4).
-- Horde supports XOAUTH2 (`xoauth2_token` param). CMailFile supports `MAIN_MAIL_SMTPS_AUTH_TYPE = XOAUTH2` with `MAIN_MAIL_SMTPS_OAUTH_SERVICE`; check how it reads the token per send context.
-- Account: an `auth_type` column (`password` | `oauth_google` | `oauth_microsoft`) plus a reference to the token.
-- **Decide first:** use core's OAuth service setup (admin registers the app once) or the module's own client config.
 
 ### 3. Automatic conversation
 **Why:** today a reply is filed only when someone opens the mailbox page that lists it.
@@ -43,6 +37,7 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Response-time report per user and per customer.
 
 ### Smaller items
+- Address autocomplete in compose To / Cc / Bcc (contacts, third parties, users, past correspondents).
 - Save drafts to the IMAP Drafts folder.
 - Several References ids when core accepts them (UPSTREAM item 7).
 - Translations beyond en_US (fr_FR first).
@@ -60,7 +55,6 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 
 | Question | Options | Notes |
 |---|---|---|
-| OAuth app registration | Core OAuth setup vs module config | Core's is the path to core inclusion |
 | Shared inboxes | Group-owned accounts vs delegated access to a user's account | Affects `canBeUsedBy()`, rights and the menu |
 | Auto-filing scope | Replies only (now) vs known contacts too | Privacy: personal mail from a contact would land on the agenda |
 | Email Collector overlap | Coexist vs replace for user mailboxes | Same event codes today |
@@ -70,8 +64,9 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 
 Not yet verified. Do these before telling users it works there:
 - **Dolibarr 24** (the owner's production) and `develop`.
-- **Real servers:** Gmail and Microsoft 365 with app passwords (Sent folder detection, `server_saves_sent`, SPECIAL-USE folders, search); a self-hosted Dovecot / Postfix.
+- **Real servers:** Gmail and Microsoft 365, with app passwords and with OAuth (consent, refresh at their token endpoints, Google app verification, Exchange Authenticated SMTP), Sent folder detection, `server_saves_sent`, SPECIAL-USE folders, search. OAuth is verified only against a local Dovecot with a token check (`dev/oauth/`).
+- **The owner's "other" IMAP server:** deleting an open email fails with "Mail server closed the connection unexpectedly". Not reproduced on GreenMail or Dovecot; capture `ajax/debug.php?mode=imaptrace` there.
 - **Dark theme** and the Eldy / Md themes in narrow windows.
 - Large mailboxes (10k+ messages): list speed, folder counts.
 - Multicompany (`entity` > 1).
-- Upgrading straight from 0.1.0 to 0.4.0.
+- Upgrading straight from 0.1.0 to 0.5.0.

@@ -156,3 +156,33 @@ ConvomailAllowSelfSigned = Accept self-signed certificates
 ConvomailAllowSelfSignedDesc = Only for internal mail servers you trust. Applies to SMTP.
 DebugMode = Debug Mode
 DebugModeDesc = When enabled, exposes a diagnostic endpoint at /custom/convomail/ajax/debug.php for troubleshooting module configuration.
+
+# Sign in with Google / Microsoft 365 (OAuth)
+ConvomailAuthType = Sign-in method
+ConvomailAuthTypeHelp = With Google or Microsoft 365, no password is stored: you sign in on the provider's page and Dolibarr receives a token that lets it read and send your mail. Offered when an administrator has set the provider up.
+ConvomailOAuthApp = OAuth app
+ConvomailSignInWith = Sign in with %s
+ConvomailOAuthConnectButton = Connect with %s
+ConvomailOAuthReconnectButton = Reconnect
+ConvomailOAuthDisconnectButton = Disconnect
+ConvomailOAuthStatusOk = Connected
+ConvomailOAuthStatusNone = Not connected
+ConvomailOAuthStatusExpired = Reconnect needed
+ConvomailOAuthConnected = %s is connected.
+ConvomailOAuthDisconnected = %s is disconnected. Connect it again to use it.
+ConvomailOAuthRefused = The provider did not give access (%s).
+ConvomailOAuthBadState = This sign-in answer does not match a request from your session. Start again from your mail accounts.
+ConvomailOAuthTokenFailed = Could not get a token from the provider: %s
+ConvomailOAuthNotConnected = %s is not connected yet: open your mail accounts and click Connect.
+ConvomailOAuthReconnect = The sign-in of %s has expired or was revoked: open your mail accounts and click Reconnect.
+ConvomailOAuthAppMissing = The OAuth app %s is not set up (client ID and secret) in Home - Setup - OAuth.
+ConvomailOAuthTenantMissing = The OAuth app %s has no tenant set in Home - Setup - OAuth.
+ConvomailOAuthSetup = Sign in with Google / Microsoft 365
+ConvomailOAuthSetupDesc = Users can connect their Google or Microsoft 365 mailbox without a password. Register the app once in <a href="%s">Home - Setup - OAuth</a> (client ID, secret, and the tenant for Microsoft), add the redirect URL below to it, then choose it here. See the README for the steps at Google and Microsoft.
+ConvomailOAuthAppFor = OAuth app for %s
+ConvomailOAuthNoApp = No app set up in Home - Setup - OAuth
+ConvomailOAuthScopesGoogle = Google app: type "Google". Scope requested: https://mail.google.com/ (a restricted scope: an app for users outside your Workspace needs Google's verification).
+ConvomailOAuthScopesMicrosoft = Microsoft app: type "Microsoft Exchange Online [SMTP/IMAP]" (or "Microsoft [outlook.office365]"). Delegated permissions: IMAP.AccessAsUser.All, SMTP.Send, offline_access. Authenticated SMTP must be allowed for each mailbox.
+ConvomailOAuthRedirectUri = Redirect URL
+ConvomailOAuthRedirectUriDesc = Add this exact URL to the app's redirect URIs at Google (Credentials) or Microsoft (App registration - Authentication, platform Web).
+

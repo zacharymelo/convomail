@@ -31,6 +31,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/ajax.lib.php';
 dol_include_once('/convomail/lib/convomail.lib.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
+dol_include_once('/convomail/class/convomailoauth.class.php');
 
 $langs->loadLangs(array('admin', 'mails', 'convomail@convomail'));
 
@@ -51,6 +52,21 @@ if ($action == 'update') {
 	header('Location: '.$_SERVER['PHP_SELF']);
 	exit;
 }
+if ($action == 'update_oauth') {
+	$error = 0;
+	foreach (ConvomailOAuth::providers() as $code => $provider) {
+		$app = GETPOST($provider['setting'], 'alphanohtml');
+		if ($app !== '' && !isset(ConvomailOAuth::availableApps($code)[$app])) {
+			$app = '';
+		}
+		if (dolibarr_set_const($db, $provider['setting'], $app, 'chaine', 0, '', $conf->entity) <= 0) {
+			$error++;
+		}
+	}
+	setEventMessages($langs->trans($error ? 'Error' : 'SetupSaved'), null, $error ? 'errors' : 'mesgs');
+	header('Location: '.$_SERVER['PHP_SELF']);
+	exit;
+}
 if ($action == 'update_pagesize') {
 	$size = GETPOSTINT('CONVOMAIL_PAGE_SIZE');
 	if (in_array($size, convomail_page_sizes(), true) && dolibarr_set_const($db, 'CONVOMAIL_PAGE_SIZE', $size, 'chaine', 0, '', $conf->entity) > 0) {
@@ -68,6 +84,8 @@ if ($action == 'update_pagesize') {
  */
 
 llxHeader('', $langs->trans('ConvomailSetup'), '', '', 0, 0, '', '', '', 'mod-convomail page-admin');
+
+$form = new Form($db);
 
 // When core lets modules add tabs to Home > Setup > Emails (see patches/), show this page as one of those tabs
 $emailhead = email_admin_prepare_head();
@@ -146,6 +164,32 @@ print '<td>'.ajax_constantonoff('CONVOMAIL_DEBUG_MODE').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('DebugModeDesc').'</td></tr>';
 
 print '</table>';
+
+// Sign in with Google / Microsoft 365: which core OAuth app (Home > Setup > OAuth) each provider uses
+print '<br>';
+print load_fiche_titre($langs->trans('ConvomailOAuthSetup'), '', '');
+print '<div class="opacitymedium marginbottomonly">'.$langs->trans('ConvomailOAuthSetupDesc', DOL_URL_ROOT.'/admin/oauth.php').'</div>';
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="update_oauth">';
+print '<table class="noborder centpercent">';
+print '<tr class="liste_titre"><td>'.$langs->trans('Parameter').'</td><td>'.$langs->trans('Value').'</td><td>'.$langs->trans('Description').'</td></tr>';
+foreach (ConvomailOAuth::providers() as $code => $provider) {
+	$apps = ConvomailOAuth::availableApps($code);
+	print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('ConvomailOAuthAppFor', $provider['label']).'</td><td>';
+	if (empty($apps)) {
+		print '<span class="opacitymedium">'.$langs->trans('ConvomailOAuthNoApp').'</span>';
+	} else {
+		print $form->selectarray($provider['setting'], $apps, getDolGlobalString($provider['setting']), 1, 0, 0, '', 0, 0, 0, '', 'minwidth200');
+	}
+	print '</td><td class="opacitymedium">'.$langs->trans('ConvomailOAuthScopes'.ucfirst($code)).'</td></tr>';
+}
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailOAuthRedirectUri').'</td><td colspan="2">';
+print '<input type="text" class="quatrevingtpercent" readonly value="'.dol_escape_htmltag(ConvomailOAuth::redirectUri()).'" onclick="this.select()">';
+print '<br><span class="opacitymedium">'.$langs->trans('ConvomailOAuthRedirectUriDesc').'</span></td></tr>';
+print '</table>';
+print '<div class="center"><input type="submit" class="button" value="'.$langs->trans('Save').'"></div>';
+print '</form>';
 
 print dol_get_fiche_end();
 

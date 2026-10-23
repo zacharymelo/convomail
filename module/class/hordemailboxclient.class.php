@@ -88,8 +88,21 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			'secure'   => $secure,
 			'timeout'  => 15,
 		);
-		$trace = self::traceFile();
-		if ($trace !== '') {
+		if ($this->account->isOAuth()) {
+			dol_include_once('/convomail/class/convomailoauth.class.php');
+			$oauth = new ConvomailOAuth($this->account->db);
+			$token = $oauth->accessToken($this->account);
+			if ($token === '') {
+				throw new Exception($oauth->error);
+			}
+			// Horde tries XOAUTH2 first when the server offers it. It refuses a blank password before trying,
+			// so the same credential object is given as password (only used, and refused, by a server without XOAUTH2).
+			$xoauth2 = new Horde_Imap_Client_Password_Xoauth2($this->account->login, $token);
+			$params['password'] = $xoauth2;
+			$params['xoauth2_token'] = $xoauth2;
+		}
+		$trace = self::traceStream();
+		if ($trace) {
 			$params['debug'] = $trace;
 		}
 		$this->imap = new Horde_Imap_Client_Socket($params);
@@ -130,6 +143,25 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 		}
 		return $file;
+	}
+
+	/**
+	 * Stream Horde writes its trace to, through a filter that masks OAuth access tokens: Horde masks
+	 * passwords and PLAIN logins itself, but not the XOAUTH2 initial response.
+	 *
+	 * @return resource|null
+	 */
+	private static function traceStream()
+	{
+		$file = self::traceFile();
+		if ($file === '' || !($fh = @fopen($file, 'a'))) {
+			return null;
+		}
+		if (!in_array('convomail.tracemask', stream_get_filters(), true)) {
+			stream_filter_register('convomail.tracemask', 'ConvomailTraceMaskFilter');
+		}
+		stream_filter_append($fh, 'convomail.tracemask', STREAM_FILTER_WRITE);
+		return $fh;
 	}
 
 	/**
@@ -836,3 +868,33 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		}
 	}
 }
+
+/**
+ * Stream filter for the IMAP trace: replaces XOAUTH2 / OAUTHBEARER credentials and bearer tokens with [TOKEN]
+ */
+class ConvomailTraceMaskFilter extends php_user_filter
+{
+	/**
+	 * @param  resource $in       Incoming bucket brigade
+	 * @param  resource $out      Outgoing bucket brigade
+	 * @param  int      $consumed Bytes consumed
+	 * @param  bool     $closing  Stream closing
+	 * @return int
+	 */
+	public function filter($in, $out, &$consumed, $closing): int
+	{
+		while ($bucket = stream_bucket_make_writeable($in)) {
+			$data = preg_replace('/(AUTHENTICATE\s+(?:XOAUTH2|OAUTHBEARER)\s+)\S+/i', '$1[TOKEN]', $bucket->data);
+			// Credential sent on its own line, when the server has no SASL-IR
+			$data = preg_replace_callback('/[A-Za-z0-9+\/]{40,}={0,2}/', function ($m) {
+				$decoded = base64_decode($m[0], true);
+				return ($decoded !== false && stripos($decoded, 'auth=Bearer') !== false) ? '[TOKEN]' : $m[0];
+			}, $data);
+			$bucket->data = preg_replace('/(Bearer\s+)[A-Za-z0-9._~+\/=-]+/i', '$1[TOKEN]', $data);
+			$consumed += $bucket->datalen;
+			stream_bucket_append($out, $bucket);
+		}
+		return PSFS_PASS_ON;
+	}
+}
+

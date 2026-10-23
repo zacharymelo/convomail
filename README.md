@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** version 0.4.0: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, automatic filing of replies), and rich-text compose with signature and templates. Tested on Dolibarr 23.0 with PHP 8.2 against a GreenMail test server. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.5.0: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, automatic filing of replies), rich-text compose with signature and templates, and sign-in with Google or Microsoft 365 (OAuth). Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
 
 ![Convomail mailbox](docs/mailbox.jpg)
 
@@ -15,6 +15,7 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Sign in with Google or Microsoft 365](#sign-in-with-google-or-microsoft-365)
 - [Using it](#using-it)
 - [The mailbox](#the-mailbox)
 - [Email on projects](#email-on-projects)
@@ -107,7 +108,42 @@ Go to **Home → Setup → Modules → Convomail → Setup** (or **Home → Setu
 | Open tracking | Off by default. Adds an invisible image to sent messages and logs opens. See [Read receipts and open tracking](#read-receipts-and-open-tracking) before enabling. |
 | Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. While it is on, each user's exchanges with their mail server are also recorded (passwords masked, but message text included), and `ajax/debug.php?mode=imaptrace` shows your last 8 requests. Turn it off when done. |
 
-Each user then adds an account: **user card → Mail accounts → Add a mail account**. With Gmail, use an app password. The Gmail and Microsoft 365 presets tick **Server saves sent mail itself**, because those servers keep their own copy of what you send; for other servers leave it unticked so Convomail stores the copy.
+The same page has **Sign in with Google / Microsoft 365**: see [the next section](#sign-in-with-google-or-microsoft-365).
+
+Each user then adds an account: **user card → Mail accounts → Add a mail account**, choosing a **Sign-in method**: a password, or Google / Microsoft 365 when the admin has set them up. With a password on Gmail, use an app password. The Gmail and Microsoft 365 presets tick **Server saves sent mail itself**, because those servers keep their own copy of what you send; for other servers leave it unticked so Convomail stores the copy.
+
+## Sign in with Google or Microsoft 365
+
+Users can connect a Google or Microsoft 365 mailbox without giving Dolibarr a password. They sign in on the provider's page, and Dolibarr gets a token that lets it read and send their mail. This is needed for Microsoft 365 tenants that block password login, and it avoids Gmail app passwords.
+
+The admin sets up each provider once.
+
+**1. Register an app at the provider**
+
+*Google* (Google Cloud console → APIs & Services):
+1. Configure the OAuth consent screen. Choose *Internal* for a Google Workspace used only by your organization. An *External* app asking for Gmail access needs Google's verification before users outside your test users can connect, because `https://mail.google.com/` is a restricted scope.
+2. Credentials → Create credentials → OAuth client ID, type *Web application*.
+3. Add both redirect URIs:
+   - Dolibarr's own, shown in Home → Setup → OAuth (`…/core/modules/oauth/google_oauthcallback.php`);
+   - Convomail's, shown in Convomail setup (`…/custom/convomail/oauth.php`).
+4. Note the client ID and secret.
+
+*Microsoft 365* (Microsoft Entra admin center → App registrations):
+1. New registration, single tenant. Redirect URI: platform *Web*, Convomail's URL from its setup page (add Dolibarr's own callback too if you use it for other things).
+2. API permissions → Add → Microsoft Graph → Delegated: `IMAP.AccessAsUser.All`, `SMTP.Send`, `offline_access`. Grant admin consent.
+3. Certificates & secrets → New client secret. Note it, the application (client) ID and the directory (tenant) ID.
+4. In Exchange, *Authenticated SMTP* must be allowed for each mailbox (Microsoft 365 admin center → user → Mail → Manage email apps), or sending fails.
+
+**2. Add the app to Dolibarr:** Home → Setup → OAuth. Add a *Google* entry, or a *Microsoft Exchange Online [SMTP/IMAP]* entry (the older *Microsoft [outlook.office365]* works too), with the client ID, secret and, for Microsoft, the tenant.
+
+**3. Choose it in Convomail:** Convomail setup → *Sign in with Google / Microsoft 365* → pick the app for each provider → Save. The page shows the redirect URL again.
+
+**4. Each user connects:** Mail accounts → Add a mail account → Sign-in method *Sign in with Google* (or Microsoft 365). The server settings are filled in. Save, and Convomail opens the provider's sign-in page. Afterwards the account shows **Connected**. **Reconnect** and **Disconnect** are on the account list.
+
+Notes:
+- Only the account's owner can connect it: the consent is theirs. A mail accounts admin can still edit, disconnect or delete it.
+- Tokens are refreshed automatically. If a refresh fails (password changed, access revoked), the mailbox and sending say so, and the user clicks **Reconnect**.
+- If you use *Allowed mail servers*, add `imap.gmail.com` and `smtp.gmail.com`, or `outlook.office365.com` and `smtp.office365.com`.
 
 ## Using it
 
@@ -209,7 +245,7 @@ Received mail is logged when a user clicks **Log to…** in the Mailbox; automat
 
 ## Privacy and security notes
 
-- Passwords are encrypted with Dolibarr's `dolEncrypt()` and never sent back to the browser.
+- Passwords are encrypted with Dolibarr's `dolEncrypt()` and never sent back to the browser. OAuth tokens are stored encrypted the same way, in Dolibarr's own token table (`llx_oauth_token`), one per account, and are never shown, including in the debug pages.
 - Users only see and use their own accounts unless they have the "manage all accounts" right.
 - Logged emails are ordinary agenda events and follow Dolibarr's agenda permissions. Anyone allowed to read the third party's events can read the email body.
 - Plain-text messages are escaped before sending. HTML from the rich-text editor goes through Dolibarr's HTML sanitizer.
@@ -220,7 +256,8 @@ Received mail is logged when a user clicks **Log to…** in the Mailbox; automat
 
 | Table | Content |
 |---|---|
-| `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, encrypted password, Sent folder, whether the server saves sent mail itself |
+| `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, sign-in method and OAuth app, encrypted password, Sent folder, whether the server saves sent mail itself |
+| `llx_oauth_token` (core) | For accounts that sign in with Google or Microsoft 365: the account's encrypted token, as `Google-convomail<id>` or `Microsoft3-convomail<id>` |
 | `llx_convomail_message` | One row per sent or logged message: account, direction, folder and UID, Message-ID, In-Reply-To, agenda event id, read receipt flag, open-tracking key, open count and dates |
 | `llx_actioncomm` (core) | The agenda event for each message: subject, body, recipients, links |
 | Agenda documents directory | Copies of attachments, under the event id |
@@ -229,7 +266,9 @@ Disabling the module removes menus and rights but keeps all data.
 
 ## Upgrading
 
-**From 0.4.0:** deploy the new zip. Nothing to re-enable: there is no database change, and the new *Messages per mailbox page* setting defaults to 25.
+**From 0.4.x:** deploy the new zip, then disable and re-enable Convomail. This adds the sign-in method columns (`sql/update_0.5.0.sql`). Existing accounts keep signing in with their password.
+
+**From 0.4.0 to 0.4.1:** deploy the new zip. Nothing to re-enable: there is no database change, and the new *Messages per mailbox page* setting defaults to 25.
 
 **From 0.3.0:** deploy the new zip, then disable and re-enable Convomail. This registers the project Emails tab, the two new settings (both on), and enables FCKeditor.
 
@@ -263,7 +302,7 @@ Convomail is built as a module first, with the aim of proposing webmail for Doli
 | 1b. Receipts | Read receipt request, open tracking (off by default), Email setup tab with the optional core patch | **Done (0.2.0)** |
 | 2. Read and file | Mailbox (folders, list, message page), safe HTML display, reply / reply all / forward, Log to… | **Done (0.3.0)** |
 | 2c. Projects and webmail | Three-pane mailbox, actions and shortcuts, project Emails tab, project detection and automatic filing, rich-text compose with signature, templates, pasted images and project contacts | **Done (0.4.0)** |
-| 2b. OAuth | Sign in with Google and Microsoft instead of app passwords | Planned |
+| 2b. OAuth | Sign in with Google and Microsoft 365 instead of passwords | **Done (0.5.0)** |
 | 3. Automatic conversation | Sync job, auto-logging by policy, replies filed to their project, shared team inboxes | Planned |
 | 4. Sales features | Awaiting-reply columns, follow-up nudges, last message on opportunity cards, response-time reports | Planned |
 
@@ -300,6 +339,7 @@ module/                   Module source (installed as custom/convomail)
   sql/                    Tables and indexes
   admin/setup.php         Setup page
   user_accounts.php       Mail accounts tab on the user card
+  oauth.php               Connect with Google / Microsoft 365 (redirect URL for the providers)
   mailbox.php             Three-pane mailbox; files replies to project threads
   project_emails.php      Emails tab of a project
   message.php             One message on its own page (phones, links) and the full Log to… form

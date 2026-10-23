@@ -208,6 +208,14 @@ if ($mode === 'imap') {
 	} else {
 		$folder = GETPOST('folder', 'restricthtml') ?: 'INBOX';
 		print "Account: $account->email ($account->imap_host)  Folder: $folder\n";
+		if ($account->isOAuth()) {
+			// Sign-in state only: the token itself is never printed
+			dol_include_once('/convomail/class/convomailoauth.class.php');
+			$st = (new ConvomailOAuth($db))->status($account);
+			print 'Sign-in: OAuth app '.$account->oauth_app.', token '.($st['connected'] ? 'stored, expires '.dol_print_date($st['expires'], 'standard', 'gmt').' UTC, refresh token '.($st['refreshable'] ? 'yes' : 'no') : 'missing')."\n";
+		} else {
+			print "Sign-in: password\n";
+		}
 		$client = new ConvomailHordeMailboxClient($account);
 		print implode("\n", $client->sortDiagnostics($folder))."\n";
 		$client->close();

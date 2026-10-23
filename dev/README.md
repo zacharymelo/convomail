@@ -37,6 +37,25 @@ docker cp dev/user2.php convomail-dolibarr-1:/tmp/user2.php
 docker compose exec -e CM_TEST_PASS=<password> dolibarr php /tmp/user2.php
 ```
 
+## Test OAuth sign-in without Google or Microsoft
+
+`dev/oauth/` runs a Dovecot whose IMAP and submission accept XOAUTH2 with one test token, checked by `introspect.php` (served from the Dolibarr container on port 8000). Submission relays to GreenMail.
+
+1. Add a fake Microsoft app in Home → Setup → OAuth, named `Mail` (any ID, secret and tenant). In Convomail setup, choose `MICROSOFT3-Mail` for Microsoft 365 and add `cm-dovecot` to *Allowed mail servers*.
+2. Run the script below. It starts Dovecot and the token check, creates the account `oauthuser@x.test` for admin, and stores a token for it the way a real connect does.
+3. Test the account, open its mailbox, and send from it.
+4. For the expiry path, store an expired token with a refresh token the provider will reject (`docker compose exec -T dolibarr php /tmp/seedtoken.php convomail-test-access-token -120 bogus`). The mailbox and sending then show "Reconnect".
+
+```bash
+dev/oauth/start.sh
+```
+
+```bash
+docker rm -f cm-dovecot
+```
+
+The consent redirect itself can be checked with fake apps: the Connect button sends you to `accounts.google.com` / `login.microsoftonline.com` with Convomail's redirect URI and the right scopes. Going further needs a real app.
+
 ## Fill the mailbox
 
 ```bash

@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.4.0**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.5.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -74,6 +74,7 @@ convomail/
     compose.php           New mail, reply (agenda event or mailbox message), forward
     project_emails.php    Emails tab of a project
     user_accounts.php     Mail accounts tab of a user
+    oauth.php             Connect with Google / Microsoft 365: consent redirect, provider callback, disconnect
     attachment.php        Streams one MIME part
     ajax/message.php      Reading-pane HTML fragment
     ajax/action.php       Mailbox actions (JSON)
@@ -104,7 +105,8 @@ convomail/
 | `label`, `email` | Display name and address used as From |
 | `imap_host`, `imap_port`, `imap_encryption` | IMAP server; encryption `ssl` (implicit TLS), `tls` (STARTTLS) or `none` |
 | `smtp_host`, `smtp_port`, `smtp_encryption` | SMTP server; same encryption values |
-| `login`, `pass_crypted` | Login; password encrypted with `dolEncrypt()`, never sent to the browser |
+| `login`, `pass_crypted` | Login; password encrypted with `dolEncrypt()`, never sent to the browser (empty for OAuth accounts) |
+| `auth_type`, `oauth_app` | `password` or `oauth`; for OAuth, the core OAuth app used (`GOOGLE-<name>`, `MICROSOFT3-<name>`, `MICROSOFT-<name>`) |
 | `sent_folder` | Folder for the Sent copy; auto-detected (SPECIAL-USE `\Sent`, then common names), created as `Sent` if missing |
 | `server_saves_sent` | 1 = the server keeps its own copy of sent mail (Gmail, Microsoft 365); skip the IMAP copy |
 | `is_default` | One per user; first account offered |
@@ -137,6 +139,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 
 | Table | Use |
 |---|---|
+| `llx_oauth_token` | OAuth accounts: one row per account, service `<Google\|Microsoft3\|Microsoft>-convomail<account id>`, `token` = serialized phpoauth token encrypted by `DoliStorage`, `fk_user` = owner. The Google service may also leave its consent `state` in the same row |
 | `llx_actioncomm` | The agenda event of each message. Fields: `code`, `fk_action` (type), `label` (subject), `note` (cleaned HTML body), `datep`, `fk_soc`, `fk_project`, `fk_element`/`elementtype` (origin document), `email_msgid`, `email_from`, `email_sender`, `email_to`, `email_tocc`, `email_tobcc`, `email_subject`, `fk_user_action` (owner) |
 | `llx_actioncomm_resources` | Assigned contacts (`element_type = socpeople`) and users of each event |
 | `llx_c_actioncomm` | Event types. `AC_EMAIL` is activated by the module (inactive by default in core) |
@@ -179,6 +182,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 |---|---|---|
 | `modConvomail` (core/modules) | Descriptor | `init()` loads `sql/`, activates `AC_EMAIL`, `delete_menus()`, `_init()`; `remove()` |
 | `ConvomailAccount` | Account CRUD (CommonObject `*Common()`), password crypto, access, host allowlist | `fetchDefaultForUser()`, `fetchAllForUser()`, `canBeUsedBy()`, `checkHostAllowed()` / `isHostAllowed()`, `setPassword()`, `getPassword()`, `countForUser()` (tab badge), `clearSessionCache()` |
+| `ConvomailOAuth` | OAuth sign-in (Google, Microsoft 365) on top of core's phpoauth services and `DoliStorage` | `providers()`, `availableApps()`, `appFor()`, `authorizationUrl()`, `handleCallback()`, `accessToken()` (refresh 5 minutes before expiry), `status()`, `disconnect()`, `mailSettings()` (in-memory settings for `CMailFile`) |
 | `ConvomailMessage` | Link row CRUD | `fetchByMsgid()`, `fetchByTrackKey()` (no entity filter: public URL), `fetchByActioncomm()`, `countForProject()` (tab badge) |
 | `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `findSentFolder`, `findFolderByRole` |
 | `ConvomailHordeMailboxClient` | IMAP implementation (Horde_Imap_Client). Returns plain arrays, never Horde objects | Summaries carry `uid, msgid, subject, date, from/to/cc/reply_to, in_reply_to, references, seen, answered, flagged, size, has_attachments, snippet`. `fetchMessage()` adds `parts` (`id, type, charset, name, disposition, cid, size`). Fallbacks: In-Reply-To from headers when ENVELOPE omits it; whole small parts when partial fetch returns nothing |
@@ -268,6 +272,32 @@ POST `ajax/action.php` with `uids[]` and `action`:
 
 The response is JSON `{ok, removed, message, events}`; the JS updates rows and the pane.
 
+### 6.8 OAuth connect and token use
+**Setup (admin, once):** the app (client ID, secret, tenant) is registered in core's Home → Setup → OAuth (`OAUTH_<TYPE>-<name>_ID/_SECRET/_TENANT`). Convomail setup stores which app each provider uses (`CONVOMAIL_OAUTH_GOOGLE_APP`, `CONVOMAIL_OAUTH_MICROSOFT_APP`) and shows the redirect URI, `oauth.php`.
+
+**Connect (owner):**
+1. The account form saves `auth_type=oauth` and `oauth_app`, then sends the owner to `oauth.php?action=connect`.
+2. `authorizationUrl()` puts `{account, nonce, time}` in the session and redirects to the provider:
+   - state `<account id>-<nonce>`, `login_hint`;
+   - Google: offline access with a forced consent prompt (for a refresh token), scope `https://mail.google.com/`;
+   - Microsoft: `prompt=select_account`, scopes `offline_access`, IMAP.AccessAsUser.All, SMTP.Send.
+3. The provider redirects back to `oauth.php?code&state`. `handleCallback()` checks:
+   - the nonce (single use, 30 minutes);
+   - that the account belongs to the signed-in user.
+
+   It then exchanges the code (`requestAccessToken`) and sets `fk_user` on the token row.
+
+**Use:**
+- `ConvomailOAuth::accessToken()` returns the stored access token, refreshing it within 5 minutes of expiry. It keeps the old refresh token when none comes back.
+- **IMAP:** the token goes to Horde as `xoauth2_token` (`AUTHENTICATE XOAUTH2`). The same object is also passed as the password, because Horde refuses blank passwords.
+- **SMTP:**
+  - `ConvomailTransport` refreshes first;
+  - it then sets in memory `MAIN_MAIL_SMTPS_AUTH_TYPE_CONVOMAIL=XOAUTH2`, `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL=<TYPE>-convomail<id>`, and copies of the app's settings under that key;
+  - `CMailFile` then reads the token from `llx_oauth_token` itself.
+- **Failure:** with no token, or a failed refresh, the mailbox and sending show "Reconnect this account", and nothing is sent or logged.
+
+**Disconnect / delete:** deletes the account's token row, by its service key.
+
 ## 7. Pages and endpoints
 
 | Path | Method | Parameters | Access | Output |
@@ -277,6 +307,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
 | `project_emails.php` | GET | `id` | project read + private-project check + agenda read | Page |
+| `oauth.php` | GET / POST | `action=connect&accountid&token` (GET); provider callback `code, state` or `error, error_description`; `action=disconnect&accountid` (POST) | connect: account owner; disconnect: owner or `account->admin` | Redirect |
 | `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent` | own (`account->read`) or any (`account->admin`) | Page |
 | `admin/setup.php` | GET / POST | `action=update, CONVOMAIL_ALLOWED_HOSTS` | admin | Page |
 | `ajax/message.php` | GET | `accountid, folder, uid, showimages` | `account->read`; usable account | HTML fragment |
@@ -316,9 +347,10 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_ADD_SIGNATURE` | 1 (created on activation) | Insert signature in compose |
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
   | `CONVOMAIL_OPEN_TRACKING` | 0 | Open tracking available |
+  | `CONVOMAIL_OAUTH_GOOGLE_APP`, `CONVOMAIL_OAUTH_MICROSOFT_APP` | empty | Core OAuth app used for each provider; empty = provider not offered |
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php`, and records an IMAP protocol trace per user in `<documents>/convomail/temp/imap-trace-<user id>.log` (`?mode=imaptrace`) |
 
-- **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. They are never written to `llx_const`.
+- **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. For OAuth accounts also `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL` and `OAUTH_<TYPE>-convomail<id>_ID/_SECRET/_TENANT/_SCOPE/_URLCALLBACK`. They are never written to `llx_const`.
 - **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default).
 - **Session:** `convomail_folders_<accountid>` (folder list, 5 minutes), cleared on account changes and when Archive / Trash are created.
 
@@ -333,7 +365,8 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 - **Attachments:** always `Content-Disposition: attachment`, except raster images requested inline; `X-Content-Type-Options: nosniff`; `Content-Security-Policy: default-src 'none'; sandbox`. Part ids are validated (`^[0-9]+(\.[0-9]+)*$`).
 - **Outgoing HTML:** rich editor → `restricthtml`; plain textarea → `htmlspecialchars`.
 - **SSRF:** `checkHostAllowed()` on save and before every send, so a user can't point the server at internal hosts.
-- **Secrets:** passwords are encrypted with `dolEncrypt()`. SMTP settings live in memory only for one send. `ajax/debug.php` refuses SQL that mentions `pass_crypted`.
+- **Secrets:** passwords are encrypted with `dolEncrypt()`, OAuth tokens by `DoliStorage` (also `dolEncrypt()`). SMTP settings live in memory only for one send. `ajax/debug.php` refuses SQL that mentions `pass_crypted`, prints only a token's expiry, and the IMAP trace passes through `ConvomailTraceMaskFilter`, which replaces XOAUTH2 credentials with `[TOKEN]` (Horde masks only passwords).
+- **OAuth:** the consent state is a random nonce in the session, single use, checked with `hash_equals()`, and tied to an account the signed-in user owns. Only the owner can connect an account.
 - **Public endpoint:** `public/open.php` accepts only 32-hex keys, does nothing when tracking is off, and always returns the same GIF (no oracle).
 
 ## 10. External code
@@ -348,7 +381,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 
 ## 11. Known limits
 
-- **IMAP only, password login only.** OAuth for Google / Microsoft isn't built; Microsoft 365 tenants that block password SMTP won't send.
+- **IMAP only.** Sign-in is by password, or OAuth with Google or Microsoft 365. OAuth was tested against a local Dovecot with a token check, not yet against Google or Microsoft themselves. Other OAuth providers aren't offered.
 - **No background sync.** Filing replies needs someone to open the mailbox page that lists them.
 - **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's.
 - **Drafts aren't saved**, there are no shared or team mailboxes, and nothing is permanently deleted (emptying Trash is left to the mail client).

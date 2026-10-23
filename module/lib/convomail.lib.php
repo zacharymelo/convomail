@@ -88,7 +88,19 @@ function convomail_test_smtp(ConvomailAccount $account)
 		$transport = new Swift_SmtpTransport($account->smtp_host, (int) $account->smtp_port, $secure);
 		$transport->setTimeout(15);
 		$transport->setUsername($account->login);
-		$transport->setPassword($account->getPassword());
+		if ($account->isOAuth()) {
+			// Same as CMailFile in XOAUTH2 mode: the access token goes in the password
+			dol_include_once('/convomail/class/convomailoauth.class.php');
+			$oauth = new ConvomailOAuth($account->db);
+			$token = $oauth->accessToken($account);
+			if ($token === '') {
+				return $oauth->error;
+			}
+			$transport->setAuthMode('XOAUTH2');
+			$transport->setPassword($token);
+		} else {
+			$transport->setPassword($account->getPassword());
+		}
 		if (getDolGlobalInt('CONVOMAIL_ALLOW_SELF_SIGNED')) {
 			$transport->setStreamOptions(array('ssl' => array('allow_self_signed' => true, 'verify_peer' => false, 'verify_peer_name' => false)));
 		}

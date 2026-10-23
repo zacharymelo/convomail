@@ -14,6 +14,8 @@ CREATE TABLE llx_convomail_account(
     smtp_port       INTEGER       NOT NULL DEFAULT 587,
     smtp_encryption VARCHAR(8)    NOT NULL DEFAULT 'tls',
     login           VARCHAR(255)  NOT NULL,
+    auth_type       VARCHAR(16)   NOT NULL DEFAULT 'password',  -- password | oauth
+    oauth_app       VARCHAR(64),                               -- core OAuth app used, e.g. GOOGLE-Mail
     pass_crypted    VARCHAR(255),
     sent_folder     VARCHAR(255),
     server_saves_sent SMALLINT    NOT NULL DEFAULT 0,

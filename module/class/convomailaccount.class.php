@@ -30,6 +30,9 @@ class ConvomailAccount extends CommonObject
 	const STATUS_DISABLED = 0;
 	const STATUS_ENABLED = 1;
 
+	const AUTH_PASSWORD = 'password';
+	const AUTH_OAUTH = 'oauth';
+
 	/**
 	 * @var array<string,array<string,mixed>> Field definitions used by the *Common() methods
 	 */
@@ -46,6 +49,8 @@ class ConvomailAccount extends CommonObject
 		'smtp_port'       => array('type' => 'integer', 'label' => 'ConvomailSmtpPort', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '587', 'position' => 51),
 		'smtp_encryption' => array('type' => 'varchar(8)', 'label' => 'ConvomailSmtpEncryption', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => 'tls', 'position' => 52),
 		'login'           => array('type' => 'varchar(255)', 'label' => 'Login', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'position' => 60),
+		'auth_type'       => array('type' => 'varchar(16)', 'label' => 'ConvomailAuthType', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => 'password', 'position' => 58),
+		'oauth_app'       => array('type' => 'varchar(64)', 'label' => 'ConvomailOAuthApp', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 59),
 		'pass_crypted'    => array('type' => 'varchar(255)', 'label' => 'Password', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 61),
 		'sent_folder'     => array('type' => 'varchar(255)', 'label' => 'ConvomailSentFolder', 'enabled' => 1, 'visible' => 1, 'notnull' => 0, 'position' => 70),
 		'server_saves_sent' => array('type' => 'smallint', 'label' => 'ConvomailServerSavesSent', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 75),
@@ -70,6 +75,10 @@ class ConvomailAccount extends CommonObject
 	public $smtp_port;
 	public $smtp_encryption;
 	public $login;
+	/** @var string 'password' or 'oauth' */
+	public $auth_type = 'password';
+	/** @var string Core OAuth app key (e.g. GOOGLE-Mail) when auth_type is 'oauth' */
+	public $oauth_app;
 	public $pass_crypted;
 	public $sent_folder;
 	public $server_saves_sent;
@@ -174,8 +183,21 @@ class ConvomailAccount extends CommonObject
 		$result = $this->deleteCommon($user, $notrigger);
 		if ($result > 0) {
 			self::clearSessionCache();
+			if ($this->isOAuth()) {
+				dol_include_once('/convomail/class/convomailoauth.class.php');
+				$oauth = new ConvomailOAuth($this->db);
+				$oauth->disconnect($this);
 			}
+		}
 		return $result;
+	}
+
+	/**
+	 * @return bool True when the account signs in with an OAuth token instead of a password
+	 */
+	public function isOAuth()
+	{
+		return $this->auth_type === self::AUTH_OAUTH;
 	}
 
 	/**

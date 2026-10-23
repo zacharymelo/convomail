@@ -71,6 +71,14 @@ Only when asked:
 - The References argument takes a single id.
 - CMailFile embeds a pasted image twice and attaches it again. `ConvomailTransport::dedupePastedImages()` fixes this (UPSTREAM item 10).
 
+**OAuth (0.5.0)**
+- Core OAuth callbacks keep one token per app; Convomail's `oauth.php` keeps one per account under the `DoliStorage` key `convomail<account id>`. `DoliStorage` never sets `fk_user`; `ConvomailOAuth` does.
+- phpoauth only accepts scopes that are `SCOPE_*` constants of the service class. Pass the constant names (`gmail_full`, `imap_accessasuserall`, ...).
+- The Google service stores its own consent `state` in the token row (no token, no owner). Disconnect deletes by service key, not by owner.
+- Horde refuses a blank password before trying XOAUTH2: pass the `Horde_Imap_Client_Password_Xoauth2` object as `password` too.
+- Horde's trace masks passwords but not the XOAUTH2 credential; the trace goes through `ConvomailTraceMaskFilter`. Never log a token.
+- Test without Google or Microsoft with `dev/oauth/start.sh` (Dovecot with an oauth2 passdb; see dev/README.md).
+
 **Other**
 - Module CSS/JS passed to `llxHeader()` is linked without a version, so browsers keep the old file after an upgrade. Pages pass `convomail_assets(...)` as the `$head` argument instead (version = file time).
 - A fixed-height CSS grid or flex column needs `minmax(0, 1fr)` rows / `min-height: 0` children, or panes grow with their content and can't scroll.

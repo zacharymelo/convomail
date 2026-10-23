@@ -16,6 +16,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
 dol_include_once('/convomail/class/convomailaccount.class.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
+dol_include_once('/convomail/class/convomailoauth.class.php');
 
 /**
  * Class ConvomailTransport
@@ -128,6 +129,15 @@ class ConvomailTransport
 		if (!empty($msg['track_key'])) {
 			$pixel = ConvomailTracker::pixelHtml($msg['track_key']);
 			$body .= $pixel;
+		}
+
+		if ($account->isOAuth()) {
+			// Refresh the token now if needed, so CMailFile finds a valid one and the error is ours, not a failed SMTP login
+			$oauth = new ConvomailOAuth($this->db);
+			if ($oauth->accessToken($account) === '') {
+				$this->error = $oauth->error;
+				return -1;
+			}
 		}
 
 		$saved = $this->overrideSmtpSettings($account);
@@ -309,6 +319,15 @@ class ConvomailTransport
 			// Pasted images (src="data:...") become inline attachments; many mail apps do not show data: images
 			'MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA' => 1,
 		);
+		if ($account->isOAuth()) {
+			// CMailFile reads the account's token from llx_oauth_token through these (see ConvomailOAuth)
+			$oauthvalues = ConvomailOAuth::mailSettings($account);
+			$values['MAIN_MAIL_SMTPS_PW_'.$ctx] = '';
+			$values['MAIN_MAIL_SMTPS_AUTH_TYPE_'.$ctx] = 'XOAUTH2';
+			$values['MAIN_MAIL_SMTPS_OAUTH_SERVICE_'.$ctx] = $oauthvalues['service'];
+			unset($oauthvalues['service']);
+			$values = array_merge($values, $oauthvalues);
+		}
 
 		$saved = array();
 		foreach ($values as $key => $value) {

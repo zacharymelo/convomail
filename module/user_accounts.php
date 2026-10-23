@@ -31,6 +31,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/usergroups.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
 dol_include_once('/convomail/class/convomailaccount.class.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
+dol_include_once('/convomail/class/convomailoauth.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
 
 $langs->loadLangs(array('convomail@convomail', 'users', 'mails', 'admin'));
@@ -66,6 +67,14 @@ if ($accountid > 0) {
 $presets = convomail_provider_presets();
 $encryptions = convomail_encryption_choices();
 
+// Sign-in methods: password, plus each OAuth provider the admin has set up
+$authmethods = array('password' => $langs->trans('Password'));
+foreach (ConvomailOAuth::providers() as $code => $provider) {
+	if (ConvomailOAuth::appFor($code) !== '') {
+		$authmethods[$code] = $langs->trans('ConvomailSignInWith', $provider['label']);
+	}
+}
+
 
 /*
  * Actions
@@ -96,8 +105,27 @@ function convomail_account_from_post(ConvomailAccount $account)
 	$account->server_saves_sent = GETPOSTINT('server_saves_sent') ? 1 : 0;
 	$account->is_default      = GETPOSTINT('is_default') ? 1 : 0;
 	$account->status          = GETPOSTINT('status') ? ConvomailAccount::STATUS_ENABLED : ConvomailAccount::STATUS_DISABLED;
-	// Empty password field keeps the stored one
-	$account->setPassword(GETPOST('password', 'password'));
+
+	$method = GETPOST('auth_method', 'aZ09');
+	$app = ($method !== 'password') ? ConvomailOAuth::appFor($method) : '';
+	if ($app !== '') {
+		if ($account->id > 0 && $account->isOAuth() && ConvomailOAuth::providerOfApp($account->oauth_app) !== $method) {
+			// Another provider: the old token is of no use
+			(new ConvomailOAuth($account->db))->disconnect($account);
+		}
+		if (!$account->isOAuth() || ConvomailOAuth::providerOfApp($account->oauth_app) !== $method) {
+			$account->oauth_app = $app;
+		}
+		$account->auth_type = ConvomailAccount::AUTH_OAUTH;
+	} else {
+		if ($account->id > 0 && $account->isOAuth()) {
+			(new ConvomailOAuth($account->db))->disconnect($account);
+		}
+		$account->auth_type = ConvomailAccount::AUTH_PASSWORD;
+		$account->oauth_app = null;
+		// Empty password field keeps the stored one
+		$account->setPassword(GETPOST('password', 'password'));
+	}
 }
 
 /**
@@ -116,7 +144,7 @@ function convomail_account_check(ConvomailAccount $account)
 	if (!empty($account->email) && !isValidEmail($account->email)) {
 		$errors[] = $langs->trans('ErrorBadEMail', $account->email);
 	}
-	if (empty($account->pass_crypted)) {
+	if (!$account->isOAuth() && empty($account->pass_crypted)) {
 		$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('Password'));
 	}
 	foreach (array('imap_encryption', 'smtp_encryption') as $field) {
@@ -134,6 +162,11 @@ if ($action == 'add') {
 	$errors = convomail_account_check($account);
 	if (empty($errors) && $account->create($user) > 0) {
 		setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+		if ($account->isOAuth() && (int) $account->fk_user === (int) $user->id) {
+			// Straight on to the provider's consent page
+			header('Location: '.dol_buildpath('/convomail/oauth.php', 1).'?action=connect&accountid='.$account->id.'&token='.newToken());
+			exit;
+		}
 		header('Location: '.$_SERVER['PHP_SELF'].'?id='.$object->id.'&accountid='.$account->id.'&action=test&token='.newToken());
 		exit;
 	}
@@ -254,10 +287,18 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 		print '</td></tr>';
 	}
 
+	if (count($authmethods) > 1 || $account->isOAuth()) {
+		$currentmethod = $account->isOAuth() ? ConvomailOAuth::providerOfApp($account->oauth_app) : 'password';
+		print '<tr><td class="titlefieldcreate">'.$langs->trans('ConvomailAuthType').'</td><td>';
+		print $form->selectarray('auth_method', $authmethods, $currentmethod, 0, 0, 0, '', 0, 0, 0, '', 'minwidth200');
+		print ' '.$form->textwithpicto('', $langs->trans('ConvomailAuthTypeHelp'));
+		print '</td></tr>';
+	}
+
 	print '<tr><td class="titlefieldcreate">'.$langs->trans('ConvomailDisplayName').'</td><td><input type="text" name="label" class="minwidth300" value="'.dol_escape_htmltag($account->label).'"></td></tr>';
 	print '<tr><td class="fieldrequired">'.$langs->trans('Email').'</td><td><input type="email" name="email" class="minwidth300" value="'.dol_escape_htmltag($account->email).'"></td></tr>';
 	print '<tr><td class="fieldrequired">'.$langs->trans('Login').'</td><td><input type="text" name="login" class="minwidth300" value="'.dol_escape_htmltag($account->login).'" autocomplete="off"></td></tr>';
-	print '<tr><td'.($iscreate ? ' class="fieldrequired"' : '').'>'.$langs->trans('Password').'</td><td><input type="password" name="password" class="minwidth300" value="" autocomplete="new-password">';
+	print '<tr class="cm-password-row"><td'.($iscreate ? ' class="fieldrequired"' : '').'>'.$langs->trans('Password').'</td><td><input type="password" name="password" class="minwidth300" value="" autocomplete="new-password">';
 	if (!$iscreate) {
 		print ' <span class="opacitymedium">'.$langs->trans('ConvomailPasswordKeep').'</span>';
 	}
@@ -286,22 +327,37 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print $form->buttonsSaveCancel($iscreate ? 'Create' : 'Save');
 	print '</form>';
 
-	if ($iscreate) {
-		// Fill server fields from the chosen preset
-		print '<script>
-		jQuery(function ($) {
-			var presets = '.json_encode($presets).';
-			$("#convomail_preset").on("change", function () {
-				var p = presets[$(this).val()];
-				if (!p) { return; }
-				$.each(["imap_host", "imap_port", "smtp_host", "smtp_port"], function (i, f) { $("[name=" + f + "]").val(p[f]); });
-				$("[name=imap_encryption]").val(p.imap_encryption).trigger("change");
-				$("[name=smtp_encryption]").val(p.smtp_encryption).trigger("change");
-				$("[name=server_saves_sent]").prop("checked", !!p.server_saves_sent);
-			});
-		});
-		</script>';
+	// Fill server fields from the chosen preset; an OAuth sign-in uses its provider's preset and needs no password
+	$oauthpresets = array();
+	foreach (ConvomailOAuth::providers() as $code => $provider) {
+		$oauthpresets[$code] = $provider['preset'];
 	}
+	print '<script>
+	jQuery(function ($) {
+		var presets = '.json_encode($presets).';
+		var oauthpresets = '.json_encode($oauthpresets).';
+		var iscreate = '.($iscreate ? 'true' : 'false').';
+		function applyPreset(key) {
+			var p = presets[key];
+			if (!p) { return; }
+			$.each(["imap_host", "imap_port", "smtp_host", "smtp_port"], function (i, f) { $("[name=" + f + "]").val(p[f]); });
+			$("[name=imap_encryption]").val(p.imap_encryption).trigger("change");
+			$("[name=smtp_encryption]").val(p.smtp_encryption).trigger("change");
+			$("[name=server_saves_sent]").prop("checked", !!p.server_saves_sent);
+		}
+		$("#convomail_preset").on("change", function () { applyPreset($(this).val()); });
+		function onMethod(firsttime) {
+			var m = $("#auth_method").val() || "password";
+			$(".cm-password-row").toggle(m === "password");
+			if (m !== "password" && !firsttime) {
+				if (iscreate) { $("#convomail_preset").val(oauthpresets[m]).trigger("change"); } else { applyPreset(oauthpresets[m]); }
+				if (!$("[name=login]").val()) { $("[name=login]").val($("[name=email]").val()); }
+			}
+		}
+		$("#auth_method").on("change", function () { onMethod(false); });
+		onMethod(true);
+	});
+	</script>';
 } else {
 	$list = $account->fetchAllForUser($object->id);
 	if (!is_array($list)) {
@@ -318,6 +374,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print '<td>'.$langs->trans('Email').'</td>';
 	print '<td>'.$langs->trans('ConvomailImapHost').'</td>';
 	print '<td>'.$langs->trans('ConvomailSmtpHost').'</td>';
+	print '<td>'.$langs->trans('ConvomailAuthType').'</td>';
 	print '<td>'.$langs->trans('ConvomailSentFolder').'</td>';
 	print '<td class="center">'.$langs->trans('Default').'</td>';
 	print '<td class="center">'.$langs->trans('Status').'</td>';
@@ -325,14 +382,42 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print '</tr>';
 
 	if (empty($list)) {
-		print '<tr class="oddeven"><td colspan="7"><span class="opacitymedium">'.$langs->trans('ConvomailNoAccount').'</span></td></tr>';
+		print '<tr class="oddeven"><td colspan="8"><span class="opacitymedium">'.$langs->trans('ConvomailNoAccount').'</span></td></tr>';
 	}
+	$oauth = new ConvomailOAuth($db);
+	$providers = ConvomailOAuth::providers();
+	$oauthurl = dol_buildpath('/convomail/oauth.php', 1);
 	foreach ($list as $acc) {
 		$baseurl = $_SERVER['PHP_SELF'].'?id='.$object->id.'&accountid='.$acc->id.'&token='.newToken();
+		$isowner = ((int) $acc->fk_user === (int) $user->id);
 		print '<tr class="oddeven">';
 		print '<td>'.dol_escape_htmltag($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).'</td>';
 		print '<td>'.dol_escape_htmltag($acc->imap_host.':'.$acc->imap_port).'</td>';
 		print '<td>'.dol_escape_htmltag($acc->smtp_host.':'.$acc->smtp_port).'</td>';
+		print '<td class="nowraponall">';
+		if ($acc->isOAuth()) {
+			$code = ConvomailOAuth::providerOfApp($acc->oauth_app);
+			print dol_escape_htmltag($providers[$code]['label'] ?? $acc->oauth_app).'<br>';
+			$st = $oauth->status($acc);
+			if (!$st['connected']) {
+				print dolGetStatus($langs->trans('ConvomailOAuthStatusNone'), '', '', 'status8', 3);
+			} elseif (!$st['refreshable'] && $st['expires'] && $st['expires'] < dol_now()) {
+				print dolGetStatus($langs->trans('ConvomailOAuthStatusExpired'), '', '', 'status8', 3);
+			} else {
+				print dolGetStatus($langs->trans('ConvomailOAuthStatusOk'), '', '', 'status4', 3);
+			}
+			if ($isowner) {
+				print ' <a class="button smallpaddingimp" href="'.dol_escape_htmltag($oauthurl.'?action=connect&accountid='.$acc->id.'&token='.newToken()).'">'.$langs->trans($st['connected'] ? 'ConvomailOAuthReconnectButton' : 'ConvomailOAuthConnectButton', $providers[$code]['label'] ?? '').'</a>';
+			}
+			if ($st['connected']) {
+				print '<form method="POST" action="'.dol_escape_htmltag($oauthurl).'" class="inline-block">';
+				print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="disconnect"><input type="hidden" name="accountid" value="'.((int) $acc->id).'">';
+				print ' <button type="submit" class="button smallpaddingimp buttonDelete">'.$langs->trans('ConvomailOAuthDisconnectButton').'</button></form>';
+			}
+		} else {
+			print $langs->trans('Password');
+		}
+		print '</td>';
 		print '<td>'.dol_escape_htmltag($acc->sent_folder).'</td>';
 		print '<td class="center">'.($acc->is_default ? img_picto($langs->trans('Default'), 'on') : '').'</td>';
 		print '<td class="center">'.$acc->getLibStatut(5).'</td>';
