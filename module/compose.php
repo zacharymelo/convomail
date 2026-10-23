@@ -698,7 +698,10 @@ if (isModEnabled('ai') && $editorishtml) {
 
 print '<tr><td colspan="2">';
 $editor = new DolEditor('message', $message, '', 360, 'dolibarr_mailings', 'In', true, true, $editorishtml, 20, '90%');
-print $editor->Create(1);
+// The editor's content filter keeps only what its toolbar can make, so it would drop the reply quote (blockquote),
+// the line breaks of quoted plain-text mail (white-space) and the signature/quote markers. Core's own extras first.
+$allowedcontent = 'a[target];section[contenteditable,id];div{background-color,color,display,float,height,margin,margin-top,margin-bottom,padding,width,border-top-left-radius,border-top-right-radius,box-shadow,white-space,word-wrap}(convomail-signature,convomail-quote);blockquote{margin,margin-left,border-left,padding-left}';
+print $editor->Create(1, '', $allowedcontent);
 print '</td></tr>';
 
 print '</table>';

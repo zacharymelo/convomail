@@ -121,6 +121,11 @@ class ConvomailRenderer
 		if ($part['type'] === 'text/plain') {
 			$html = htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 			$html = preg_replace('#\bhttps?://[^\s<>"\']+#i', '<a href="$0" target="_blank" rel="noopener noreferrer">$0</a>', $html);
+			if ($forStorage) {
+				// Quotes and agenda notes go through editors that collapse plain line breaks and write a line break
+				// after each <br>: pre-wrap would then show every break twice. So <br> and normal white-space.
+				return '<div style="word-wrap:break-word">'.nl2br($html, false).'</div>';
+			}
 			return '<div style="white-space:pre-wrap;word-wrap:break-word">'.$html.'</div>';
 		}
 
