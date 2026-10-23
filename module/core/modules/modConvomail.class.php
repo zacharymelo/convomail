@@ -282,8 +282,15 @@ class modConvomail extends DolibarrModules
 		// Scheduled jobs and menu entries added by a newer version (jobs are skipped if they exist; menus are rebuilt)
 		$this->insert_cronjobs();
 		if (getDolGlobalString('CONVOMAIL_DB_VERSION') !== $this->version) {
+			global $user;
+
 			$this->delete_menus();
 			$this->insert_menus();
+			// Names, descriptions and connection of the "Log replies automatically" collectors follow the new version
+			if (isModEnabled('emailcollector') && is_object($user)) {
+				dol_include_once('/convomail/class/convomailcollector.class.php');
+				(new ConvomailCollector($this->db))->refreshAll($user);
+			}
 		}
 		// Schema is shared by all entities
 		dolibarr_set_const($this->db, 'CONVOMAIL_DB_VERSION', $this->version, 'chaine', 0, 'Convomail tables are at this version', 0);

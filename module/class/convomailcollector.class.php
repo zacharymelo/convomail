@@ -134,7 +134,62 @@ class ConvomailCollector
 			$collector->password = $account->getPassword();
 		}
 		$collector->source_directory = ($which === self::IN) ? 'INBOX' : ((string) $account->sent_folder !== '' ? (string) $account->sent_folder : 'Sent');
-		$collector->label = dol_trunc($langs->transnoentitiesnoconv($which === self::IN ? 'ConvomailCollectorLabelIn' : 'ConvomailCollectorLabelOut', $account->email), 128);
+		self::fillDescription($collector, $account, $which);
+	}
+
+	/**
+	 * Name and description that tell, in core's collector list, which mailbox and which Dolibarr user a job is for
+	 *
+	 * @param  EmailCollector   $collector Collector
+	 * @param  ConvomailAccount $account   Account
+	 * @param  string           $which     self::IN or self::OUT
+	 * @return void
+	 */
+	private static function fillDescription($collector, ConvomailAccount $account, $which)
+	{
+		global $db, $langs;
+
+		// Also called from scheduled jobs and scripts, where the module's translations aren't loaded
+		$langs->load('convomail@convomail');
+		if ($account->isShared()) {
+			$owner = $langs->transnoentitiesnoconv('ConvomailCollectorOwnerShared');
+			$ownerlong = $owner;
+			$access = $account->fetchAccess();
+			if (is_array($access) && !empty($access)) {
+				$names = array();
+				foreach ($access as $grant) {
+					$names[] = $grant['name'] ?: $grant['login'];
+				}
+				$ownerlong = $langs->transnoentitiesnoconv('ConvomailCollectorOwnerSharedWith', implode(', ', $names));
+			}
+		} else {
+			$u = new User($db);
+			$owner = ($u->fetch((int) $account->fk_user) > 0) ? $u->getFullName($langs) : '#'.((int) $account->fk_user);
+			$ownerlong = $langs->transnoentitiesnoconv('ConvomailCollectorOwnerUser', $owner, ($u->id > 0 ? $u->login : ''));
+		}
+		$key = ($which === self::IN) ? 'In' : 'Out';
+		$collector->label = dol_trunc($langs->transnoentitiesnoconv('ConvomailCollectorLabel'.$key, $account->email, $owner), 128, 'right', 'UTF-8', 1);
+		$collector->description = $langs->transnoentitiesnoconv('ConvomailCollectorDescription'.$key, $account->email, $ownerlong, $collector->source_directory);
+	}
+
+	/**
+	 * Refresh the name, description and connection of every Convomail collector (after an upgrade)
+	 *
+	 * @param  User $user User
+	 * @return void
+	 */
+	public function refreshAll(User $user)
+	{
+		if (!self::isAvailable()) {
+			return;
+		}
+		$resql = $this->db->query("SELECT rowid FROM ".MAIN_DB_PREFIX."convomail_account WHERE entity IN (".getEntity('convomailaccount').")");
+		while ($resql && ($obj = $this->db->fetch_object($resql))) {
+			$account = new ConvomailAccount($this->db);
+			if ($account->fetch((int) $obj->rowid) > 0) {
+				$this->sync($account, $user);
+			}
+		}
 	}
 
 	/**
@@ -182,7 +237,6 @@ class ConvomailCollector
 			if ($isnew) {
 				$collector = new EmailCollector($this->db);
 				$collector->ref = self::ref($account, $which);
-				$collector->description = $langs->transnoentitiesnoconv('ConvomailCollectorDescription');
 				$collector->maxemailpercollect = 100;
 				$collector->target_directory = '';
 			}

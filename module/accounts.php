@@ -131,6 +131,8 @@ if (in_array($action, array('grant', 'revoke'), true) && $account->id > 0 && $_S
 	$userid = GETPOSTINT('userid');
 	$result = ($action == 'grant') ? $account->setAccess($userid, (bool) GETPOSTINT('cansend'), $user) : $account->removeAccess($userid);
 	if ($result > 0) {
+		// The collectors' description names the users of a shared mailbox
+		(new ConvomailCollector($db))->sync($account, $user);
 		setEventMessages($langs->trans('ConvomailAccessSaved'), null, 'mesgs');
 	} else {
 		setEventMessages($account->error ?: $langs->trans('Error'), null, 'errors');

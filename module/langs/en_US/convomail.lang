@@ -224,9 +224,13 @@ ConvomailFilingNeedsPhpImap = Needs the PHP-IMAP library for collectors (Sign in
 ConvomailFilingCollectorCard = Advanced settings of the two Email Collector jobs that do the checks (administrators)
 ConvomailCollectorModuleOff = The Email Collector module is off
 ConvomailEnableModule = Enable it
-ConvomailCollectorLabelIn = Convomail: replies to %s
-ConvomailCollectorLabelOut = Convomail: replies sent from %s
-ConvomailCollectorDescription = Set up by Convomail (automatic filing). Replies received, or sent from another mail app, are filed on the agenda with their third party and project. Connection settings follow the Convomail account.
+ConvomailCollectorLabelIn = Convomail: Inbox replies of %s (%s)
+ConvomailCollectorLabelOut = Convomail: Sent replies of %s (%s)
+ConvomailCollectorDescriptionIn = Set up by Convomail for the mail account %s of %s. Every 5 minutes it logs on the agenda the replies received in "%s" to emails sent from Dolibarr, with their third party, contact and project. Its connection follows the Convomail account: change it in the account's settings, and turn it on or off with "Log replies automatically" in Mail accounts.
+ConvomailCollectorDescriptionOut = Set up by Convomail for the mail account %s of %s. Every 5 minutes it logs on the agenda the replies found in "%s" that were written in another mail app (phone, Outlook) to emails sent from Dolibarr. Its connection follows the Convomail account: change it in the account's settings, and turn it on or off with "Log replies automatically" in Mail accounts.
+ConvomailCollectorOwnerUser = %s (Dolibarr user %s)
+ConvomailCollectorOwnerShared = shared mailbox
+ConvomailCollectorOwnerSharedWith = the shared mailbox used by %s
 
 # Shared mailboxes and the admin dashboard
 ConvomailShared = shared
