@@ -97,6 +97,7 @@ ConvomailMarkRead = Mark as read
 ConvomailMoveTo = Move to...
 ConvomailOpenFullPage = Open on its own page
 ConvomailConversation = Conversation
+ConvomailResizeHelp = Drag to resize (arrow keys work too). Double-click to reset. Remembered in this browser.
 ConvomailAiTools = AI writing tools
 ConvomailAiHelp = Write or rework the text above your signature with the AI service set up in Dolibarr's AI module. In a reply, the AI also reads the message you are answering. Your signature and the quoted message are never changed. Check the text before sending; Undo puts back what was there.
 ConvomailAiPromptNew = Describe the email to write, e.g. "Thank them for the meeting and propose a call next week"

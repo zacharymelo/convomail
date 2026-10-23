@@ -319,6 +319,8 @@ class ConvomailView
 			$h .= ' data-self="'.dol_escape_htmltag($pageurl).'"';
 		}
 		$h .= '>';
+		// In the reading pane the message scrolls on its own, above the conversation (resizable split, js/convomail.js)
+		$h .= '<div class="cm-view-main">';
 
 		// Toolbar
 		$h .= '<div class="cm-toolbar cm-view-toolbar">';
@@ -415,9 +417,12 @@ class ConvomailView
 		}
 		$h .= '<iframe class="convomail-body" data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id)).'" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
 
+		$h .= '</div>';	// cm-view-main
+
 		// Conversation (earlier messages and replies, including those sent): loaded afterwards, see ajax/thread.php
 		if (!empty($message['msgid']) && convomail_show_conversation()) {
-			$h .= '<div class="cm-thread-slot" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/thread.php', 1).$base).'"></div>';
+			$h .= '<div class="cm-resize cm-resize-row" role="separator" aria-orientation="horizontal" tabindex="0" title="'.dol_escape_htmltag($langs->trans('ConvomailResizeHelp')).'"></div>';
+			$h .= '<div class="cm-conv-slot" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/thread.php', 1).$base).'"></div>';
 		}
 		$h .= '</div>';
 

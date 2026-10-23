@@ -9,7 +9,8 @@
 	--cm-selected: var(--colorbacklinepairchecked, #e8eefc);
 	--cm-accent: var(--colortextlink, #263c5c);
 	display: grid;
-	grid-template-columns: 200px minmax(300px, 400px) minmax(0, 1fr);
+	/* folders | handle | list | handle | reading pane; widths set by dragging the handles (js/convomail.js) */
+	grid-template-columns: var(--cm-col1, 200px) 5px var(--cm-col2, 360px) 5px minmax(0, 1fr);
 	grid-template-rows: minmax(0, 1fr);	/* panes take the mailbox height and scroll, instead of growing with their content */
 	height: calc(100vh - 110px);
 	min-height: 480px;
@@ -20,7 +21,7 @@
 }
 
 /* Left: folders */
-.cm-folders { border-right: 1px solid var(--cm-border); padding: 10px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.cm-folders { padding: 10px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .cm-folders .cm-account { width: 100%; max-width: 100%; }
 .cm-compose { display: block; text-align: center; padding: 8px 10px; border-radius: 18px; background: var(--butactionbg, #4b6fbe); color: #fff !important; font-weight: 600; text-decoration: none; }
 .cm-compose:hover { filter: brightness(1.08); }
@@ -52,7 +53,7 @@
 .cm-pagesize select { font-size: inherit; padding: 1px 2px; }
 
 /* Middle: list */
-.cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--cm-border); }
+.cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .cm-rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .cm-row { display: grid; grid-template-columns: 22px 22px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 6px 8px 6px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
 .cm-row:hover { background: var(--cm-hover); }
@@ -79,6 +80,25 @@
 
 /* Right: reading pane */
 .cm-pane { overflow-y: auto; min-width: 0; position: relative; }
+
+/* Resize handles: a 1px line in a 5px grab area */
+.cm-resize { background: linear-gradient(var(--cm-border), var(--cm-border)) center / 1px 100% no-repeat; touch-action: none; outline: none; }
+.cm-resize-col { cursor: col-resize; }
+.cm-resize-row { display: none; flex: 0 0 5px; cursor: row-resize; background-size: 100% 1px; }
+.cm-resize:hover, .cm-resize:focus-visible, .cm-resizing .cm-resize.active { background-color: var(--cm-selected); background-image: linear-gradient(var(--cm-accent), var(--cm-accent)); }
+.cm-resizing, .cm-resizing * { user-select: none; }
+.cm-resizing iframe { pointer-events: none; }	/* frames would swallow the drag */
+.cm-resizing.cm-resizing-col, .cm-resizing.cm-resizing-col * { cursor: col-resize !important; }
+.cm-resizing.cm-resizing-row, .cm-resizing.cm-resizing-row * { cursor: row-resize !important; }
+
+/* Reading pane: the message scrolls on its own, the conversation stays below it (height dragged with the row handle) */
+.cm-pane > .cm-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.cm-pane > .cm-view > .cm-view-main { flex: 1 1 auto; min-height: 60px; overflow-y: auto; }
+.cm-pane > .cm-view.cm-has-conv > .cm-resize-row { display: block; }
+.cm-pane > .cm-view > .cm-conv-slot { flex: 0 0 auto; min-height: 0; overflow-y: auto; }
+.cm-pane > .cm-view.cm-has-conv > .cm-conv-slot { flex-basis: var(--cm-conv-h, 40%); min-height: 60px; }
+.cm-pane .cm-conv-slot .cm-conv { border-top: 0; margin-top: 0; padding-top: 0; }
+.cm-pane .cm-conv-slot .cm-conv-title { position: sticky; top: 0; z-index: 1; padding: 8px 0 6px; margin-bottom: 4px; background: var(--colorbackbody, #fff); }
 .cm-pane.loading { opacity: .55; }
 .cm-view-toolbar { position: sticky; top: 0; z-index: 2; background: var(--colorbackbody, #fff); }
 .cm-subject { font-size: 1.3em; font-weight: 600; margin: 14px 16px 6px; line-height: 1.3; }
@@ -93,23 +113,23 @@
 .cm-imagesblocked { margin: 6px 16px; padding: 6px 10px; border-radius: 4px; background: var(--cm-hover); font-size: .9em; }
 .convomail-body { display: block; width: calc(100% - 32px); margin: 8px 16px 16px; min-height: 160px; border: 0; background: #fff; border-radius: 4px; }
 /* Conversation under a message */
-.cm-thread { margin: 4px 16px 16px; border-top: 1px solid var(--cm-border); padding-top: 10px; }
-.cm-thread-title { font-weight: 600; margin-bottom: 8px; }
-.cm-thread-item { border: 1px solid var(--cm-border); border-radius: 6px; margin-bottom: 6px; }
-.cm-thread-item[data-body] .cm-thread-head { cursor: pointer; }
-.cm-thread-item.loading { opacity: .6; }
-.cm-thread-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 10px 0; }
-.cm-thread-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cm-thread-date { margin-left: auto; color: var(--cm-muted); font-size: .9em; white-space: nowrap; }
-.cm-thread-snippet { padding: 2px 10px 6px; color: var(--cm-muted); font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cm-thread-current { background: var(--cm-hover); border-style: dashed; }
-.cm-thread-mine { border-left: 3px solid var(--cm-accent); }
-.cm-thread-item.open .cm-thread-snippet { display: none; }
-.cm-thread-body { display: none; }
-.cm-thread-item.open .cm-thread-body { display: block; padding-top: 4px; }
-.cm-thread-body .cm-meta, .cm-thread-body .cm-attachments, .cm-thread-body .cm-imagesblocked { margin-left: 10px; margin-right: 10px; }
-.cm-thread-body .convomail-body { width: calc(100% - 20px); height: 40px; margin: 6px 10px 4px; min-height: 40px; }
-.cm-thread-open { padding: 0 10px 8px; font-size: .9em; }
+.cm-conv { margin: 4px 16px 16px; border-top: 1px solid var(--cm-border); padding-top: 10px; }
+.cm-conv-title { font-weight: 600; margin-bottom: 8px; }
+.cm-conv-item { border: 1px solid var(--cm-border); border-radius: 6px; margin-bottom: 6px; }
+.cm-conv-item[data-body] .cm-conv-head { cursor: pointer; }
+.cm-conv-item.loading { opacity: .6; }
+.cm-conv-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 10px 0; }
+.cm-conv-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-conv-date { margin-left: auto; color: var(--cm-muted); font-size: .9em; white-space: nowrap; }
+.cm-conv-snippet { padding: 2px 10px 6px; color: var(--cm-muted); font-size: .92em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-conv-current { background: var(--cm-hover); border-style: dashed; }
+.cm-conv-mine { border-left: 3px solid var(--cm-accent); }
+.cm-conv-item.open .cm-conv-snippet { display: none; }
+.cm-conv-body { display: none; }
+.cm-conv-item.open .cm-conv-body { display: block; padding-top: 4px; }
+.cm-conv-body .cm-meta, .cm-conv-body .cm-attachments, .cm-conv-body .cm-imagesblocked { margin-left: 10px; margin-right: 10px; }
+.cm-conv-body .convomail-body { width: calc(100% - 20px); height: 40px; margin: 6px 10px 4px; min-height: 40px; }
+.cm-conv-open { padding: 0 10px 8px; font-size: .9em; }
 .cm-empty { padding: 30px 16px; text-align: center; color: var(--cm-muted); }
 .cm-pane-empty { margin-top: 15vh; }
 .cm-bigicon { font-size: 3em; opacity: .25; }
@@ -131,7 +151,7 @@
 
 /* Narrow screens: one column, rows open the full page */
 @media (max-width: 1100px) {
-	.cm-app { grid-template-columns: 170px minmax(260px, 340px) minmax(0, 1fr); }
+	.cm-app { grid-template-columns: var(--cm-col1, 170px) 5px var(--cm-col2, 300px) 5px minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
 	.cm-app { display: block; height: auto; border: 0; }
@@ -140,7 +160,7 @@
 	.cm-folderlist a { border-radius: 14px; }
 	.cm-list { border-right: 0; }
 	.cm-rows { overflow: visible; }
-	.cm-pane { display: none; }
+	.cm-pane, .cm-resize { display: none; }
 }
 
 /* Project Emails tab */

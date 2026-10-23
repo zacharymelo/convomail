@@ -165,8 +165,8 @@ class ConvomailThread
 		}
 		$bodyurl = dol_buildpath('/convomail/ajax/thread.php', 1).'?accountid='.((int) $account->id).'&body=1';
 
-		$h = '<div class="cm-thread">';
-		$h .= '<div class="cm-thread-title">'.img_picto('', 'fa-comments', 'class="pictofixedwidth"').$langs->trans('ConvomailConversation');
+		$h = '<div class="cm-conv">';
+		$h .= '<div class="cm-conv-title">'.img_picto('', 'fa-comments', 'class="pictofixedwidth"').$langs->trans('ConvomailConversation');
 		$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailConversationCount', count($items)).'</span></div>';
 
 		$aftercurrent = false;
@@ -174,7 +174,7 @@ class ConvomailThread
 		foreach ($items as $m) {
 			$from = $m['from'][0] ?? array('name' => '', 'email' => '');
 			$mine = in_array(strtolower($from['email']), $myemails, true);
-			$classes = 'cm-thread-item'.($m['current'] ? ' cm-thread-current' : '').($mine ? ' cm-thread-mine' : '');
+			$classes = 'cm-conv-item'.($m['current'] ? ' cm-conv-current' : '').($mine ? ' cm-conv-mine' : '');
 			if ($aftercurrent && !$m['current'] && $opened < self::AUTOOPEN) {
 				$classes .= ' cm-autoopen';
 				$opened++;
@@ -183,8 +183,8 @@ class ConvomailThread
 			$params = '&folder='.urlencode($m['folder']).'&uid='.((int) $m['uid']);
 
 			$h .= '<div class="'.$classes.'"'.($m['current'] ? '' : ' data-body="'.dol_escape_htmltag($bodyurl.$params).'"').'>';
-			$h .= '<div class="cm-thread-head">';
-			$h .= '<span class="cm-thread-who">'.img_picto($mine ? $langs->trans('ConvomailSentByYou') : '', $mine ? 'fa-paper-plane' : 'fa-envelope', 'class="pictofixedwidth opacitymedium"');
+			$h .= '<div class="cm-conv-head">';
+			$h .= '<span class="cm-conv-who">'.img_picto($mine ? $langs->trans('ConvomailSentByYou') : '', $mine ? 'fa-paper-plane' : 'fa-envelope', 'class="pictofixedwidth opacitymedium"');
 			$h .= '<strong>'.dol_escape_htmltag($from['name'] !== '' ? $from['name'] : $from['email']).'</strong>';
 			if ($mine && !empty($m['to'])) {
 				$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailTo').' '.dol_escape_htmltag(convomail_format_addresses($m['to'])).'</span>';
@@ -193,13 +193,13 @@ class ConvomailThread
 			if ($m['folder'] !== $folder) {
 				$h .= '<span class="cm-chip">'.dol_escape_htmltag($labels[$m['folder']] ?? $m['folder']).'</span>';
 			}
-			$h .= '<span class="cm-thread-date">'.($m['date'] ? dol_print_date($m['date'], 'dayhour', 'tzuserrel') : '').'</span>';
+			$h .= '<span class="cm-conv-date">'.($m['date'] ? dol_print_date($m['date'], 'dayhour', 'tzuserrel') : '').'</span>';
 			$h .= '</div>';
 			if ($m['current']) {
-				$h .= '<div class="cm-thread-snippet">'.img_picto('', 'fa-arrow-up', 'class="pictofixedwidth"').$langs->trans('ConvomailThisMessage').'</div>';
+				$h .= '<div class="cm-conv-snippet">'.img_picto('', 'fa-arrow-up', 'class="pictofixedwidth"').$langs->trans('ConvomailThisMessage').'</div>';
 			} else {
-				$h .= '<div class="cm-thread-snippet">'.dol_escape_htmltag($m['snippet'] !== '' ? $m['snippet'] : $m['subject']).'</div>';
-				$h .= '<div class="cm-thread-body"></div>';
+				$h .= '<div class="cm-conv-snippet">'.dol_escape_htmltag($m['snippet'] !== '' ? $m['snippet'] : $m['subject']).'</div>';
+				$h .= '<div class="cm-conv-body"></div>';
 			}
 			$h .= '</div>';
 		}
@@ -245,10 +245,10 @@ class ConvomailThread
 			$h .= '</div>';
 		}
 		if ($renderer->blockedImages && !$showimages) {
-			$h .= '<div class="cm-imagesblocked">'.$langs->trans('ConvomailImagesBlocked').' <a href="#" data-cm-thread-images="1">'.$langs->trans('ConvomailShowImages').'</a></div>';
+			$h .= '<div class="cm-imagesblocked">'.$langs->trans('ConvomailImagesBlocked').' <a href="#" data-cm-conv-images="1">'.$langs->trans('ConvomailShowImages').'</a></div>';
 		}
 		$h .= '<iframe class="convomail-body" data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id)).'" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
-		$h .= '<div class="cm-thread-open"><a href="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1).$base).'">'.img_picto('', 'fa-external-link-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailOpenFullPage').'</a></div>';
+		$h .= '<div class="cm-conv-open"><a href="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1).$base).'">'.img_picto('', 'fa-external-link-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailOpenFullPage').'</a></div>';
 		return $h;
 	}
 }
