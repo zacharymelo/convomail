@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.6.4)
+## Where it stands (0.7.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -29,6 +29,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | The From and mailbox dropdowns show the email address ("Name — address") | 0.6.3 |
 | Attachments | Files stored in Dolibarr picked with the optional Document Browser module (separate repo), largest ones sent as share links over its size limit | 0.7.0 |
 | Fixes | "New third party" from an email works with CSRF level 3 (`MAIN_SECURITY_CSRF_WITH_TOKEN=3`) | 0.6.4 |
+| Conversations | Under each message, the rest of its conversation (earlier messages and replies, including those sent and archived) from Inbox, Sent and Archive; per-user **Show conversation** switch | 0.7.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

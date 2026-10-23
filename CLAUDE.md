@@ -39,7 +39,7 @@ docker compose up -d
 3. Check the result over IMAP where it applies (flags, folders, Sent copy).
 4. For access changes, also try as `salesrep`.
 
-**GreenMail differs from real servers.** It omits In-Reply-To from ENVELOPE, returns nothing for partial body fetches, doesn't search Latin-1 bodies, refuses grouped search criteria, and matches FROM / TO / CC against whole addresses only. Test search on `dev/bigmailbox/` (Dovecot, 20,000 messages) instead. Real-server behaviour (Gmail, Microsoft 365) is untested.
+**GreenMail differs from real servers.** It omits In-Reply-To from ENVELOPE, returns nothing for partial body fetches, doesn't search Latin-1 bodies, refuses grouped search criteria (and stalls, until the read timeout, on an unquoted `<id>` before `)`), and matches FROM / TO / CC against whole addresses only. Test search on `dev/bigmailbox/` (Dovecot, 20,000 messages) instead. Real-server behaviour (Gmail, Microsoft 365) is untested.
 
 ## Release
 

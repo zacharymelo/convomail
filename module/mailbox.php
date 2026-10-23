@@ -60,6 +60,14 @@ if (in_array($limit, convomail_page_sizes(), true)) {
 	$limit = convomail_page_size();
 }
 
+// "Show conversation" switch of the folder column, remembered for the user (only "off" is stored)
+if (GETPOST('action', 'aZ09') === 'setconversation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	dol_set_user_param($db, $conf, $user, array('CONVOMAIL_HIDE_CONVERSATION' => GETPOSTINT('showconversation') ? '' : '1'));
+	header('Location: '.$_SERVER['PHP_SELF'].'?accountid='.$accountid.'&folder='.urlencode($folder)
+		.($search !== '' ? '&search='.urlencode($search).($searchbody ? '&searchbody=1' : '') : '').($page > 0 ? '&page='.$page : '').($openuid > 0 ? '&uid='.$openuid : ''));
+	exit;
+}
+
 $account = convomail_get_usable_account($db, $user, $accountid);
 if ($accountid > 0 && !$account) {
 	accessforbidden();
@@ -248,6 +256,15 @@ foreach ($folders as $f) {
 }
 print '</nav>';
 print '<a class="cm-refresh" href="'.dol_escape_htmltag($selfbase.'&refresh=1').'">'.img_picto('', 'fa-sync', 'class="pictofixedwidth"').$langs->trans('Refresh').'</a>';
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" class="cm-conversation-switch">';
+print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="setconversation">';
+print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
+if ($search !== '') {
+	print '<input type="hidden" name="search" value="'.dol_escape_htmltag($search).'">'.($searchbody ? '<input type="hidden" name="searchbody" value="1">' : '');
+}
+print ($page > 0 ? '<input type="hidden" name="page" value="'.((int) $page).'">' : '').($openuid > 0 ? '<input type="hidden" name="uid" value="'.((int) $openuid).'">' : '');
+print '<label class="classfortooltip" title="'.dol_escape_htmltag($langs->trans('ConvomailShowConversationHelp')).'"><input type="checkbox" name="showconversation" value="1"'.(convomail_show_conversation() ? ' checked' : '').'> '.$langs->trans('ConvomailShowConversation').'</label>';
+print '</form>';
 print '</aside>';
 
 // Middle: toolbar + list

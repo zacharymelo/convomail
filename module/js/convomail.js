@@ -48,8 +48,66 @@
 		}
 	}
 
+	/**
+	 * Conversation under a message (ajax/thread.php): loaded after the message, later messages opened
+	 */
+	function loadThread(root) {
+		var slot = qs('.cm-thread-slot', root);
+		if (!slot) {
+			return;
+		}
+		fetch(slot.getAttribute('data-url'), { credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.text() : ''; })
+			.then(function (html) {
+				if (!slot.isConnected) {
+					return;	// another message was opened meanwhile
+				}
+				slot.innerHTML = html;
+				qsa('.cm-thread-item.cm-autoopen', slot).forEach(function (item) { openThreadItem(item, false); });
+			})
+			.catch(function () { /* the conversation is optional */ });
+	}
+
+	function openThreadItem(item, showimages) {
+		var body = qs('.cm-thread-body', item);
+		if (!body) {
+			return;
+		}
+		if (item.classList.contains('open') && !showimages) {
+			item.classList.remove('open');
+			return;
+		}
+		item.classList.add('open');
+		if (body.getAttribute('data-loaded') && !showimages) {
+			return;
+		}
+		item.classList.add('loading');
+		fetch(item.getAttribute('data-body') + (showimages ? '&showimages=1' : ''), { credentials: 'same-origin' })
+			.then(function (r) { return r.text(); })
+			.then(function (html) {
+				item.classList.remove('loading');
+				body.innerHTML = html;
+				body.setAttribute('data-loaded', '1');
+				bindFrames(body);
+			});
+	}
+
+	document.addEventListener('click', function (ev) {
+		var images = ev.target.closest('[data-cm-thread-images]');
+		if (images) {
+			ev.preventDefault();
+			openThreadItem(images.closest('.cm-thread-item'), true);
+			return;
+		}
+		var head = ev.target.closest('.cm-thread-item[data-body] .cm-thread-head');
+		if (head && !ev.target.closest('a')) {
+			openThreadItem(head.parentNode, false);
+		}
+	});
+
 	document.addEventListener('DOMContentLoaded', function () {
 		bindFrames(document);
+		loadThread(document);
 
 		var switcher = qs('form.convomail-switcher select');
 		if (switcher) {
@@ -77,6 +135,10 @@
 		var pagesize = qs('form.cm-pagesize select');
 		if (pagesize) {
 			pagesize.addEventListener('change', function () { pagesize.form.submit(); });
+		}
+		var conversation = qs('form.cm-conversation-switch input[type="checkbox"]');
+		if (conversation) {
+			conversation.addEventListener('change', function () { conversation.form.submit(); });
 		}
 
 		var app = qs('.cm-app');
@@ -167,6 +229,7 @@
 					pane.classList.remove('loading');
 					pane.scrollTop = 0;
 					bindFrames(pane);
+					loadThread(pane);
 					setSelected(uid);
 					history.replaceState(null, '', app.getAttribute('data-self') + '&uid=' + uid);
 				});

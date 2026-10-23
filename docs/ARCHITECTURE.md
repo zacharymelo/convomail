@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.6.4**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.7.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -77,6 +77,7 @@ convomail/
     oauth.php             Connect with Google / Microsoft 365: consent redirect, provider callback, disconnect
     attachment.php        Streams one MIME part
     ajax/message.php      Reading-pane HTML fragment
+    ajax/thread.php       Conversation under a message, and one of its messages opened
     ajax/action.php       Mailbox actions (JSON)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
@@ -189,8 +190,9 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailCollector` | Automatic filing through core's Email Collector | `enable()` creates/updates `CONVOMAIL<id>_IN` (INBOX, `isanswer`) and `_OUT` (Sent folder, `isanswer` + `withouttrackingidinmsgid`, `code=SET:AC_EMAIL`), action `recordevent` with `userownerid/authorid=SET:<owner>`; `disable()`, `sync()` (called by `ConvomailAccount::update()` and on shared-mailbox access changes), `remove()` (by `delete()`), `status()`, `runNow()`, `refreshAll()` (on upgrade). Collector label "Convomail: Inbox/Sent replies of <address> (<owner or shared mailbox>)"; the description names the Dolibarr user (or the shared mailbox's users) and what the job does |
 | `ConvomailOAuth` | OAuth sign-in (Google, Microsoft 365) on top of core's phpoauth services and `DoliStorage` | `providers()`, `availableApps()`, `appFor()`, `authorizationUrl()`, `handleCallback()`, `accessToken()` (refresh 5 minutes before expiry), `status()`, `disconnect()`, `mailSettings()` (in-memory settings for `CMailFile`) |
 | `ConvomailMessage` | Link row CRUD | `fetchByMsgid()`, `fetchByTrackKey()` (no entity filter: public URL), `fetchByActioncomm()`, `countForProject()` (tab badge) |
-| `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `findSentFolder`, `findFolderByRole` |
+| `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `findSentFolder`, `findFolderByRole`, `findRelated` |
 | `ConvomailHordeMailboxClient` | IMAP implementation (Horde_Imap_Client). Returns plain arrays, never Horde objects | Summaries carry `uid, msgid, subject, date, from/to/cc/reply_to, in_reply_to, references, seen, answered, flagged, size, has_attachments, snippet`. `fetchMessage()` adds `parts` (`id, type, charset, name, disposition, cid, size`). Fallbacks: In-Reply-To from headers when ENVELOPE omits it; whole small parts when partial fetch returns nothing |
+| `ConvomailThread` | Conversation of a message across Inbox, Sent, Archive | `folders()`, `find()` (rounds of `findRelated()`), `html()`, `bodyHtml()` |
 | `ConvomailRenderer` | Message body to safe HTML | `cleanBody($allowImages, $forStorage)`, `iframeDocument()`, `attachments()`, static `purify()` (HTMLPurifier; `cid:` scheme via `ConvomailHTMLPurifierCidScheme`) |
 | `ConvomailTransport` | Send through the account's SMTP via `CMailFile`, copy to Sent | `send()`, `buildTrackId()`. Private: `overrideSmtpSettings()` / `restoreSmtpSettings()` (in-memory `MAIN_MAIL_*_CONVOMAIL`), `dedupePastedImages()` (core bug), `copyToSent()` |
 | `ConvomailMatcher` | Addresses to contacts and third parties | `parseAddresses()`, `mapEmails()` (per address), `matchRecipients()` (contacts + single third party), `loggedEvents()` (Message-ID → event) |
@@ -240,7 +242,9 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    1. `fetchMessage()` marks the message `\Seen`;
    2. resolves its project;
    3. `ConvomailRenderer::iframeDocument()` purifies the body, blocks remote images unless `showimages`, and rewrites `cid:` to `attachment.php`;
-   4. returns the pane: toolbar, people, project line, attachments, sandboxed `<iframe srcdoc>`.
+   4. returns the pane: toolbar, people, project line, attachments, sandboxed `<iframe srcdoc>`, and an empty `.cm-thread-slot` when the message has a Message-ID.
+
+   The JS then fills the slot from `ajax/thread.php` (6.11).
 
    The JS swaps the pane, marks the row read and `history.replaceState`s the URL.
 5. Under 768px wide, rows open `message.php` instead, the same view on a page.
@@ -320,6 +324,14 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 - **Dashboard** `accounts.php` (`account->admin`): every account, shared mailbox create/edit (same form as the user tab, `convomail_account_form_fields()`), access grants, automatic filing cells.
 - **Automatic filing:** `convomail_filing_cell()` / `convomail_filing_actions()` (`filing_on|filing_off|filing_run`, owner or admin) drive `ConvomailCollector`. Core's cron *Email collector* runs the collectors every 5 minutes; Convomail's cron *ConvomailCronRefreshTokens* (`ConvomailOAuth::refreshTokens()`, every 5 minutes) refreshes OAuth tokens expiring within 15 minutes, because the collector can't. OAuth collectors need `MAIN_IMAP_USE_PHPIMAP=1` (button on the dashboard).
 
+### 6.11 Conversation under a message
+0. Only when `convomail_show_conversation()` (the user didn't turn **Show conversation** off: POST `mailbox.php` `action=setconversation`, stored as user param `CONVOMAIL_HIDE_CONVERSATION`). Otherwise `render()` prints no slot and `ajax/thread.php` returns nothing without connecting.
+1. `ajax/thread.php` (after the message is shown, session released) calls `ConvomailThread::find()` over `ConvomailThread::folders()`: the current folder, Inbox, the account's Sent folder and Archive.
+2. Rounds (at most 4, 40 messages): for the messages found last round (first: the open one), `findRelated()` searches each folder for their parents by `Message-ID` (sent before them) and their replies by `In-Reply-To` / `References` (sent after them), with a day of margin on the header dates. Several rounds are needed because Convomail's replies carry only the parent in References. Header text search matches substrings, so only exact links are kept (`answersOneOf()`).
+3. `findRelated()` runs one plain `UID SEARCH HEADER … SENTSINCE/SENTBEFORE` per id and header, never an `OR (…)` group: GreenMail stalls on `(HEADER X <id>)` (it reads `id>)` as one word), and Horde ORs a date into an `orSearch()` group instead of ANDing it.
+4. `ConvomailThread::html()` lists the messages oldest first (own ones marked, folder chip when not the current folder); the first 3 after the open one load open. A click fetches `ajax/thread.php?body=1` (`bodyHtml()`: recipients, attachments, sandboxed body, never marks read).
+5. Cost on 20,000 messages (Dovecot, no full-text index): 0.02–0.05 s once the server has cached the headers; about 16 s the very first time while it indexes them.
+
 ## 7. Pages and endpoints
 
 | Path | Method | Parameters | Access | Output |
@@ -334,6 +346,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|filing_on\|filing_off\|filing_run` | own (`account->read`) or any (`account->admin`) | Page |
 | `admin/setup.php` | GET / POST | `action=update, CONVOMAIL_ALLOWED_HOSTS` | admin | Page |
 | `ajax/message.php` | GET | `accountid, folder, uid, showimages` | `account->read`; usable account | HTML fragment |
+| `ajax/thread.php` | GET | `accountid, folder, uid`; `body=1, showimages` for one message | `account->read`; usable account | HTML fragment |
 | `ajax/action.php` | POST + token | `accountid, folder, uids[], action, dest, projectid, socid, contactids` | `account->read`; usable account | JSON |
 | `ajax/template.php` | GET | `id, socid, contactid, projectid` | `message->send`; template public or own | JSON `{subject, body}` |
 | `ajax/projectcontacts.php` | GET | `id` | `message->send` + project read + private-project check | JSON list |
@@ -376,7 +389,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php`, and records an IMAP protocol trace per user in `<documents>/convomail/temp/imap-trace-<user id>.log` (`?mode=imaptrace`) |
 
 - **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. For OAuth accounts also `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL` and `OAUTH_<TYPE>-convomail<id>_ID/_SECRET/_TENANT/_SCOPE/_URLCALLBACK`. They are never written to `llx_const`.
-- **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default).
+- **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default), `CONVOMAIL_HIDE_CONVERSATION` (1 = the user turned **Show conversation** off; unset = on).
 - **Session:** `convomail_folders_<accountid>` (folder list, 5 minutes), cleared on account changes and when Archive / Trash are created.
 
 ## 9. Security model

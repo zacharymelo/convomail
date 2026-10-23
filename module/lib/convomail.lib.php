@@ -168,6 +168,16 @@ function convomail_page_size()
 }
 
 /**
+ * Whether the conversation is shown under each message: on unless the user turned it off in the mailbox
+ *
+ * @return bool
+ */
+function convomail_show_conversation()
+{
+	return !getDolUserInt('CONVOMAIL_HIDE_CONVERSATION');
+}
+
+/**
  * Head HTML linking module CSS and JS files with their modification time as version. Core links
  * llxHeader() files without one, so browsers keep the previous copy after an upgrade.
  *

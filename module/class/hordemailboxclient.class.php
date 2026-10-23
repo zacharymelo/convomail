@@ -643,33 +643,95 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
 
-			$messages = array();
-			if (!empty($pageuids)) {
-				$fetchquery = new Horde_Imap_Client_Fetch_Query();
-				$fetchquery->envelope();
-				$fetchquery->flags();
-				$fetchquery->size();
-				$fetchquery->structure();
-				$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
-				$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($pageuids)));
-				$textparts = array();	// uid => array(part id, Horde_Mime_Part)
-				foreach ($pageuids as $uid) {
-					$data = $fetched[$uid];
-					if ($data) {
-						$messages[] = self::summary($uid, $data);
-						$found = self::firstTextPart($data->getStructure());
-						if ($found) {
-							$textparts[$uid] = $found;
-						}
-					}
-				}
-				$snippets = $this->snippets($folder, $textparts);
-				foreach ($messages as $i => $m) {
-					$messages[$i]['snippet'] = $snippets[$m['uid']] ?? '';
+			return array('total' => $total, 'messages' => $this->summaries($imap, $folder, $pageuids));
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Summaries with snippets of some messages of a folder, in the order of $uids
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap   Connection
+	 * @param  string                   $folder Folder
+	 * @param  int[]                    $uids   UIDs
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function summaries($imap, $folder, array $uids)
+	{
+		$messages = array();
+		if (empty($uids)) {
+			return $messages;
+		}
+		$fetchquery = new Horde_Imap_Client_Fetch_Query();
+		$fetchquery->envelope();
+		$fetchquery->flags();
+		$fetchquery->size();
+		$fetchquery->structure();
+		$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
+		$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($uids)));
+		$textparts = array();	// uid => array(part id, Horde_Mime_Part)
+		foreach ($uids as $uid) {
+			$data = $fetched[$uid];
+			if ($data) {
+				$messages[] = self::summary($uid, $data);
+				$found = self::firstTextPart($data->getStructure());
+				if ($found) {
+					$textparts[$uid] = $found;
 				}
 			}
+		}
+		$snippets = $this->snippets($folder, $textparts);
+		foreach ($messages as $i => $m) {
+			$messages[$i]['snippet'] = $snippets[$m['uid']] ?? '';
+		}
+		return $messages;
+	}
 
-			return array('total' => $total, 'messages' => $messages);
+	/**
+	 * Messages of a folder related to known ones: those whose Message-ID is in $ids, and those answering
+	 * one of $answering (In-Reply-To or References). A date window around the known messages keeps the
+	 * header search short on big folders.
+	 *
+	 * One plain search per id and header: grouped criteria (OR with parentheses) stall some servers
+	 * (GreenMail reads "id)" as one word and waits), and the lists are short.
+	 *
+	 * @param  string   $folder    Folder
+	 * @param  string[] $ids       Message-IDs to find (parents), without brackets
+	 * @param  int      $before    Parents are sent before this date (timestamp, 0 = no limit)
+	 * @param  string[] $answering Message-IDs whose replies to find, without brackets
+	 * @param  int      $since     Replies are sent after this date (timestamp, 0 = no limit)
+	 * @return array<int,array<string,mixed>>|false Summaries as listMessages(), false on error
+	 */
+	public function findRelated($folder, array $ids, $before, array $answering, $since)
+	{
+		try {
+			$imap = $this->connect();
+			$searches = array();
+			foreach ($ids as $id) {
+				$searches[] = array('Message-ID', $id, $before, Horde_Imap_Client_Search_Query::DATE_BEFORE);
+			}
+			foreach ($answering as $id) {
+				$searches[] = array('In-Reply-To', $id, $since, Horde_Imap_Client_Search_Query::DATE_SINCE);
+				$searches[] = array('References', $id, $since, Horde_Imap_Client_Search_Query::DATE_SINCE);
+			}
+			$uids = array();
+			foreach ($searches as $s) {
+				list($header, $id, $date, $range) = $s;
+				$query = new Horde_Imap_Client_Search_Query();
+				$query->headerText($header, $id);
+				if ($date > 0) {
+					// Header dates, with a day of margin for time zones and clocks
+					$query->dateSearch(new DateTime('@'.($range === Horde_Imap_Client_Search_Query::DATE_BEFORE ? $date + 86400 : $date - 86400)), $range);
+				}
+				foreach ($imap->search($folder, $query)['match']->ids as $uid) {
+					$uids[(int) $uid] = true;
+				}
+			}
+			$uids = array_keys($uids);
+			sort($uids, SORT_NUMERIC);
+			return $this->summaries($imap, $folder, $uids);
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
 			return false;

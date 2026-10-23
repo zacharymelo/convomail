@@ -84,6 +84,19 @@ interface ConvomailMailboxClient
 	public function fetchMessage($folder, $uid, $markSeen = true);
 
 	/**
+	 * Messages of a folder related to known ones, to rebuild a conversation.
+	 *
+	 * @param  string   $folder    Folder name
+	 * @param  string[] $ids       Message-IDs to find (parents), without brackets
+	 * @param  int      $before    Parents are sent before this date (timestamp, 0 = no limit)
+	 * @param  string[] $answering Message-IDs whose replies to find (In-Reply-To or References), without brackets
+	 * @param  int      $since     Replies are sent after this date (timestamp, 0 = no limit)
+	 * @return array<int,array<string,mixed>>|false Same keys as listMessages() entries, plus in_reply_to and references.
+	 *         The search matches header text, so callers check the ids themselves. false on error.
+	 */
+	public function findRelated($folder, array $ids, $before, array $answering, $since);
+
+	/**
 	 * Content of one MIME part, transfer-decoded (charset not converted).
 	 *
 	 * @param  string $folder Folder name
