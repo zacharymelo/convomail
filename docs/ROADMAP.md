@@ -35,7 +35,7 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - A cron job (`$this->cronjobs`) per account: scan Inbox and Sent since the last UID (`uidnext` / `CONDSTORE`), run the resolver, file thread and code matches. Store the last seen UID per account and folder (new table `llx_convomail_folder_state`).
 - Filing policy per user or account: off / replies only (today's behaviour) / anything from a known contact.
 - Shared team inboxes (sales@, support@): an account owned by a user group instead of a user, with per-message assignment. This needs an ownership model change in `ConvomailAccount::canBeUsedBy()`.
-- Overlap with core's Email Collector: same codes and trackid scheme, so both can run. Document which to use when, or make the sync job call the shared matcher (UPSTREAM item 6).
+- Overlap with core's Email Collector: settled, both can run on the same mailbox without duplicates (one event per Message-ID, verified in 0.5.6). The sync job could still call a shared matcher (UPSTREAM item 6).
 
 ### 4. Sales features
 - "Awaiting reply" / "Replied" state per thread, with columns on third party and project lists.
@@ -44,6 +44,7 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Response-time report per user and per customer.
 
 ### Smaller items
+- Publishing Dolibarr contacts to other address books (LDAP via core's LDAP module, or Google / Microsoft 365 contacts): discussed and parked by the owner (2026-10-23).
 - Search across folders, and Gmail's own search syntax (`X-GM-RAW`) for fast text search on Gmail.
 - Save drafts to the IMAP Drafts folder.
 - Several References ids when core accepts them (UPSTREAM item 7).
@@ -63,7 +64,6 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 |---|---|---|
 | Shared inboxes | Group-owned accounts vs delegated access to a user's account | Affects `canBeUsedBy()`, rights and the menu |
 | Auto-filing scope | Replies only (now) vs known contacts too | Privacy: personal mail from a contact would land on the agenda |
-| Email Collector overlap | Coexist vs replace for user mailboxes | Same event codes today |
 | Distribution | DoliStore listing vs GitHub releases only | The repo is private |
 
 ## Test debt
@@ -73,6 +73,6 @@ Not yet verified. Do these before telling users it works there:
 - **Real servers:** Gmail and Microsoft 365, with app passwords and with OAuth (consent, refresh at their token endpoints, Google app verification, Exchange Authenticated SMTP), Sent folder detection, `server_saves_sent`, SPECIAL-USE folders, search. OAuth is verified only against a local Dovecot with a token check (`dev/oauth/`).
 - **The owner's "other" IMAP server:** deleting an open email fails with "Mail server closed the connection unexpectedly". Not reproduced on GreenMail or Dovecot; capture `ajax/debug.php?mode=imaptrace` there.
 - **Dark theme** and the Eldy / Md themes in narrow windows.
-- Large mailboxes (10k+ messages): list speed, folder counts.
+- Large mailboxes: listing and search measured on 20,000 messages on a local Dovecot (`dev/bigmailbox/`, 0.5.1). Still to check: a remote hosted server, 100k+ messages, folder counts on many folders.
 - Multicompany (`entity` > 1).
-- Upgrading straight from 0.1.0 to 0.5.0.
+- Upgrading straight from 0.1.0 or 0.2.0 to the current version.
