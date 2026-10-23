@@ -13,7 +13,6 @@ Permission19428203 = Manage the mail accounts of all users
 MailAccounts = Mail accounts
 MailAccount = Mail account
 ComposeEmail = Compose email
-ConvomailSendEmail = Email from my mailbox
 ConvomailReply = Reply
 ConvomailSetup = Convomail setup
 ConvomailEmailTab = Convomail (user mailboxes)

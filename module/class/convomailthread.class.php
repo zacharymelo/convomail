@@ -247,7 +247,7 @@ class ConvomailThread
 		if ($renderer->blockedImages && !$showimages) {
 			$h .= '<div class="cm-imagesblocked">'.$langs->trans('ConvomailImagesBlocked').' <a href="#" data-cm-thread-images="1">'.$langs->trans('ConvomailShowImages').'</a></div>';
 		}
-		$h .= '<iframe class="convomail-body" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
+		$h .= '<iframe class="convomail-body" data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id)).'" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
 		$h .= '<div class="cm-thread-open"><a href="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1).$base).'">'.img_picto('', 'fa-external-link-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailOpenFullPage').'</a></div>';
 		return $h;
 	}

@@ -200,7 +200,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailLogger` | Write agenda events + link rows | `logSent()`, `logReceived()`, `fetchReplyTarget()` |
 | `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `recordOpen()` (first open creates `AC_CONVOMAIL_OPENED`) |
 | `ConvomailView` | Shared server-side views and filing | `render()` (reading pane / full page), `logMessage()` (filing used by all paths), `defaultLinks()`, `projectThreads()`, `projectBadge()`, `myEmails()`, `msgid()` |
-| `ActionsConvomail` | Hooks | `getElementProperties`, `addMoreActionsButtons` (buttons on third party, contact, project and event cards), `formObjectOptions` (receipt status on the event card) |
+| `ActionsConvomail` | Hooks | `getElementProperties`, `addMoreActionsButtons` (**Reply** on email events; third party, contact and project cards keep only core's **Send email**, see ROADMAP), `formObjectOptions` (receipt status on the event card) |
 
 ## 6. Flows
 
@@ -248,7 +248,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    3. `ConvomailRenderer::iframeDocument()` purifies the body, blocks remote images unless `showimages`, and rewrites `cid:` to `attachment.php`;
    4. returns the pane: toolbar, people, project line, attachments, sandboxed `<iframe srcdoc>`, and an empty `.cm-thread-slot` when the message has a Message-ID.
 
-   The JS then fills the slot from `ajax/thread.php` (6.11).
+   The JS then fills the slot from `ajax/thread.php` (6.11). Message frames carry `data-compose` (compose URL with the account): `bindFrames()` listens for clicks inside the same-origin frame and sends `mailto:` links (to, cc, bcc, subject, body) to compose (`composeFromMailto()`), unless a modifier key is held (Shift: the system mail app). Compose puts a prefilled `message` above the signature.
 
    The JS swaps the pane, marks the row read and `history.replaceState`s the URL.
 5. Under 768px wide, rows open `message.php` instead, the same view on a page.
