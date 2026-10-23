@@ -1,6 +1,7 @@
 /* Copyright (C) 2026 DPG Supply - convomail compose
  * Email templates (fill subject and body above the signature/quote), project contact chips (add to To / Cc),
- * and address suggestions while typing in To / Cc / Bcc (jQuery UI autocomplete, as elsewhere in Dolibarr).
+ * address suggestions while typing in To / Cc / Bcc (jQuery UI autocomplete, as elsewhere in Dolibarr),
+ * and the AI writing tools of core's AI module.
  */
 (function () {
 	'use strict';
@@ -63,6 +64,181 @@
 		} else if (field('message')) {
 			field('message').value = html;
 		}
+	}
+
+	function normalized(text) {
+		return (text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+	}
+
+	/**
+	 * The editor content split into what the user typed and what follows: the signature ("-- " line) or the quoted
+	 * message (its intro line). The editor drops the classes and the blockquote put there by the server, so these
+	 * two texts are what is left to find them by.
+	 */
+	function splitBody(html, intro) {
+		var box = document.createElement('div');
+		box.innerHTML = html;
+		var nodes = Array.prototype.slice.call(box.childNodes);
+		var stop = nodes.length;
+		for (var i = 0; i < nodes.length; i++) {
+			var n = nodes[i];
+			var text = normalized(n.textContent);
+			if (n.nodeType === 1 && (/^--( |$)/.test(text) || n.tagName === 'BLOCKQUOTE' || (intro && text.indexOf(intro) === 0))) {
+				stop = i;
+				break;
+			}
+		}
+		var typed = document.createElement('div');
+		var rest = document.createElement('div');
+		nodes.forEach(function (n, i) { (i < stop ? typed : rest).appendChild(n); });
+		return { typed: typed, rest: rest };
+	}
+
+	// AI output is HTML from a remote service: keep the content only, nothing that runs or would trip core's injection filter
+	function cleanAiHtml(html) {
+		html = String(html || '').trim().replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/, '');
+		var doc = new DOMParser().parseFromString(html, 'text/html');
+		Array.prototype.forEach.call(doc.querySelectorAll('script, style, iframe, object, embed, form, link, meta, title'), function (el) { el.remove(); });
+		Array.prototype.forEach.call(doc.body.querySelectorAll('*'), function (el) {
+			Array.prototype.slice.call(el.attributes).forEach(function (a) {
+				if (/^on/i.test(a.name) || a.name === 'contenteditable' || a.name === 'style' || /^\s*javascript:/i.test(a.value)) {
+					el.removeAttribute(a.name);
+				}
+			});
+		});
+		var section = doc.body.querySelector('section');
+		return (section && normalized(section.textContent) === normalized(doc.body.textContent) ? section.innerHTML : doc.body.innerHTML).trim();
+	}
+
+	/**
+	 * AI writing tools (core's AI module, ai/ajax/generate_content.php): write from a prompt, or rephrase,
+	 * shorten or translate the typed text. Only the typed part changes; signature and quote stay as they are.
+	 */
+	function bindAiTools(panel) {
+		var $ = window.jQuery;
+		var prompt = document.getElementById('cm-ai-prompt');
+		var write = document.getElementById('cm-ai-write');
+		var status = document.getElementById('cm-ai-status');
+		var intro = normalized(panel.getAttribute('data-intro'));
+		var busy = false;
+
+		document.getElementById('cm-ai-toggle').addEventListener('click', function (ev) {
+			ev.preventDefault();
+			panel.classList.toggle('hideobject');
+			if (!panel.classList.contains('hideobject')) {
+				prompt.focus();
+			}
+		});
+		prompt.addEventListener('input', function () { write.disabled = busy || !prompt.value.trim(); });
+		prompt.addEventListener('keydown', function (ev) {
+			if (ev.key === 'Enter' && !ev.shiftKey && prompt.value.trim()) {
+				ev.preventDefault();
+				write.click();
+			}
+		});
+
+		function say(text, error) {
+			status.textContent = text;
+			status.classList.toggle('error', !!error);
+			status.classList.toggle('hideobject', !text);
+		}
+
+		function run(fn, instructions, parts) {
+			busy = true;
+			write.disabled = true;
+			panel.classList.add('cm-ai-busy');
+			say(panel.getAttribute('data-wait'), false);
+			var editor = window.CKEDITOR && CKEDITOR.instances.message;
+			fetch(panel.getAttribute('data-url'), {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ format: 'html', 'function': fn, instructions: instructions })
+			}).then(function (r) {
+				return r.text().then(function (text) { return { ok: r.ok, text: text }; });
+			}).then(function (res) {
+				// Core answers 200 with its error text when the provider can't be reached (UPSTREAM item 15)
+				var failed = !res.ok || /^\s*(Error\b|Quota or allowed period exceeded)/.test(res.text);
+				var html = failed ? '' : cleanAiHtml(res.text);
+				if (!html) {
+					var box = document.createElement('div');
+					box.innerHTML = res.text;
+					throw new Error(normalized(box.textContent) || 'Error');
+				}
+				var rest = parts.rest.innerHTML.trim();
+				var previous = editorData();
+				setEditorData(html + (rest ? '<p>&nbsp;</p>' + rest : ''));
+				prompt.value = '';
+				// The editor's own undo can't step back over setData(): offer an explicit one
+				say(panel.getAttribute('data-done') + ' ', false);
+				var undo = document.createElement('a');
+				undo.href = '#';
+				undo.textContent = panel.getAttribute('data-undo');
+				undo.addEventListener('click', function (ev) {
+					ev.preventDefault();
+					setEditorData(previous);
+					say('', false);
+				});
+				status.appendChild(undo);
+			}).catch(function (e) {
+				say(e.message, true);
+			}).then(function () {
+				busy = false;
+				write.disabled = !prompt.value.trim();
+				panel.classList.remove('cm-ai-busy');
+			});
+		}
+
+		write.addEventListener('click', function () {
+			var ask = prompt.value.trim();
+			if (!ask || busy) {
+				return;
+			}
+			var parts = splitBody(editorData(), intro);
+			var draft = normalized(parts.typed.textContent);
+			var instructions = ask;
+			if (draft) {
+				instructions += '\n\nUse and improve this draft:\n' + parts.typed.innerHTML;
+			}
+			if (panel.getAttribute('data-mode') !== 'new' && panel.getAttribute('data-quote')) {
+				instructions += '\n\nThis email ' + (panel.getAttribute('data-mode') === 'forward' ? 'forwards' : 'answers') + ' the message below. Do not repeat it.\n'
+					+ panel.getAttribute('data-intro') + '\n' + panel.getAttribute('data-quote');
+			}
+			instructions += '\n\nWrite only the body text: no subject line and no signature, they are added separately.';
+			run('textgenerationemail', instructions, parts);
+		});
+
+		function onChoice(id, fn, build) {
+			var sel = document.getElementById(id);
+			if (!sel || !$) {
+				return;
+			}
+			$(sel).on('change', function () {
+				var value = sel.value;
+				if (!value || value === '-1' || value === '0' || busy) {
+					return;
+				}
+				var parts = splitBody(editorData(), intro);
+				if (!normalized(parts.typed.textContent)) {
+					say(panel.getAttribute('data-empty'), true);
+				} else {
+					run(fn, build(value, parts.typed.innerHTML), parts);
+				}
+				$(sel).val('-1').trigger('change.select2');
+			});
+		}
+		// Same instructions as core's mail form (core/class/html.formai.class.php)
+		onChoice('cm_ai_rephrase', 'textrephraser', function (style, text) {
+			return 'Rephrase the following text in a ' + style + ' style: ' + text;
+		});
+		onChoice('cm_ai_summarize', 'textsummarize', function (value, text) {
+			var p = value.split('_');
+			var unit = { w: 'words', p: 'paragraphs', pc: 'percent' }[p[1]] || 'words';
+			return 'Summarize the following text ' + (unit === 'percent' ? 'by ' : 'in ') + p[0] + ' ' + unit + ': ' + text;
+		});
+		onChoice('cm_ai_translate', 'texttranslation', function (lang, text) {
+			return 'Translate only the following text to ' + lang + ': ' + text;
+		});
 	}
 
 	// The part of an address list being typed: after the last comma that is not inside quotes
@@ -240,6 +416,11 @@
 						tpl.value = '';
 					});
 			});
+		}
+
+		var aipanel = document.getElementById('cm-ai-panel');
+		if (aipanel) {
+			bindAiTools(aipanel);
 		}
 	});
 })();
