@@ -218,7 +218,7 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 - **Project contacts:** when a project is chosen, its contacts (and its third party's contacts) appear under **To**. Click a name to add it to To, or **Cc** to add it to Cc.
 
 ## Which email account is used
-- **Files stored in Dolibarr:** with the separate [Document Browser](https://github.com/zacharymelo/doli-docbrowser) module enabled, **Add from Dolibarr…** next to the file field opens a picker:
+- **Files stored in Dolibarr:** with the separate [Document Browser](https://github.com/zacharymelo/docbrowser) module enabled, **Add from Dolibarr…** next to the file field opens a picker:
   - **Linked records:** files of the chosen third party, project, contact and linked document, plus the third party's latest proposals, orders and invoices;
   - **Products**, the **Documents** module and the medias library, and a **Search** by file name.
 
