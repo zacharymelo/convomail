@@ -72,6 +72,7 @@ Only when asked:
 - CMailFile embeds a pasted image twice and attaches it again. `ConvomailTransport::dedupePastedImages()` fixes this (UPSTREAM item 10).
 
 **Other**
+- Don't use server-side IMAP SORT for list order. Servers differ, and the bundled Horde stores range results (`ESEARCH ALL 40:31`) in ascending order. The list sorts UIDs itself (`newestFirst()`); `ajax/debug.php?mode=imap` shows a server's order.
 - Horde has no getter for a part's transfer encoding; base64 is detected heuristically.
 - With curl, a `-F` value starting with `<` reads a file. Use `--form-string` for message bodies.
 - Online module install fails when `htdocs/custom` isn't writable by the web server user. That's a server permission problem, not ours (README Installation).

@@ -169,6 +169,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
   Replies quote it in In-Reply-To / References, which is how both the resolver (`-proj<id>@`) and core's Email Collector route them.
 - **Messages without a Message-ID** get a stable stand-in, `convomail-<account id>-<md5(folder|uid|date)>@local` (`ConvomailView::msgid()`).
 - **IMAP identity of a message** is account + folder + UID. UIDs are only stable within a folder; moving a message changes them.
+- **List order** is UID descending, which is arrival order in that folder on every server. A message moved or copied into a folder (for example back from Archive) counts as newly arrived.
 - **Folder roles:** `inbox`, `sent`, `drafts`, `junk`, `trash`, `archive`, or `''`. They come from SPECIAL-USE attributes, then common names (`ConvomailHordeMailboxClient::folderRole()`). Archive and Trash are created when missing.
 - **Project match strengths** (`ConvomailProjectResolver`): `logged` > `thread` > `code` > `suggested`. Only `thread` and `code` are filed automatically.
 
@@ -218,7 +219,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    1. `convomail_get_usable_account()` picks the account: requested, else last used, else default;
    2. `convomail_folders()` lists folders (session cache, 5 minutes);
    3. the folder is chosen: explicit, else role, else last used, else INBOX;
-   4. `listMessages()` loads 25 per page, with References and previews.
+   4. `listMessages()` loads 25 per page, newest arrival first (UIDs descending, sorted by the module, not by server SORT), with References and previews.
 2. `mapEmails()` and `resolvePage()` give each row its known contact or third party and its project chip.
 3. **Automatic filing** (6.4) runs, then the page renders the three panes. `data-*` attributes on `.cm-app` carry the account, folder, CSRF token and endpoint URLs for `js/convomail.js`.
 4. A row click fetches `ajax/message.php`. `ConvomailView::render()` then:

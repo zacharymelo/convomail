@@ -20,6 +20,7 @@
  *   messages  — Last 20 logged messages with their agenda events
  *   sql       — Read-only diagnostic query (?mode=sql&q=SELECT...)
  *   hooks     — Registered hook contexts
+ *   imap      — How a folder of your default mail account is ordered (?mode=imap&folder=INBOX)
  *   all       — Every diagnostic except sql
  */
 
@@ -66,7 +67,7 @@ print "Timestamp: ".date('Y-m-d H:i:s T')."\n";
 print "Dolibarr: ".(defined('DOL_VERSION') ? DOL_VERSION : 'unknown')."\n";
 print "PHP: ".PHP_VERSION."\n";
 print "Mode: $mode\n";
-print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|all\n";
+print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|imap|all\n";
 print str_repeat('=', 60)."\n\n";
 
 if ($mode === 'overview' || $run_all) {
@@ -192,6 +193,23 @@ if ($mode === 'sql') {
 		} else {
 			print "SQL ERROR: ".$db->lasterror()."\n";
 		}
+	}
+	print "\n";
+}
+
+if ($mode === 'imap') {
+	print "--- IMAP MESSAGE ORDER ---\n";
+	dol_include_once('/convomail/class/convomailaccount.class.php');
+	dol_include_once('/convomail/class/hordemailboxclient.class.php');
+	$account = new ConvomailAccount($db);
+	if ($account->fetchDefaultForUser($user) <= 0) {
+		print "No mail account for this user.\n";
+	} else {
+		$folder = GETPOST('folder', 'restricthtml') ?: 'INBOX';
+		print "Account: $account->email ($account->imap_host)  Folder: $folder\n";
+		$client = new ConvomailHordeMailboxClient($account);
+		print implode("\n", $client->sortDiagnostics($folder))."\n";
+		$client->close();
 	}
 	print "\n";
 }

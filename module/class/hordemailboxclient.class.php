@@ -94,6 +94,61 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * How a folder is ordered, for ajax/debug.php: the server's sort capabilities, the first UIDs in the
+	 * module's order and in the server's date sort, each with its Date header and arrival time.
+	 *
+	 * @param  string   $folder Folder
+	 * @param  int      $count  Number of messages
+	 * @return string[]         Report lines
+	 */
+	public function sortDiagnostics($folder, $count = 10)
+	{
+		$lines = array();
+		try {
+			$imap = $this->connect();
+			$caps = array();
+			foreach (array('SORT', 'ESORT', 'ESEARCH', 'CONTEXT') as $cap) {
+				$caps[] = $cap.'='.($imap->capability->query($cap) ? 'yes' : 'no');
+			}
+			$lines[] = 'Server: '.implode(' ', $caps);
+
+			$used = array_slice(self::newestFirst($imap->search($folder)['match']), 0, $count);
+			$lines[] = 'Module order (newest arrival first): '.implode(',', $used);
+			$bydate = $imap->search($folder, null, array('sort' => array(Horde_Imap_Client::SORT_REVERSE, Horde_Imap_Client::SORT_DATE)));
+			$lines[] = 'Server sort by Date header:          '.implode(',', array_slice($bydate['match']->ids, 0, $count));
+
+			$query = new Horde_Imap_Client_Fetch_Query();
+			$query->envelope();
+			$query->imapDate();
+			$fetched = $imap->fetch($folder, $query, array('ids' => new Horde_Imap_Client_Ids($used)));
+			foreach ($used as $uid) {
+				$data = $fetched[$uid];
+				if ($data) {
+					$lines[] = sprintf('  uid %d  date %s  arrived %s', $uid, $data->getEnvelope()->date->format('Y-m-d H:i:s O'), $data->getImapDate()->format('Y-m-d H:i:s O'));
+				}
+			}
+		} catch (Exception $e) {
+			$lines[] = 'ERROR: '.$e->getMessage();
+		}
+		return $lines;
+	}
+
+	/**
+	 * UIDs newest first. UIDs grow in the order messages arrive in a folder (RFC 3501 2.3.1.1), so this is
+	 * arrival order on every server, the order desktop clients default to. Server-side SORT is not used:
+	 * its results vary between servers and the Horde version bundled here can lose their order.
+	 *
+	 * @param  Horde_Imap_Client_Ids $ids Search result
+	 * @return int[]
+	 */
+	private static function newestFirst(Horde_Imap_Client_Ids $ids)
+	{
+		$uids = $ids->ids;
+		rsort($uids, SORT_NUMERIC);
+		return $uids;
+	}
+
+	/**
 	 * @return bool
 	 */
 	public function testConnection()
@@ -371,8 +426,8 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$query = new Horde_Imap_Client_Search_Query();
 				$query->text(trim($searchText), false);
 			}
-			$result = $imap->search($folder, $query, array('sort' => array(Horde_Imap_Client::SORT_REVERSE, Horde_Imap_Client::SORT_DATE)));
-			$uids = $result['match']->ids;
+			$result = $imap->search($folder, $query);
+			$uids = self::newestFirst($result['match']);
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
 
