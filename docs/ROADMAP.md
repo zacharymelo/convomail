@@ -23,7 +23,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | The message list updates as soon as an email is filed from the reading pane | 0.5.5 |
 | Docs | Convomail and Email Collector on the same mailbox: one event per email, verified in both orders | 0.5.6 |
 | Fixes | Newsletters' hidden preview text no longer shows as a column of letters; buttons keep display:inline-block | 0.5.7 |
-| 3. Automatic filing and shared mailboxes | Automatic filing through core's Email Collector (two collectors per mailbox, managed by Convomail, token refresh job), shared mailboxes with Read / Read and send per user, All mail accounts dashboard | 0.6.0 |
+| 3. Automatic filing and shared mailboxes | Automatic filing through core's Email Collector (two collectors per mailbox, managed by Convomail, token refresh job), shared mailboxes with Read / Read and send per user, Shared mail accounts dashboard | 0.6.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

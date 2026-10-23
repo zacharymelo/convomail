@@ -129,7 +129,7 @@ if (($action == 'test' || $action == 'detectsent') && $account->id > 0) {
 $form = new Form($db);
 
 $title = $langs->trans('User').' - '.$langs->trans('MailAccounts');
-llxHeader('', $title, '', '', 0, 0, '', '', '', 'mod-convomail page-user_accounts');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css')), $title, '', '', 0, 0, '', '', '', 'mod-convomail page-user_accounts');
 
 $head = user_prepare_head($object);
 print dol_get_fiche_head($head, 'convomail', $langs->trans('User'), -1, 'user');
@@ -191,7 +191,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print '<td>'.$langs->trans('ConvomailSmtpHost').'</td>';
 	print '<td>'.$langs->trans('ConvomailAuthType').'</td>';
 	print '<td>'.$langs->trans('ConvomailSentFolder').'</td>';
-	print '<td>'.$langs->trans('ConvomailFiling').'</td>';
+	print '<td>'.convomail_filing_title($form).'</td>';
 	print '<td class="center">'.$langs->trans('Default').'</td>';
 	print '<td class="center">'.$langs->trans('Status').'</td>';
 	print '<td></td>';
@@ -250,6 +250,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	}
 	print '</table>';
 	print '</div>';
+	print convomail_filing_explanation();
 }
 
 llxFooter();

@@ -90,7 +90,7 @@ Only when asked:
 - Core's collector pages are admin-only: Convomail runs collectors itself (`doCollectOneCollector(0)`) and shows their last result. Needs `core/lib/date.lib.php` + `functions2.lib.php` loaded first.
 - `select_dolusers()`: `$morefilter` takes core's universal filter syntax, not SQL; use the `$notdisabled` argument to hide disabled users.
 - `dolGetStatus(..., 3)` is a dot without text; use 2 for dot and label. `$langs->trans()` escapes its parameters: print HTML links next to the translated text, not through it.
-- Test collectors and the OAuth path on the dev stack: `dev/oauth/start.sh`, then turn on PHP-IMAP from All mail accounts.
+- Test collectors and the OAuth path on the dev stack: `dev/oauth/start.sh`, then turn on PHP-IMAP from Shared mail accounts.
 
 **Other**
 - Core's WAF (`waf.inc.php`) refuses a whole POST when a value contains `<style`, `<script`, `<iframe`, `on…=` handlers or `=data:`. Anything Convomail puts into the compose editor (quotes, templates) must go through `ConvomailRenderer::purify()` first. The refusal page hides `paramkey` / `paramvalue` in an HTML comment: view the page source to see which field.

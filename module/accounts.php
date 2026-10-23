@@ -10,7 +10,7 @@
 /**
  * \file    accounts.php
  * \ingroup convomail
- * \brief   All mail accounts (mail accounts admins): every personal and shared mailbox, shared mailboxes and their
+ * \brief   Shared mail accounts (mail accounts admins): every personal and shared mailbox, shared mailboxes and their
  *          access, automatic filing. Personal accounts are edited on their owner's Mail accounts tab.
  *
  * GET/POST parameters: accountid, action (create, add, edit, update, delete, confirm_delete, test, detectsent,
@@ -145,7 +145,7 @@ if (in_array($action, array('grant', 'revoke'), true) && $account->id > 0 && $_S
  */
 
 $form = new Form($db);
-llxHeader('', $langs->trans('ConvomailAllAccounts'), '', '', 0, 0, '', '', '', 'mod-convomail page-accounts');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css')), $langs->trans('ConvomailAllAccounts'), '', '', 0, 0, '', '', '', 'mod-convomail page-accounts');
 
 if ($action == 'delete' && $account->id > 0) {
 	print $form->formconfirm($cardurl, $langs->trans('ConvomailDeleteAccount'), $langs->trans('ConvomailConfirmDeleteAccount', $account->email), 'confirm_delete', '', 0, 1);
@@ -192,8 +192,9 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	}
 	print '</td></tr>';
 	print '<tr><td>'.$langs->trans('Status').'</td><td>'.$account->getLibStatut(5).'</td></tr>';
-	print '<tr><td>'.$langs->trans('ConvomailFiling').'</td><td>'.convomail_filing_cell($account, $user, $self, array('backtocard' => 1)).'</td></tr>';
+	print '<tr><td>'.convomail_filing_title($form).'</td><td>'.convomail_filing_cell($account, $user, $self, array('backtocard' => 1)).'</td></tr>';
 	print '</table>';
+	print convomail_filing_explanation();
 
 	print '<div class="tabsAction">';
 	print '<a class="butAction" href="'.dol_escape_htmltag($cardurl.'&action=edit&token='.newToken()).'">'.$langs->trans('Modify').'</a>';
@@ -244,23 +245,31 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 		}
 		print '</div>';
 	}
-	if (ConvomailCollector::isAvailable()) {
-		print '<div class="opacitymedium marginbottomonly">'.$langs->trans('ConvomailFilingLimit').'</div>';
-	}
 
 	$list = $account->fetchAllAccounts();
 	$userstatic = new User($db);
 	print '<div class="div-table-responsive-no-min">';
 	print '<table class="noborder centpercent">';
 	print '<tr class="liste_titre"><td>'.$langs->trans('Email').'</td><td>'.$langs->trans('ConvomailAccountType').'</td><td>'.$langs->trans('ConvomailAuthType').'</td>';
-	print '<td class="center">'.$langs->trans('Status').'</td><td>'.$langs->trans('ConvomailFiling').'</td><td></td></tr>';
+	print '<td class="center">'.$langs->trans('Status').'</td><td>'.convomail_filing_title($form).'</td><td></td></tr>';
 	if (!is_array($list)) {
 		print '<tr class="oddeven"><td colspan="6"><div class="error">'.$langs->trans('ConvomailAccountsLoadError', dol_escape_htmltag($account->error)).'</div></td></tr>';
 		$list = array();
 	} elseif (empty($list)) {
 		print '<tr class="oddeven"><td colspan="6"><span class="opacitymedium">'.$langs->trans('ConvomailNoAccount').'</span></td></tr>';
 	}
+	// Shared mailboxes first, then personal accounts (fetchAllAccounts() returns them in that order)
+	$section = '';
 	foreach ($list as $acc) {
+		$thissection = $acc->isShared() ? 'shared' : 'personal';
+		if ($thissection !== $section) {
+			if ($section === '' && $thissection === 'personal') {
+				print '<tr class="liste_titre_filter"><td colspan="6"><b>'.$langs->trans('ConvomailSharedMailboxes').'</b></td></tr>';
+				print '<tr class="oddeven"><td colspan="6"><span class="opacitymedium">'.$langs->trans('ConvomailNoShared').'</span></td></tr>';
+			}
+			print '<tr class="liste_titre_filter"><td colspan="6"><b>'.$langs->trans($thissection === 'shared' ? 'ConvomailSharedMailboxes' : 'ConvomailPersonalAccounts').'</b></td></tr>';
+			$section = $thissection;
+		}
 		print '<tr class="oddeven">';
 		print '<td><a href="'.dol_escape_htmltag($acc->cardUrl()).'">'.dol_escape_htmltag($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).'</a></td>';
 		if ($acc->isShared()) {
@@ -283,6 +292,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 		print '</tr>';
 	}
 	print '</table></div>';
+	print convomail_filing_explanation(true);
 }
 
 llxFooter();

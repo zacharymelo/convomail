@@ -619,13 +619,13 @@ function convomail_filing_actions($action, ConvomailAccount $account, User $user
 }
 
 /**
- * Automatic filing state of an account, with its buttons, for an account list
+ * "Log replies automatically" state of an account, with its buttons, for an account list
  *
- * @param  ConvomailAccount $account Account
- * @param  User             $user    User
- * @param  string           $formurl Page the buttons post to (with its own parameters)
- * @param  array<string,string|int> $hidden More fields posted with the buttons
- * @return string                    HTML
+ * @param  ConvomailAccount         $account Account
+ * @param  User                     $user    User
+ * @param  string                   $formurl Page the buttons post to (with its own parameters)
+ * @param  array<string,string|int> $hidden  More fields posted with the buttons
+ * @return string                            HTML
  */
 function convomail_filing_cell(ConvomailAccount $account, User $user, $formurl, array $hidden = array())
 {
@@ -641,7 +641,7 @@ function convomail_filing_cell(ConvomailAccount $account, User $user, $formurl, 
 		return $out;
 	}
 	$st = $collector->status($account);
-	$button = function ($action, $label, $primary = false) use ($formurl, $account, $hidden) {
+	$button = function ($action, $label, $help, $primary = false) use ($formurl, $account, $hidden) {
 		$more = '';
 		foreach ($hidden as $name => $value) {
 			$more .= '<input type="hidden" name="'.dol_escape_htmltag($name).'" value="'.dol_escape_htmltag((string) $value).'">';
@@ -649,38 +649,89 @@ function convomail_filing_cell(ConvomailAccount $account, User $user, $formurl, 
 		return '<form method="POST" action="'.dol_escape_htmltag($formurl).'" class="inline-block">'
 			.'<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="'.$action.'">'
 			.'<input type="hidden" name="accountid" value="'.((int) $account->id).'">'.$more
-			.'<button type="submit" class="button smallpaddingimp'.($primary ? '' : ' button-cancel').'">'.dol_escape_htmltag($label).'</button></form>';
+			.'<button type="submit" class="button smallpaddingimp classfortooltip'.($primary ? '' : ' button-cancel').'" title="'.dol_escape_htmltag($help).'">'.dol_escape_htmltag($label).'</button></form>';
 	};
 
 	if (!$st['on']) {
 		$out = dolGetStatus($langs->trans('ConvomailFilingOff'), '', '', 'status0', 2);
 	} else {
+		// Last check over both collectors; a failure is shown in words, details per check in the tooltip
 		$last = 0;
-		$ko = '';
-		foreach ($st['collectors'] as $c) {
-			if ($c['enabled']) {
-				$last = max($last, $c['date']);
-				if ($c['code'] === 'KO') {
-					$ko = $c['result'];
-				}
+		$failure = '';
+		$details = array();
+		foreach (array(ConvomailCollector::IN => 'ConvomailFilingDetailIn', ConvomailCollector::OUT => 'ConvomailFilingDetailOut') as $which => $key) {
+			$c = $st['collectors'][$which] ?? null;
+			if (!$c || !$c['enabled']) {
+				continue;
 			}
+			$last = max($last, $c['date']);
+			$result = trim(strip_tags(str_replace('<br>', ' ', $c['result'])));
+			if ($c['code'] === 'KO' && $failure === '') {
+				$failure = $result;
+			}
+			$details[] = $langs->trans($key, $c['date'] ? dol_print_date($c['date'], 'dayhour', 'tzuserrel').($result !== '' ? ' — '.dol_trunc($result, 160) : '') : $langs->trans('ConvomailFilingNeverChecked'));
 		}
-		$label = $langs->trans('ConvomailFilingOn').($last ? ' · '.dol_print_date($last, 'dayhour', 'tzuserrel') : ' · '.$langs->trans('ConvomailFilingNotRunYet'));
-		$out = '<span title="'.dol_escape_htmltag($ko !== '' ? strip_tags(str_replace('<br>', ' ', $ko)) : '').'">'.dolGetStatus($label, '', '', $ko !== '' ? 'status8' : 'status4', 2).'</span>';
+		$tooltip = $langs->trans('ConvomailFilingWatching').'<br>'.implode('<br>', array_map('dol_escape_htmltag', $details));
+		// Same look as dolGetStatus(), but carrying the details: a badge's own title would hide them
+		$out = '<span class="badge badge-status badge-status'.($failure !== '' ? '8' : '4').' classfortooltip" title="'.dol_escape_htmltag($tooltip).'">';
+		$out .= dol_escape_htmltag($langs->transnoentitiesnoconv($failure !== '' ? 'ConvomailFilingProblem' : 'ConvomailFilingOn')).'</span>';
+		$out .= '<div class="opacitymedium small">'.($last ? $langs->trans('ConvomailFilingLastCheck', dol_print_date($last, 'dayhour', 'tzuserrel')) : $langs->trans('ConvomailFilingNotRunYet')).'</div>';
+		if ($failure !== '') {
+			$out .= '<div class="error small">'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailFilingLastFailed', dol_trunc($failure, 120))).'</div>';
+		}
 	}
 	if (ConvomailCollector::needsPhpImap($account)) {
-		$out .= '<br><span class="warning small">'.$langs->trans('ConvomailFilingNeedsPhpImap').'</span>';
+		$out .= '<div class="warning small">'.$langs->trans('ConvomailFilingNeedsPhpImap').'</div>';
 	}
 	if ($account->canManage($user)) {
-		$out .= '<br>'.($st['on'] ? $button('filing_run', $langs->trans('ConvomailFilingRunNow'), true).' '.$button('filing_off', $langs->trans('ConvomailFilingTurnOff'))
-			: $button('filing_on', $langs->trans('ConvomailFilingTurnOn'), true));
+		$out .= '<div class="paddingtop">'.($st['on']
+			? $button('filing_run', $langs->trans('ConvomailFilingRunNow'), $langs->transnoentitiesnoconv('ConvomailFilingRunNowHelp'), true).' '.$button('filing_off', $langs->trans('ConvomailFilingTurnOff'), $langs->transnoentitiesnoconv('ConvomailFilingTurnOffHelp'))
+			: $button('filing_on', $langs->trans('ConvomailFilingTurnOn'), $langs->transnoentitiesnoconv('ConvomailFilingTurnOnHelp'), true));
 		if ($user->admin) {
 			foreach ($st['collectors'] as $c) {
-				$out .= ' <a href="'.DOL_URL_ROOT.'/admin/emailcollector_card.php?id='.((int) $c['id']).'" title="'.dol_escape_htmltag($langs->trans('ConvomailFilingCollectorCard')).'">'.img_picto('', 'fa-cog').'</a>';
+				$out .= ' <a class="classfortooltip" href="'.DOL_URL_ROOT.'/admin/emailcollector_card.php?id='.((int) $c['id']).'" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailFilingCollectorCard')).'">'.img_picto('', 'fa-cog').'</a>';
 				break;
 			}
 		}
+		$out .= '</div>';
 	}
 	return $out;
+}
+
+/**
+ * Column title of "Log replies automatically", with its explanation as tooltip
+ *
+ * @param  Form   $form Form helper
+ * @return string       HTML
+ */
+function convomail_filing_title($form)
+{
+	global $langs;
+
+	return $form->textwithpicto($langs->trans('ConvomailFiling'), $langs->trans('ConvomailFilingHelp'));
+}
+
+/**
+ * Collapsed "How does it work?" explanation shown under account lists
+ *
+ * @param  bool   $admin Also explain the capacity limit (Shared mail accounts page)
+ * @return string        HTML
+ */
+function convomail_filing_explanation($admin = false)
+{
+	global $langs;
+
+	dol_include_once('/convomail/class/convomailcollector.class.php');
+	if (!ConvomailCollector::isAvailable()) {
+		return '';
+	}
+	$out = '<details class="cm-howto"><summary>'.img_picto('', 'fa-question-circle', 'class="pictofixedwidth"').$langs->trans('ConvomailFilingHowTitle').'</summary><ul>';
+	foreach (array(1, 2, 3, 4, 5, 6) as $i) {
+		$out .= '<li>'.$langs->trans('ConvomailFilingHow'.$i).'</li>';
+	}
+	if ($admin) {
+		$out .= '<li>'.$langs->trans('ConvomailFilingLimit').'</li>';
+	}
+	return $out.'</ul></details>';
 }
 
