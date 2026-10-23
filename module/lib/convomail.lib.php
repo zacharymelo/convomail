@@ -274,6 +274,30 @@ function convomail_strip_data_images($html)
 }
 
 /**
+ * Insert HTML above the signature and the quoted message of a body being sent, or at the end when neither is
+ * found (the editor may have rewritten their markup)
+ *
+ * @param  string $body  HTML body
+ * @param  string $block HTML to insert
+ * @return string
+ */
+function convomail_insert_before_signature($body, $block)
+{
+	$pos = false;
+	// The editor drops the convomail-signature class, so the "-- " line that starts a signature is looked for too
+	$patterns = array('#<div[^>]*class="convomail-signature"#i', '#<div[^>]*class="convomail-quote"#i', '#<blockquote\b#i', '#<(?:div|p)\b[^>]*>\s*--(?:\s|&nbsp;)*(?:<|\R)#i', '#(<br\s*/?>\s*)?--\s*<br#');
+	foreach ($patterns as $re) {
+		if (preg_match($re, $body, $m, PREG_OFFSET_CAPTURE) && ($pos === false || $m[0][1] < $pos)) {
+			$pos = $m[0][1];
+		}
+	}
+	if ($pos === false) {
+		return $body.'<br>'.$block;
+	}
+	return substr($body, 0, $pos).$block.substr($body, $pos);
+}
+
+/**
  * People to suggest as recipients for a project: its external contacts, then its third party's contacts
  *
  * @param  DoliDB $db        Database

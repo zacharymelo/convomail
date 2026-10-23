@@ -43,6 +43,13 @@ dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailrenderer.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
 
+// Document Browser (separate module, optional): pick files stored in Dolibarr as attachments
+$docbrowser = null;
+if (isModEnabled('docbrowser') && dol_include_once('/docbrowser/class/docbrowserservice.class.php') && class_exists('DocBrowserService')
+	&& DocBrowserService::available($user) && dol_include_once('/docbrowser/class/actions_docbrowser.class.php')) {
+	$docbrowser = new DocBrowserService($db);
+}
+
 $langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'other'));
 
 $action    = GETPOST('action', 'aZ09');
@@ -372,6 +379,52 @@ if ($action == 'send') {
 		}
 	}
 
+	// Files picked from Dolibarr (Document Browser): checked again, copied (resized if set up), and the largest ones
+	// sent as share links when everything together is over its size limit. Uploads and forwarded parts always attach.
+	$dbkeys = array();
+	if ($docbrowser) {
+		foreach ((array) GETPOST('dbfile', 'array') as $k) {
+			if (is_string($k) && preg_match('/^[A-Za-z0-9_-]+$/', $k)) {
+				$dbkeys[] = $k;
+			}
+		}
+	}
+	if (!$error && $dbkeys) {
+		$langs->load('docbrowser@docbrowser');
+		$picked = array();
+		foreach (array_unique($dbkeys) as $k) {
+			$f = $docbrowser->resolve($k, $user);
+			$copy = $f ? $docbrowser->copyForMail($f, $upload_dir_tmp) : null;
+			if (!$copy) {
+				setEventMessages($langs->trans($f ? 'DocBrowserCopyFailed' : 'DocBrowserFileRefused', $f ? $f['name'] : ''), null, 'errors');
+				$error++;
+				break;
+			}
+			$copy['resolved'] = $f;
+			$picked[] = $copy;
+		}
+		if (!$error) {
+			$otherbytes = 0;
+			foreach ($files as $file) {
+				$otherbytes += (int) dol_filesize($file['path']);
+			}
+			$split = DocBrowserService::split($picked, $otherbytes);
+			foreach ($split['attach'] as $copy) {
+				$files[] = array('path' => $copy['path'], 'mime' => $copy['mime'], 'name' => $copy['name']);
+			}
+			if ($split['link']) {
+				$links = $docbrowser->shareLinks(array_column($split['link'], 'resolved'), $user);
+				if (count($links) < count($split['link'])) {
+					setEventMessages($langs->trans('DocBrowserSomeLinksFailed'), $docbrowser->errors, 'errors');
+					$error++;
+				} else {
+					$body = convomail_insert_before_signature($body, DocBrowserService::linksBlock($links, true));
+					$linkedcount = count($links);
+				}
+			}
+		}
+	}
+
 	if (!$error) {
 		$matcher = new ConvomailMatcher($db);
 		$match = $matcher->matchRecipients($recipients);
@@ -445,6 +498,9 @@ if ($action == 'send') {
 			}
 			if (!empty($transport->warnings)) {
 				setEventMessages(null, $transport->warnings, 'warnings');
+			}
+			if (!empty($linkedcount)) {
+				setEventMessages($langs->trans('DocBrowserSentAsLinks', $linkedcount), null, 'warnings');
 			}
 
 			header('Location: '.convomail_back_url($socid, $projectid, $eventid));
@@ -561,7 +617,22 @@ if ($srcmessage && $mode === 'forward') {
 		print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).'</label><br>';
 	}
 }
-print '<input type="file" name="attachments[]" multiple></td></tr>';
+print '<input type="file" name="attachments[]" multiple>';
+if ($docbrowser) {
+	// After a failed send, the files picked before are shown again
+	$repicked = array();
+	foreach ($dbkeys ?? array() as $k) {
+		$f = $docbrowser->resolve($k, $user);
+		if ($f) {
+			$repicked[] = DocBrowserService::publicItem($f);
+		}
+	}
+	$langs->load('docbrowser@docbrowser');
+	print ' <button type="button" class="button smallpaddingimp" id="cm-docbrowser">'.$langs->trans('DocBrowserAddFromDolibarr').'</button>';
+	print '<div id="cm-dbfiles" class="cm-dbfiles" data-files="'.dol_escape_htmltag(json_encode($repicked)).'" data-remove="'.dol_escape_htmltag($langs->transnoentitiesnoconv('DocBrowserRemove')).'" data-overlimit="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDocBrowserOverLimit', price2num(getDolGlobalString('DOCBROWSER_MAX_ATTACH_MB', '10')).' MB')).'"></div>';
+	print ActionsDocBrowser::assetTags();
+}
+print '</td></tr>';
 
 print '<tr><td>'.$langs->trans('ConvomailReceipts').'</td><td>';
 print '<label class="marginrightonly"><input type="checkbox" name="read_receipt" value="1"'.($readreceipt ? ' checked' : '').'> '.$langs->trans('ConvomailRequestReadReceipt').'</label>';

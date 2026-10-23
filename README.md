@@ -218,6 +218,11 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 - **Project contacts:** when a project is chosen, its contacts (and its third party's contacts) appear under **To**. Click a name to add it to To, or **Cc** to add it to Cc.
 
 ## Which email account is used
+- **Files stored in Dolibarr:** with the separate [Document Browser](https://github.com/zacharymelo/doli-docbrowser) module enabled, **Add from Dolibarr…** next to the file field opens a picker:
+  - **Linked records:** files of the chosen third party, project, contact and linked document, plus the third party's latest proposals, orders and invoices;
+  - **Products**, the **Documents** module and the medias library, and a **Search** by file name.
+
+  You only see files you could open on their record. When everything together is over Document Browser's size limit, the largest picked files go as share links above your signature instead; uploads always attach. Without Document Browser, compose works as before.
 
 - Each user adds one or more accounts on their user card → **Mail accounts**, and ticks **Default** on the one to use first.
 - **In the Mailbox**, the account switcher at the top lists the user's enabled accounts. It opens on the account and folder used last, otherwise the default account.

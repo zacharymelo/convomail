@@ -145,6 +145,74 @@
 			}
 		}
 
+		// Files picked from Dolibarr with the Document Browser module (optional): chips holding dbfile[] keys
+		var dbbtn = document.getElementById('cm-docbrowser');
+		var dbbox = document.getElementById('cm-dbfiles');
+		if (dbbtn && dbbox && window.DocBrowser) {
+			var picked = [];
+			var renderPicked = function () {
+				dbbox.textContent = '';
+				var total = 0;
+				picked.forEach(function (f, i) {
+					total += f.size || 0;
+					var chip = document.createElement('span');
+					chip.className = 'cm-chip cm-dbchip';
+					chip.title = f.record || f.name;
+					var icon = document.createElement('span');
+					icon.className = 'fa fa-' + (f.icon || 'file') + ' pictofixedwidth';
+					chip.appendChild(icon);
+					chip.appendChild(document.createTextNode(f.name + ' (' + f.sizetext + ')'));
+					var input = document.createElement('input');
+					input.type = 'hidden';
+					input.name = 'dbfile[]';
+					input.value = f.key;
+					chip.appendChild(input);
+					var x = document.createElement('a');
+					x.href = '#';
+					x.textContent = '×';
+					x.title = dbbox.getAttribute('data-remove');
+					x.addEventListener('click', function (ev) {
+						ev.preventDefault();
+						picked.splice(i, 1);
+						renderPicked();
+					});
+					chip.appendChild(x);
+					dbbox.appendChild(chip);
+				});
+				if (window.DocBrowser.maxBytes > 0 && total > window.DocBrowser.maxBytes) {
+					var note = document.createElement('div');
+					note.className = 'opacitymedium';
+					note.textContent = dbbox.getAttribute('data-overlimit');
+					dbbox.appendChild(note);
+				}
+			};
+			try { picked = JSON.parse(dbbox.getAttribute('data-files') || '[]') || []; } catch (e) { picked = []; }
+			renderPicked();
+			dbbtn.addEventListener('click', function () {
+				var project = document.getElementById('projectid');
+				window.DocBrowser.open({
+					// Read when the dialog opens, so a third party or project chosen on the form is used
+					context: function () {
+						return {
+							socid: (field('socid') || {}).value || '',
+							contactid: (field('contactid') || {}).value || '',
+							projectid: project ? project.value : '',
+							origin: (field('origin') || {}).value || '',
+							originid: (field('originid') || {}).value || ''
+						};
+					},
+					onPick: function (files) {
+						files.forEach(function (f) {
+							if (!picked.some(function (p) { return p.key === f.key; })) {
+								picked.push(f);
+							}
+						});
+						renderPicked();
+					}
+				});
+			});
+		}
+
 		var tpl = document.getElementById('cm-template');
 		if (tpl) {
 			tpl.addEventListener('change', function () {

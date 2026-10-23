@@ -212,7 +212,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 2. POST `action=send`:
    - the account must be the user's own and enabled;
    - the body is read with `restricthtml` (rich editor) or raw and escaped (plain textarea);
-   - attachments are uploaded to a per-send temp dir (forwards re-fetch the original parts).
+   - attachments are uploaded to a per-send temp dir (forwards re-fetch the original parts);
+   - files picked with the optional Document Browser module come as `dbfile[]` keys. Each goes through `DocBrowserService::resolve()` (the record's own access checks; one refused key stops the send) and `copyForMail()` into the same temp dir. Then `split()` turns the largest picks into share links when the total, uploads included, is over `DOCBROWSER_MAX_ATTACH_MB`. `shareLinks()` + `linksBlock()` go into the body above the signature or quote (`convomail_insert_before_signature()`), so the agenda copy has them too.
 3. `ConvomailMatcher::matchRecipients()` gives the contacts and, if unambiguous, the third party. `buildTrackId()` makes the tracking id.
 4. `ConvomailTransport::send()`:
    1. puts the account's SMTP settings in memory under the `convomail` context (swiftmailer mode, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`);
@@ -325,7 +326,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 |---|---|---|---|---|
 | `mailbox.php` | GET | `accountid, folder, role, search, searchbody, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
 | `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log\|confirm_thirdparty, newthirdparty, socid, projectid, contactids[], copyfiles, addr, addrname, addcontact, firstname, lastname, logit` | same | Page |
-| `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
+| `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], dbfile[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
 | `project_emails.php` | GET | `id` | project read + private-project check + agenda read | Page |
 | `accounts.php` | GET / POST | `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|grant\|revoke\|filing_on\|filing_off\|filing_run\|phpimap_on, userid, cansend, backtocard` | `account->admin` (`phpimap_on`: `$user->admin`) | Page |

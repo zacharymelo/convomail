@@ -101,6 +101,10 @@
 
 /* Compose */
 .cm-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+/* Files picked with the Document Browser module */
+.cm-dbfiles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.cm-dbfiles .opacitymedium { flex-basis: 100%; }
+.cm-dbchip a { margin-left: 6px; text-decoration: none; font-weight: bold; }
 .cm-chips .cm-chip { cursor: pointer; }
 .cm-chips .cm-chip a { margin-left: 4px; font-weight: 600; }
 .convomail-signature { color: var(--cm-muted); }

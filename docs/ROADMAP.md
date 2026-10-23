@@ -27,6 +27,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | UI | "Log replies automatically" (was Automatic filing) with tooltips, status details and a How does it work? box; Shared mail accounts (was All mail accounts) | 0.6.1 |
 | Fixes | Collectors named after their mailbox and Dolibarr user (existing ones renamed on upgrade); no more raw text keys as collector labels | 0.6.2 |
 | Fixes | The From and mailbox dropdowns show the email address ("Name — address") | 0.6.3 |
+| Attachments | Files stored in Dolibarr picked with the optional Document Browser module (separate repo), largest ones sent as share links over its size limit | 0.7.0 |
 | Fixes | "New third party" from an email works with CSRF level 3 (`MAIN_SECURITY_CSRF_WITH_TOKEN=3`) | 0.6.4 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).

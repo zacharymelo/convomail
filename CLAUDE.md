@@ -51,6 +51,10 @@ Only when asked:
 
 ## Dolibarr gotchas we have hit
 
+**Optional modules**
+- Document Browser (`docbrowser`, repo `../doli-docbrowser`, mounted in the dev stack) is used only when `isModEnabled('docbrowser')` and its class loads. Never make Convomail depend on it. Its keys are re-checked on send with `DocBrowserService::resolve()`; never accept a path from the form.
+- CKEditor drops the `convomail-signature` class from the signature div, so code that looks for the signature also matches the "-- " line (`convomail_insert_before_signature()`).
+
 **Module descriptor**
 - Tab label syntax: `Label,ClassName,/path/file.class.php,method`. The second item is the class, not an icon.
 - Menu `enabled`/`perms` strings go through `dol_eval` with a restricted set of methods. Rights are loaded right before menus, with no hook in between: per-user menu conditions aren't possible (UPSTREAM item 9).
