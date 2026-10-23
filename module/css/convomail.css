@@ -128,3 +128,10 @@
 .cm-thread-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: .9em; }
 .cm-thread-body { overflow-x: auto; max-height: 420px; overflow-y: auto; }
 .cm-thread-body img { max-width: 100%; height: auto; }
+
+/* Compose: address suggestions */
+.cm-ac-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.cm-ac-name { font-weight: 600; }
+.cm-ac-email { color: var(--colortextother, #666); }
+.cm-ac-kind { flex-basis: 100%; font-size: .85em; color: var(--colortextother, #888); }
+

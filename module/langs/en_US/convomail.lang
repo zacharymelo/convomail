@@ -185,4 +185,4 @@ ConvomailOAuthScopesGoogle = Google app: type "Google". Scope requested: https:/
 ConvomailOAuthScopesMicrosoft = Microsoft app: type "Microsoft Exchange Online [SMTP/IMAP]" (or "Microsoft [outlook.office365]"). Delegated permissions: IMAP.AccessAsUser.All, SMTP.Send, offline_access. Authenticated SMTP must be allowed for each mailbox.
 ConvomailOAuthRedirectUri = Redirect URL
 ConvomailOAuthRedirectUriDesc = Add this exact URL to the app's redirect URIs at Google (Credentials) or Microsoft (App registration - Authentication, platform Web).
-
+ConvomailRecentAddress = Recent correspondent

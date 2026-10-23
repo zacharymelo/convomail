@@ -80,6 +80,7 @@ convomail/
     ajax/action.php       Mailbox actions (JSON)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
+    ajax/addresses.php    Address suggestions for To / Cc / Bcc (JSON)
     ajax/debug.php        Diagnostics (admin + debug mode)
     public/open.php       Open-tracking image (no login)
     admin/setup.php       Module setup
@@ -203,7 +204,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    - `replyto` (an agenda event);
    - `accountid` + `folder` + `uid` + `mode=reply|replyall|forward` (a mailbox message).
 
-   Signature (`$user->signature`) when `CONVOMAIL_ADD_SIGNATURE`. Templates via `ajax/template.php`, project chips via `ajax/projectcontacts.php`.
+   Signature (`$user->signature`) when `CONVOMAIL_ADD_SIGNATURE`. Templates via `ajax/template.php`, project chips via `ajax/projectcontacts.php`, address suggestions in To / Cc / Bcc via `ajax/addresses.php` (jQuery UI autocomplete, multi-address).
 2. POST `action=send`:
    - the account must be the user's own and enabled;
    - the body is read with `restricthtml` (rich editor) or raw and escaped (plain textarea);
@@ -314,6 +315,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `ajax/action.php` | POST + token | `accountid, folder, uids[], action, dest, projectid, socid, contactids` | `account->read`; usable account | JSON |
 | `ajax/template.php` | GET | `id, socid, contactid, projectid` | `message->send`; template public or own | JSON `{subject, body}` |
 | `ajax/projectcontacts.php` | GET | `id` | `message->send` + project read + private-project check | JSON list |
+| `ajax/addresses.php` | GET | `term` (2+ chars) | `message->send`; contacts need `societe->contact->lire`, third parties `societe->lire`, both limited like core lists (`societe_commerciaux` without `client->voir`, private contacts, external users to their company); users need `user->user->lire`; recent = the user's own email events, minus their own addresses | JSON list, up to 15 |
 | `ajax/debug.php` | GET | `mode` | admin + `CONVOMAIL_DEBUG_MODE` | Text |
 | `public/open.php` | GET | `k, entity` | none (public) | 1×1 GIF |
 

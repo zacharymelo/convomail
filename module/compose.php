@@ -142,9 +142,10 @@ function convomail_back_url($socid, $projectid, $eventid = 0)
  * Defaults from the context (only when the form is first shown)
  */
 
-$sendto = GETPOST('sendto', 'alphawithlgt');
-$sendtocc = GETPOST('sendtocc', 'alphawithlgt');
-$sendtobcc = GETPOST('sendtobcc', 'alphawithlgt');
+// Trailing separators are left by the address suggestions ("a <x@y>, ")
+$sendto = trim(GETPOST('sendto', 'alphawithlgt'), " ,;");
+$sendtocc = trim(GETPOST('sendtocc', 'alphawithlgt'), " ,;");
+$sendtobcc = trim(GETPOST('sendtobcc', 'alphawithlgt'), " ,;");
 $subject = GETPOST('subject', 'alphanohtml');
 // HTML goes through core's sanitizer. Plain text (editor off) is read raw because that sanitizer
 // collapses its line breaks; it is escaped before use, so it can never carry markup.
@@ -496,7 +497,10 @@ print '<tr><td class="titlefieldcreate fieldrequired">'.$langs->trans('MailFrom'
 print $form->selectarray('accountid', $accountoptions, $accountid ?: $defaultaccountid, 0, 0, 0, '', 0, 0, 0, '', 'minwidth300');
 print '</td></tr>';
 
-print '<tr><td class="fieldrequired">'.$langs->trans('MailTo').'</td><td><input type="text" name="sendto" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendto).'">';
+// Address suggestions while typing (ajax/addresses.php, js/convomail-compose.js)
+$acattr = ' autocomplete="off" spellcheck="false" data-cm-addresses="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/addresses.php', 1)).'"'
+	.' data-cm-kinds="'.dol_escape_htmltag(json_encode(array('contact' => $langs->transnoentitiesnoconv('Contact'), 'thirdparty' => $langs->transnoentitiesnoconv('ThirdParty'), 'user' => $langs->transnoentitiesnoconv('User'), 'recent' => $langs->transnoentitiesnoconv('ConvomailRecentAddress')))).'"';
+print '<tr><td class="fieldrequired">'.$langs->trans('MailTo').'</td><td><input type="text" name="sendto" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendto).'"'.$acattr.'>';
 print '<div class="cm-chips" id="cm-projectcontacts" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/projectcontacts.php', 1)).'" data-cc-label="'.dol_escape_htmltag($langs->trans('MailCC')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailProjectContactsHelp')).'">';
 if ($projectid > 0) {
 	foreach (convomail_project_contacts($db, $projectid) as $pc) {
@@ -505,8 +509,8 @@ if ($projectid > 0) {
 	}
 }
 print '</div></td></tr>';
-print '<tr><td>'.$langs->trans('MailCC').'</td><td><input type="text" name="sendtocc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtocc).'"></td></tr>';
-print '<tr><td>'.$langs->trans('MailCCC').'</td><td><input type="text" name="sendtobcc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtobcc).'"></td></tr>';
+print '<tr><td>'.$langs->trans('MailCC').'</td><td><input type="text" name="sendtocc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtocc).'"'.$acattr.'></td></tr>';
+print '<tr><td>'.$langs->trans('MailCCC').'</td><td><input type="text" name="sendtobcc" class="quatrevingtpercent" value="'.dol_escape_htmltag($sendtobcc).'"'.$acattr.'></td></tr>';
 
 print '<tr><td>'.$langs->trans('ThirdParty').'</td><td>';
 print img_picto('', 'company', 'class="pictofixedwidth"').$form->select_company($socid, 'socid', '', 1, 0, 0, array(), 0, 'minwidth300');

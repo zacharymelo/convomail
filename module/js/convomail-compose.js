@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 DPG Supply - convomail compose
- * Email templates (fill subject and body above the signature/quote) and project contact chips (add to To / Cc).
+ * Email templates (fill subject and body above the signature/quote), project contact chips (add to To / Cc),
+ * and address suggestions while typing in To / Cc / Bcc (jQuery UI autocomplete, as elsewhere in Dolibarr).
  */
 (function () {
 	'use strict';
@@ -64,7 +65,66 @@
 		}
 	}
 
+	// The part of an address list being typed: after the last comma that is not inside quotes
+	function lastTerm(value) {
+		var inquote = false, start = 0;
+		for (var i = 0; i < value.length; i++) {
+			if (value[i] === '"') { inquote = !inquote; }
+			if (value[i] === ',' && !inquote) { start = i + 1; }
+		}
+		return { head: value.slice(0, start), term: value.slice(start).replace(/^\s+/, '') };
+	}
+
+	function bindAddressAutocomplete(input) {
+		var $ = window.jQuery;
+		if (!$ || !$.fn.autocomplete) {
+			return;
+		}
+		var url = input.getAttribute('data-cm-addresses');
+		var kinds = {};
+		try { kinds = JSON.parse(input.getAttribute('data-cm-kinds') || '{}'); } catch (e) { kinds = {}; }
+		$(input).on('keydown', function (ev) {
+			// Tab picks the highlighted suggestion instead of leaving the field
+			var inst = $(this).autocomplete('instance');
+			if (ev.keyCode === $.ui.keyCode.TAB && inst && inst.menu.active) {
+				ev.preventDefault();
+			}
+		}).autocomplete({
+			minLength: 2,
+			delay: 200,
+			source: function (request, response) {
+				var term = lastTerm(request.term).term;
+				if (term.length < 2) {
+					response([]);
+					return;
+				}
+				$.getJSON(url, { term: term }).done(function (data) { response(Array.isArray(data) ? data : []); }).fail(function () { response([]); });
+			},
+			focus: function () { return false; },
+			select: function (ev, ui) {
+				// Replace what was typed with the chosen address, ready for the next one
+				var head = lastTerm(this.value).head.replace(/\s*$/, '');
+				this.value = head + (head ? ' ' : '') + ui.item.value + ', ';
+				return false;
+			}
+		}).autocomplete('instance')._renderItem = function (ul, item) {
+			// Built from text nodes: names and addresses come from the database
+			var row = $('<div class="cm-ac-item">');
+			row.append($('<span class="cm-ac-name">').text(item.name || item.email));
+			if (item.name) {
+				row.append($('<span class="cm-ac-email">').text(item.email));
+			}
+			var extra = [kinds[item.kind] || '', item.detail || ''].filter(Boolean).join(' · ');
+			if (extra) {
+				row.append($('<span class="cm-ac-kind">').text(extra));
+			}
+			return $('<li>').append(row).appendTo(ul);
+		};
+	}
+
 	document.addEventListener('DOMContentLoaded', function () {
+		document.querySelectorAll('input[data-cm-addresses]').forEach(bindAddressAutocomplete);
+
 		var chips = document.getElementById('cm-projectcontacts');
 		if (chips) {
 			bindChips(chips);

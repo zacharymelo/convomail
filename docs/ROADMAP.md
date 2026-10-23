@@ -15,7 +15,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | 2. Read and file | Mailbox (folders, list, message page), safe HTML display, reply / reply all / forward, Log to…, "server saves sent mail itself" | 0.3.0 |
 | 2c. Projects and webmail | Three-pane mailbox, bulk actions and shortcuts, project Emails tab, project detection (logged / thread / code / suggested), automatic filing of replies, rich-text compose with signature, templates, pasted images and project contact chips | 0.4.0 |
 | Fixes | Newest mail first on every IMAP server; list pane scrolls on small screens; messages per page per user (10–100); CSS/JS refreshed after upgrades | 0.4.1 |
-| 2b. OAuth | Sign in with Google or Microsoft 365: the admin picks a core OAuth app per provider, each owner connects their account (`oauth.php`), tokens in `llx_oauth_token` per account, XOAUTH2 for IMAP (Horde) and SMTP (`CMailFile`). IMAP protocol trace in Debug mode, with tokens masked | 0.5.0 |
+| 2b. OAuth | Sign in with Google or Microsoft 365: the admin picks a core OAuth app per provider, each owner connects their account (`oauth.php`), tokens in `llx_oauth_token` per account, XOAUTH2 for IMAP (Horde) and SMTP (`CMailFile`). IMAP protocol trace in Debug mode, with tokens masked. Address suggestions in To / Cc / Bcc | 0.5.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
@@ -37,7 +37,6 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Response-time report per user and per customer.
 
 ### Smaller items
-- Address autocomplete in compose To / Cc / Bcc (contacts, third parties, users, past correspondents).
 - Save drafts to the IMAP Drafts folder.
 - Several References ids when core accepts them (UPSTREAM item 7).
 - Translations beyond en_US (fr_FR first).

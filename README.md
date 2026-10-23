@@ -205,6 +205,7 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 
 ## Composing
 
+- **Address suggestions:** type two letters in To, Cc or Bcc to get matching contacts, third parties, colleagues and people you have emailed before. Pick one with the mouse, Enter or Tab, then keep typing for the next address. Suggestions follow Dolibarr's own visibility rules: you only see contacts and third parties you could open (sales representative restriction, private contacts), and colleagues only with the right to read users.
 - **Rich text** is always on (Convomail enables Dolibarr's FCKeditor module), whatever the global "WYSIWYG for emails" setting says.
 - **Signature:** the signature from your user card is inserted below the message and above any quoted text.
 - **Email templates:** pick one of Dolibarr's email templates (Setup → Emails → Email templates; types "all", third party, contact or project). Its subject and body are filled in with the third party, contact or project substituted, above your signature.
@@ -343,7 +344,7 @@ module/                   Module source (installed as custom/convomail)
   mailbox.php             Three-pane mailbox; files replies to project threads
   project_emails.php      Emails tab of a project
   message.php             One message on its own page (phones, links) and the full Log to… form
-  ajax/                   Reading pane, actions, templates, project contacts, diagnostics
+  ajax/                   Reading pane, actions, templates, project contacts, address suggestions, diagnostics
   attachment.php          Attachment download / inline image
   compose.php             Compose, reply, forward, send
   ajax/debug.php          Diagnostics (admin + debug mode)

@@ -80,6 +80,7 @@ Only when asked:
 - Test without Google or Microsoft with `dev/oauth/start.sh` (Dovecot with an oauth2 passdb; see dev/README.md).
 
 **Other**
+- Core's `ajax_autocompleter()` fills one hidden id field; for address lists use jQuery UI `autocomplete()` directly in multi-value mode (`js/convomail-compose.js`), and trim trailing separators server-side.
 - Module CSS/JS passed to `llxHeader()` is linked without a version, so browsers keep the old file after an upgrade. Pages pass `convomail_assets(...)` as the `$head` argument instead (version = file time).
 - A fixed-height CSS grid or flex column needs `minmax(0, 1fr)` rows / `min-height: 0` children, or panes grow with their content and can't scroll.
 - To see what a user's mail server actually answers, turn on Debug mode, repeat the action, and read `ajax/debug.php?mode=imaptrace` (Horde masks the password).
