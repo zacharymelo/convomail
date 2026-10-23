@@ -43,7 +43,7 @@ class ConvomailView
 	{
 		$emails = array(strtolower($account->email));
 		$static = new ConvomailAccount($db);
-		$list = $static->fetchAllForUser($user->id);
+		$list = $static->fetchAllUsableBy($user, false);
 		if (is_array($list)) {
 			foreach ($list as $acc) {
 				$emails[] = strtolower($acc->email);

@@ -56,6 +56,8 @@ if ($code !== '' || $error !== '') {
 		setEventMessages($langs->trans('ConvomailOAuthRefused', $error.(GETPOST('error_description', 'alphanohtml') ? ': '.GETPOST('error_description', 'alphanohtml') : '')), null, 'errors');
 	} elseif ($account = $oauth->handleCallback($code, $state, $user)) {
 		setEventMessages($langs->trans('ConvomailOAuthConnected', $account->email), null, 'mesgs');
+		header('Location: '.$account->cardUrl());
+		exit;
 	} else {
 		setEventMessages($oauth->error, null, 'errors');
 	}
@@ -69,8 +71,10 @@ if ($accountid <= 0 || $account->fetch($accountid) <= 0 || !$account->isOAuth())
 }
 
 if ($action == 'connect') {
-	// The consent is the owner's: an admin managing someone else's account cannot give it for them
-	if ((int) $account->fk_user !== (int) $user->id || GETPOST('token', 'alpha') !== currentToken()) {
+	// The consent is the owner's: an admin managing someone else's account cannot give it for them.
+	// A shared mailbox has no owner: a mail accounts admin connects it.
+	$mayconnect = $account->isShared() ? $user->hasRight('convomail', 'account', 'admin') : ((int) $account->fk_user === (int) $user->id);
+	if (!$mayconnect || GETPOST('token', 'alpha') !== currentToken()) {
 		accessforbidden();
 	}
 	// The admin may have switched the provider to another app since the account was set up
@@ -83,7 +87,7 @@ if ($action == 'connect') {
 	$url = $oauth->authorizationUrl($account);
 	if ($url === '') {
 		setEventMessages($oauth->error, null, 'errors');
-		header('Location: '.$accountsurl.((int) $account->fk_user));
+		header('Location: '.$account->cardUrl());
 		exit;
 	}
 	header('Location: '.$url);
@@ -91,12 +95,12 @@ if ($action == 'connect') {
 }
 
 if ($action == 'disconnect' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-	if (!$account->canBeUsedBy($user)) {
+	if (!$account->canManage($user)) {
 		accessforbidden();
 	}
 	$oauth->disconnect($account);
 	setEventMessages($langs->trans('ConvomailOAuthDisconnected', $account->email), null, 'mesgs');
-	header('Location: '.$accountsurl.((int) $account->fk_user));
+	header('Location: '.$account->cardUrl());
 	exit;
 }
 

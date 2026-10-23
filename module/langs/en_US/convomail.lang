@@ -207,3 +207,47 @@ ConvomailContactAdded = %s added as a contact.
 # Web form mail (sender in Reply-To)
 ConvomailReplyTo = Reply to
 ConvomailVia = via %s
+
+# Automatic filing (core Email Collector)
+ConvomailFiling = Automatic filing
+ConvomailFilingOn = On
+ConvomailFilingOff = Off
+ConvomailFilingNotRunYet = not run yet
+ConvomailFilingTurnOn = Turn on
+ConvomailFilingTurnOff = Turn off
+ConvomailFilingRunNow = Run now
+ConvomailFilingTurnedOn = Automatic filing is on for %s: replies are filed on the agenda every few minutes.
+ConvomailFilingTurnedOff = Automatic filing is off for %s.
+ConvomailFilingRunIn = Inbox: %s
+ConvomailFilingRunOut = Sent: %s
+ConvomailFilingNeedsPhpImap = Needs the PHP-IMAP library for collectors (Sign in with Google / Microsoft 365). An administrator can turn it on in All mail accounts.
+ConvomailFilingCollectorCard = Collector settings (Email Collector)
+ConvomailCollectorModuleOff = The Email Collector module is off
+ConvomailEnableModule = Enable it
+ConvomailCollectorLabelIn = Convomail: replies to %s
+ConvomailCollectorLabelOut = Convomail: replies sent from %s
+ConvomailCollectorDescription = Set up by Convomail (automatic filing). Replies received, or sent from another mail app, are filed on the agenda with their third party and project. Connection settings follow the Convomail account.
+
+# Shared mailboxes and the admin dashboard
+ConvomailShared = shared
+ConvomailAllAccounts = All mail accounts
+ConvomailNewShared = New shared mailbox
+ConvomailEditShared = Shared mailbox
+ConvomailAccountType = Type
+ConvomailPersonal = Personal
+ConvomailSharedWith = Shared: %s user(s)
+ConvomailAccess = Access
+ConvomailAccessRead = Read and file
+ConvomailAccessSend = Read, file and send
+ConvomailAccessAdd = Give access
+ConvomailAccessRemove = Remove
+ConvomailAccessNone = Nobody has access yet.
+ConvomailAccessSaved = Access saved.
+ConvomailSharedHelp = A shared mailbox (sales@, support@) is used by the users you give access to. "Read and file" lets them read it and log its emails; "Read, file and send" also lets them send as its address. Their sent emails are logged under their own name.
+ConvomailPhpImapOff = Collectors read Google and Microsoft 365 mailboxes only with the PHP-IMAP library, which is off (core setting MAIN_IMAP_USE_PHPIMAP).
+ConvomailPhpImapTurnOn = Use PHP-IMAP for Email Collector
+ConvomailPhpImapOn = Email Collector now uses the PHP-IMAP library.
+ConvomailFilingLimit = Core's Email Collector runs at most about 100 collectors per cycle; Convomail uses two per mailbox (about 50 mailboxes).
+ConvomailCronRefreshTokens = Refresh Convomail sign-in tokens
+ConvomailCronRefreshTokensHelp = Keeps the Google / Microsoft 365 tokens of mail accounts valid, so automatic filing (Email Collector) can sign in.
+

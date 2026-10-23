@@ -83,6 +83,15 @@ Only when asked:
 - Don't send IMAP `TEXT` / `BODY` searches by default: without a full-text index the server reads every message. Header criteria are answered from the server's cache.
 - Call `convomail_release_session()` before slow mail-server work in any new page: PHP serialises a user's requests on the session lock.
 
+**Shared mailboxes and collectors (0.6.0)**
+- Access goes through `ConvomailAccount::canRead()` / `canSend()` / `canManage()` and `fetchAllUsableBy()`; never compare `fk_user` with the user. `fk_user = 0` is a shared mailbox; a new, unsaved account has `fk_user` null.
+- CommonObject saves an empty `integer:User` field as NULL unless the field has a `default`: that is why `fk_user` declares `'default' => '0'`.
+- `upgradeSchema()` also inserts new cron jobs and rebuilds the menus when the version changes, so deploying files is enough.
+- Core's collector pages are admin-only: Convomail runs collectors itself (`doCollectOneCollector(0)`) and shows their last result. Needs `core/lib/date.lib.php` + `functions2.lib.php` loaded first.
+- `select_dolusers()`: `$morefilter` takes core's universal filter syntax, not SQL; use the `$notdisabled` argument to hide disabled users.
+- `dolGetStatus(..., 3)` is a dot without text; use 2 for dot and label. `$langs->trans()` escapes its parameters: print HTML links next to the translated text, not through it.
+- Test collectors and the OAuth path on the dev stack: `dev/oauth/start.sh`, then turn on PHP-IMAP from All mail accounts.
+
 **Other**
 - Core's WAF (`waf.inc.php`) refuses a whole POST when a value contains `<style`, `<script`, `<iframe`, `on…=` handlers or `=data:`. Anything Convomail puts into the compose editor (quotes, templates) must go through `ConvomailRenderer::purify()` first. The refusal page hides `paramkey` / `paramvalue` in an HTML comment: view the page source to see which field.
 - Core's `ajax_autocompleter()` fills one hidden id field; for address lists use jQuery UI `autocomplete()` directly in multi-value mode (`js/convomail-compose.js`), and trim trailing separators server-side.

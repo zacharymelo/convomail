@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.5.7)
+## Where it stands (0.6.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -23,19 +23,13 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | The message list updates as soon as an email is filed from the reading pane | 0.5.5 |
 | Docs | Convomail and Email Collector on the same mailbox: one event per email, verified in both orders | 0.5.6 |
 | Fixes | Newsletters' hidden preview text no longer shows as a column of letters; buttons keep display:inline-block | 0.5.7 |
+| 3. Automatic filing and shared mailboxes | Automatic filing through core's Email Collector (two collectors per mailbox, managed by Convomail, token refresh job), shared mailboxes with Read / Read and send per user, All mail accounts dashboard | 0.6.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
 ## Next
 
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
-
-### 3. Automatic conversation
-**Why:** today a reply is filed only when someone opens the mailbox page that lists it.
-- A cron job (`$this->cronjobs`) per account: scan Inbox and Sent since the last UID (`uidnext` / `CONDSTORE`), run the resolver, file thread and code matches. Store the last seen UID per account and folder (new table `llx_convomail_folder_state`).
-- Filing policy per user or account: off / replies only (today's behaviour) / anything from a known contact.
-- Shared team inboxes (sales@, support@): an account owned by a user group instead of a user, with per-message assignment. This needs an ownership model change in `ConvomailAccount::canBeUsedBy()`.
-- Overlap with core's Email Collector: settled, both can run on the same mailbox without duplicates (one event per Message-ID, verified in 0.5.6). The sync job could still call a shared matcher (UPSTREAM item 6).
 
 ### 4. Sales features
 - "Awaiting reply" / "Replied" state per thread, with columns on third party and project lists.
@@ -48,6 +42,8 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Search across folders, and Gmail's own search syntax (`X-GM-RAW`) for fast text search on Gmail.
 - Save drafts to the IMAP Drafts folder.
 - Several References ids when core accepts them (UPSTREAM item 7).
+- Per-message assignment in shared mailboxes (who handles which email).
+- Group-based access to shared mailboxes (today per user).
 - Translations beyond en_US (fr_FR first).
 - A per-user "file this sender always to project X" rule.
 
@@ -62,8 +58,7 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 
 | Question | Options | Notes |
 |---|---|---|
-| Shared inboxes | Group-owned accounts vs delegated access to a user's account | Affects `canBeUsedBy()`, rights and the menu |
-| Auto-filing scope | Replies only (now) vs known contacts too | Privacy: personal mail from a contact would land on the agenda |
+| Auto-filing scope | Replies only (core's isanswer filter, now) vs anything from a known contact | Privacy: personal mail from a contact would land on the agenda; core has no "known contact" filter |
 | Distribution | DoliStore listing vs GitHub releases only | The repo is private |
 
 ## Test debt

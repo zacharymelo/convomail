@@ -22,6 +22,8 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - [Composing](#composing)
 - [Which email account is used](#which-email-account-is-used)
 - [Read receipts and open tracking](#read-receipts-and-open-tracking)
+- [Automatic filing](#automatic-filing)
+- [Shared mailboxes and the admin dashboard](#shared-mailboxes-and-the-admin-dashboard)
 - [Replies and the Email Collector](#replies-and-the-email-collector)
 - [Privacy and security notes](#privacy-and-security-notes)
 - [What the module stores](#what-the-module-stores)
@@ -240,6 +242,34 @@ Before switching open tracking on:
 - The tracking image is only in the delivered message. It is removed from the copy in the sender's Sent folder and from the logged event, so the sender reading their own copy is not counted.
 - Switching tracking off stops recording immediately; messages already sent keep their image but nothing is logged.
 
+## Automatic filing
+
+Replies are filed on the agenda every few minutes, without anyone opening the mailbox. Convomail does this through Dolibarr's own **Email Collector** module rather than a background job of its own.
+
+- **Turn on** in the *Automatic filing* column of **Mail accounts** (user card) or **All mail accounts** (admins). Users can turn it on for their own accounts; admins for any account, including shared mailboxes.
+- Convomail then sets up two collectors for the mailbox, copied from core's examples *Collect_Responses_In* and *Collect_Responses_Out*:
+  - **Inbox:** replies received;
+  - **Sent:** replies sent from another mail app (phone, Outlook), threaded on an email from Dolibarr.
+- Each reply is filed with its third party, contact and project, recognised from Dolibarr's tracking id in the reply, else from the sender's address. Events belong to the mailbox owner. Core runs collectors every 5 minutes; **Run now** runs them at once.
+- The collectors follow the account: a new password, server or Sent folder is copied to them, disabling the account disables them, deleting it deletes them. **Turn off** disables them and keeps them. Admins can open their settings in Home → Setup → Email Collector.
+- **No duplicates:** an email already logged by Convomail, or by another collector, isn't recorded twice.
+- **Google / Microsoft 365 accounts:** collectors read them with the account's sign-in token. That needs core's PHP-IMAP library (setting `MAIN_IMAP_USE_PHPIMAP`); **All mail accounts** shows a button to turn it on. Convomail's scheduled job *Refresh Convomail sign-in tokens* (every 5 minutes) keeps the tokens valid.
+- **Limit:** core's Email Collector runs at most about 100 collectors per cycle, so about 50 mailboxes with automatic filing.
+
+Convomail still files replies instantly when a mailbox page lists them (setting *File replies automatically*); both work together.
+
+## Shared mailboxes and the admin dashboard
+
+**All mail accounts** (left menu of Mailbox, for users with *Manage the mail accounts of all users*) lists every account: personal ones with their owner, shared ones with their number of users, the sign-in method and automatic filing.
+
+- **New shared mailbox** creates an account for an address like sales@ or support@, with the same settings as a personal account.
+- On its page, **Access** lists who may use it:
+  - **Read and file:** they see it in their mailbox switcher, read it and log its emails;
+  - **Read, file and send:** they can also choose it as *From* when composing.
+- Emails a user sends from a shared mailbox are logged under their own name; the Sent copy goes to the shared mailbox's Sent folder.
+- A shared mailbox signing in with Google or Microsoft 365 is connected by an admin, from its page.
+- Personal accounts are still managed on their owner's Mail accounts tab; the dashboard links there.
+
 ## Replies and the Email Collector
 
 Convomail logs received mail when a user clicks **Log to…**, and files replies to project threads automatically when the mailbox lists them. Dolibarr's core **Email Collector** can also record incoming mail, on a schedule and without anyone opening the mailbox:
@@ -274,7 +304,8 @@ The event label differs ("Reception of Email - From …" from the collector, the
 
 | Table | Content |
 |---|---|
-| `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, sign-in method and OAuth app, encrypted password, Sent folder, whether the server saves sent mail itself |
+| `llx_convomail_account_access` | Users granted a shared mailbox, and whether they may send as it |
+| `llx_convomail_account` | One row per mail account (`fk_user` 0 for a shared mailbox): user, servers, ports, encryption, login, sign-in method and OAuth app, encrypted password, Sent folder, whether the server saves sent mail itself |
 | `llx_oauth_token` (core) | For accounts that sign in with Google or Microsoft 365: the account's encrypted token, as `Google-convomail<id>` or `Microsoft3-convomail<id>` |
 | `llx_convomail_message` | One row per sent or logged message: account, direction, folder and UID, Message-ID, In-Reply-To, agenda event id, read receipt flag, open-tracking key, open count and dates |
 | `llx_actioncomm` (core) | The agenda event for each message: subject, body, recipients, links |
@@ -288,7 +319,9 @@ Mail accounts, logged messages and settings are kept when you disable, re-enable
 
 Passwords of mail accounts are encrypted with the instance key in Dolibarr's `conf.php` (`$dolibarr_main_instance_unique_id`). If Dolibarr itself is reinstalled with a new `conf.php`, keep that value, or users must re-enter their mail passwords (OAuth accounts must reconnect).
 
-**From 0.5.x:** deploy the new zip. Nothing to re-enable. If you deployed 0.5.0 or 0.5.1 over 0.4.x without disabling and enabling Convomail, 0.5.2 adds the missing columns on its own and the accounts reappear.
+**From 0.5.x to 0.6.0:** deploy the new zip. On the first page that uses mail accounts, Convomail adds its new table, the *All mail accounts* menu and the token refresh job by itself.
+
+**Within 0.5.x:** deploy the new zip. Nothing to re-enable. If you deployed 0.5.0 or 0.5.1 over 0.4.x without disabling and enabling Convomail, 0.5.2 adds the missing columns on its own and the accounts reappear.
 
 **From 0.4.x:** deploy the new zip, then disable and re-enable Convomail. This adds the sign-in method columns (`sql/update_0.5.0.sql`). Existing accounts keep signing in with their password.
 
@@ -327,7 +360,7 @@ Convomail is built as a module first, with the aim of proposing webmail for Doli
 | 2. Read and file | Mailbox (folders, list, message page), safe HTML display, reply / reply all / forward, Log to… | **Done (0.3.0)** |
 | 2c. Projects and webmail | Three-pane mailbox, actions and shortcuts, project Emails tab, project detection and automatic filing, rich-text compose with signature, templates, pasted images and project contacts | **Done (0.4.0)** |
 | 2b. OAuth | Sign in with Google and Microsoft 365 instead of passwords | **Done (0.5.0)** |
-| 3. Automatic conversation | Sync job, auto-logging by policy, replies filed to their project, shared team inboxes | Planned |
+| 3. Automatic filing and shared mailboxes | Automatic filing through core's Email Collector, shared mailboxes with per-user access, admin dashboard | **Done (0.6.0)** |
 | 4. Sales features | Awaiting-reply columns, follow-up nudges, last message on opportunity cards, response-time reports | Planned |
 
 [UPSTREAM.md](UPSTREAM.md) lists the small core changes the module works around, which come before proposing it upstream.
@@ -364,6 +397,7 @@ module/                   Module source (installed as custom/convomail)
   admin/setup.php         Setup page
   user_accounts.php       Mail accounts tab on the user card
   oauth.php               Connect with Google / Microsoft 365 (redirect URL for the providers)
+  accounts.php            All mail accounts (admins): shared mailboxes, access, automatic filing
   mailbox.php             Three-pane mailbox; files replies to project threads
   project_emails.php      Emails tab of a project
   message.php             One message on its own page (phones, links) and the full Log to… form

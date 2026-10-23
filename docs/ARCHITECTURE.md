@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.5.7**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.6.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -116,6 +116,8 @@ convomail/
 
 Keys: `(entity, fk_user)`, `status`.
 
+**`llx_convomail_account_access`**: users granted a shared mailbox (`fk_account`, `fk_user`, `can_send`; unique per account and user). An account with `fk_user = 0` is shared.
+
 **`llx_convomail_message`**: one row per message Convomail sent or filed (`ConvomailMessage`). It links a Message-ID to its agenda event.
 
 | Column | Meaning |
@@ -184,6 +186,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 |---|---|---|
 | `modConvomail` (core/modules) | Descriptor | `init()` loads `sql/`, activates `AC_EMAIL`, `delete_menus()`, `_init()`; `remove()` |
 | `ConvomailAccount` | Account CRUD (CommonObject `*Common()`), password crypto, access, host allowlist | `fetchDefaultForUser()`, `fetchAllForUser()`, `canBeUsedBy()`, `checkHostAllowed()` / `isHostAllowed()`, `setPassword()`, `getPassword()`, `countForUser()` (tab badge), `clearSessionCache()` |
+| `ConvomailCollector` | Automatic filing through core's Email Collector | `enable()` creates/updates `CONVOMAIL<id>_IN` (INBOX, `isanswer`) and `_OUT` (Sent folder, `isanswer` + `withouttrackingidinmsgid`, `code=SET:AC_EMAIL`), action `recordevent` with `userownerid/authorid=SET:<owner>`; `disable()`, `sync()` (called by `ConvomailAccount::update()`), `remove()` (by `delete()`), `status()`, `runNow()` |
 | `ConvomailOAuth` | OAuth sign-in (Google, Microsoft 365) on top of core's phpoauth services and `DoliStorage` | `providers()`, `availableApps()`, `appFor()`, `authorizationUrl()`, `handleCallback()`, `accessToken()` (refresh 5 minutes before expiry), `status()`, `disconnect()`, `mailSettings()` (in-memory settings for `CMailFile`) |
 | `ConvomailMessage` | Link row CRUD | `fetchByMsgid()`, `fetchByTrackKey()` (no entity filter: public URL), `fetchByActioncomm()`, `countForProject()` (tab badge) |
 | `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `findSentFolder`, `findFolderByRole` |
@@ -311,6 +314,11 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 2. Core creates the third party with all its own rules, then redirects to `backtopage` = `message.php?…&action=thirdpartycreated&addr&addrname`, adding `&socid=<new id>`. Cancel comes back without `socid`.
 3. `message.php` checks access to the third party (`restrictedArea`) and offers adding the person as a contact (`splitName()`, unless a contact has the address) and logging the email. POST `action=confirm_thirdparty` creates the contact (`Contact::create`) and calls `ConvomailView::logMessage()` with the third party and contact, then returns to the mailbox on that message.
 
+### 6.10 Shared mailboxes and automatic filing
+- **Access:** `ConvomailAccount::canRead()` (own, granted shared, or `account->admin`), `canSend()` (own, or shared granted with `can_send`; admins need a grant too), `canManage()` (owner of a personal account, or `account->admin`). `fetchAllUsableBy()` gives the mailbox switcher and compose's From list; `convomail_get_usable_account()` falls back to granted shared mailboxes.
+- **Dashboard** `accounts.php` (`account->admin`): every account, shared mailbox create/edit (same form as the user tab, `convomail_account_form_fields()`), access grants, automatic filing cells.
+- **Automatic filing:** `convomail_filing_cell()` / `convomail_filing_actions()` (`filing_on|filing_off|filing_run`, owner or admin) drive `ConvomailCollector`. Core's cron *Email collector* runs the collectors every 5 minutes; Convomail's cron *ConvomailCronRefreshTokens* (`ConvomailOAuth::refreshTokens()`, every 5 minutes) refreshes OAuth tokens expiring within 15 minutes, because the collector can't. OAuth collectors need `MAIN_IMAP_USE_PHPIMAP=1` (button on the dashboard).
+
 ## 7. Pages and endpoints
 
 | Path | Method | Parameters | Access | Output |
@@ -320,8 +328,9 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
 | `project_emails.php` | GET | `id` | project read + private-project check + agenda read | Page |
+| `accounts.php` | GET / POST | `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|grant\|revoke\|filing_on\|filing_off\|filing_run\|phpimap_on, userid, cansend, backtocard` | `account->admin` (`phpimap_on`: `$user->admin`) | Page |
 | `oauth.php` | GET / POST | `action=connect&accountid&token` (GET); provider callback `code, state` or `error, error_description`; `action=disconnect&accountid` (POST) | connect: account owner; disconnect: owner or `account->admin` | Redirect |
-| `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent` | own (`account->read`) or any (`account->admin`) | Page |
+| `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|filing_on\|filing_off\|filing_run` | own (`account->read`) or any (`account->admin`) | Page |
 | `admin/setup.php` | GET / POST | `action=update, CONVOMAIL_ALLOWED_HOSTS` | admin | Page |
 | `ajax/message.php` | GET | `accountid, folder, uid, showimages` | `account->read`; usable account | HTML fragment |
 | `ajax/action.php` | POST + token | `accountid, folder, uids[], action, dest, projectid, socid, contactids` | `account->read`; usable account | JSON |

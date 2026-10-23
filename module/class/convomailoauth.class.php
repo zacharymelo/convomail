@@ -30,6 +30,9 @@ class ConvomailOAuth
 	/** @var string */
 	public $error = '';
 
+	/** @var string Result of the scheduled job, shown in the job list */
+	public $output = '';
+
 	/** Refresh a token that expires within this many seconds */
 	const REFRESH_MARGIN = 300;
 
@@ -285,7 +288,13 @@ class ConvomailOAuth
 		}
 
 		$account = new ConvomailAccount($this->db);
-		if ($account->fetch((int) $m[1]) <= 0 || (int) $account->fk_user !== (int) $user->id || !$account->isOAuth()) {
+		if ($account->fetch((int) $m[1]) <= 0 || !$account->isOAuth()) {
+			$this->error = $langs->trans('ConvomailOAuthBadState');
+			return false;
+		}
+		// The owner gives the consent; a shared mailbox has no owner, so a mail accounts admin does
+		$mayconnect = $account->isShared() ? $user->hasRight('convomail', 'account', 'admin') : ((int) $account->fk_user === (int) $user->id);
+		if (!$mayconnect) {
 			$this->error = $langs->trans('ConvomailOAuthBadState');
 			return false;
 		}
@@ -341,9 +350,10 @@ class ConvomailOAuth
 	 * A valid access token for IMAP / SMTP, refreshed when it expires soon
 	 *
 	 * @param  ConvomailAccount $account Account
+	 * @param  int              $margin  Refresh when the token expires within this many seconds
 	 * @return string                    Access token, '' if KO (see $this->error)
 	 */
-	public function accessToken(ConvomailAccount $account)
+	public function accessToken(ConvomailAccount $account, $margin = self::REFRESH_MARGIN)
 	{
 		global $langs;
 
@@ -362,14 +372,21 @@ class ConvomailOAuth
 
 		$eol = $token->getEndOfLife();
 		if ($eol !== \OAuth\Common\Token\TokenInterface::EOL_NEVER_EXPIRES && $eol !== \OAuth\Common\Token\TokenInterface::EOL_UNKNOWN
-			&& $eol - self::REFRESH_MARGIN < dol_now()) {
+			&& $eol - $margin < dol_now()) {
 			$refresh = $token->getRefreshToken();
+			// Core's copy of the OAuth library prints the provider's error on a failed refresh: keep it out of the page
+			ob_start();
 			try {
 				$token = $service->refreshAccessToken($token);
+				$printed = ob_get_clean();
 			} catch (Exception $e) {
-				dol_syslog(__METHOD__.' refresh failed for account '.$account->id.': '.$e->getMessage(), LOG_WARNING);
+				$printed = ob_get_clean();
+				dol_syslog(__METHOD__.' refresh failed for account '.$account->id.': '.$e->getMessage().($printed !== '' ? ' ('.$printed.')' : ''), LOG_WARNING);
 				$this->error = $langs->trans('ConvomailOAuthReconnect', $account->email);
 				return '';
+			}
+			if ($printed !== '') {
+				dol_syslog(__METHOD__.' account '.$account->id.': '.$printed, LOG_WARNING);
 			}
 			// Google sends a refresh token only with the first token
 			if (empty($token->getRefreshToken()) && !empty($refresh)) {
@@ -378,6 +395,40 @@ class ConvomailOAuth
 			$storage->storeAccessToken(self::serviceName((string) $account->oauth_app), $token);
 		}
 		return (string) $token->getAccessToken();
+	}
+
+	/**
+	 * Scheduled job: refresh the tokens of OAuth accounts that expire within 15 minutes, so core's Email Collector
+	 * (which can only refresh with per-account copies of the app secret) always finds a valid one
+	 *
+	 * @return int 0 if OK, number of accounts that failed otherwise (see $this->output)
+	 */
+	public function refreshTokens()
+	{
+		$this->output = '';
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."convomail_account WHERE auth_type = 'oauth' AND status = 1";
+		$sql .= " AND entity IN (".getEntity('convomailaccount').")";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return 1;
+		}
+		$done = 0;
+		$failed = 0;
+		while ($obj = $this->db->fetch_object($resql)) {
+			$account = new ConvomailAccount($this->db);
+			if ($account->fetch((int) $obj->rowid) <= 0 || !$this->status($account)['connected']) {
+				continue;
+			}
+			if ($this->accessToken($account, 900) === '') {
+				$failed++;
+				$this->output .= $account->email.': '.$this->error."\n";
+			} else {
+				$done++;
+			}
+		}
+		$this->output .= $done.' token(s) valid, '.$failed.' failed';
+		return $failed;
 	}
 
 	/**

@@ -163,7 +163,7 @@ if (count($found) < $max && isModEnabled('agenda')) {
 	$termlower = dol_strtolower($term);
 	// The user's own addresses are in every one of these events: not worth suggesting
 	$own = array(strtolower((string) $user->email) => true);
-	$accounts = (new ConvomailAccount($db))->fetchAllForUser($user->id);
+	$accounts = (new ConvomailAccount($db))->fetchAllUsableBy($user, false);
 	foreach (is_array($accounts) ? $accounts : array() as $acc) {
 		$own[strtolower($acc->email)] = true;
 	}

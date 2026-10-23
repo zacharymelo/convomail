@@ -204,10 +204,10 @@ $client->close();
 $form = new Form($db);
 
 $accountstatic = new ConvomailAccount($db);
-$myaccounts = $accountstatic->fetchAllForUser($user->id, true);
+$myaccounts = $accountstatic->fetchAllUsableBy($user, true);
 $options = array();
 foreach (is_array($myaccounts) ? $myaccounts : array() as $acc) {
-	$options[$acc->id] = $acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email;
+	$options[$acc->id] = ($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).($acc->isShared() ? ' ('.$langs->transnoentitiesnoconv('ConvomailShared').')' : '');
 }
 if (!isset($options[$account->id])) {
 	$options[$account->id] = $account->email;

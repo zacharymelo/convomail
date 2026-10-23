@@ -54,7 +54,8 @@ $origin    = GETPOST('origin', 'aZ09');
 $originid  = GETPOSTINT('originid');
 $replyto   = GETPOSTINT('replyto');
 $accountid = GETPOSTINT('accountid');
-// Reply to / forward a message of the mailbox
+// Reply to / forward a message of the mailbox (srcaccountid: the mailbox it is in, when sending from another account)
+$srcaccountid = GETPOSTINT('srcaccountid') ?: $accountid;
 $srcfolder = GETPOST('folder', 'restricthtml');
 $srcuid    = GETPOSTINT('uid');
 $mode      = GETPOST('mode', 'aZ09');
@@ -64,7 +65,8 @@ if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'message', 'send
 }
 
 $accountstatic = new ConvomailAccount($db);
-$accounts = $accountstatic->fetchAllForUser($user->id, true);
+// Accounts the user may send with: their own, then shared mailboxes granted with "send"
+$accounts = $accountstatic->fetchAllUsableBy($user, true, true);
 if (!is_array($accounts)) {
 	$accounts = array();
 }
@@ -80,9 +82,9 @@ $srcclient = null;
 $srcrenderer = null;
 $srcevent = null;
 if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall', 'forward'), true)) {
-	// Only from the user's own accounts: replies go out from the mailbox the message is in
-	$srcaccount = convomail_get_usable_account($db, $user, $accountid);
-	if (!$srcaccount || (int) $srcaccount->fk_user !== (int) $user->id) {
+	// Any mailbox the user may read; the reply goes out from it when they may send with it
+	$srcaccount = convomail_get_usable_account($db, $user, $srcaccountid);
+	if (!$srcaccount) {
 		accessforbidden();
 	}
 	$srcclient = new ConvomailHordeMailboxClient($srcaccount);
@@ -92,7 +94,10 @@ if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall
 	}
 	$srcattachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $srcaccount->id).'&folder='.urlencode($srcfolder).'&uid='.((int) $srcuid);
 	$srcrenderer = new ConvomailRenderer($srcclient, $srcfolder, $srcuid, $srcmessage, $srcattachmentbase);
-	$accountid = (int) $srcaccount->id;
+	$srcaccountid = (int) $srcaccount->id;
+	if (GETPOSTINT('accountid') <= 0 || $action !== 'send') {
+		$accountid = $srcaccount->canSend($user) ? (int) $srcaccount->id : 0;
+	}
 
 	// If the message was logged, the reply inherits that event's third party and project
 	if ($srcmessage['msgid'] !== '') {
@@ -305,7 +310,7 @@ if ($action == 'send') {
 	$error = 0;
 
 	$account = new ConvomailAccount($db);
-	if ($accountid <= 0 || $account->fetch($accountid) <= 0 || (int) $account->fk_user !== (int) $user->id || (int) $account->status !== ConvomailAccount::STATUS_ENABLED) {
+	if ($accountid <= 0 || $account->fetch($accountid) <= 0 || !$account->canSend($user) || (int) $account->status !== ConvomailAccount::STATUS_ENABLED) {
 		setEventMessages($langs->trans('ConvomailErrorChooseAccount'), null, 'errors');
 		$error++;
 	}
@@ -476,9 +481,9 @@ if (empty($accounts)) {
 $accountoptions = array();
 $defaultaccountid = 0;
 foreach ($accounts as $acc) {
-	$accountoptions[$acc->id] = $acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email;
+	$accountoptions[$acc->id] = ($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).($acc->isShared() ? ' ('.$langs->transnoentitiesnoconv('ConvomailShared').')' : '');
 	if (!$defaultaccountid) {
-		$defaultaccountid = $acc->id;	// fetchAllForUser() returns the default account first
+		$defaultaccountid = $acc->id;	// own default account first, see fetchAllUsableBy()
 	}
 }
 
@@ -490,6 +495,7 @@ print '<input type="hidden" name="originid" value="'.((int) $originid).'">';
 print '<input type="hidden" name="contactid" value="'.((int) $contactid).'">';
 print '<input type="hidden" name="replyto" value="'.((int) $replyto).'">';
 if ($srcmessage) {
+	print '<input type="hidden" name="srcaccountid" value="'.((int) $srcaccountid).'">';
 	print '<input type="hidden" name="folder" value="'.dol_escape_htmltag($srcfolder).'">';
 	print '<input type="hidden" name="uid" value="'.((int) $srcuid).'">';
 	print '<input type="hidden" name="mode" value="'.dol_escape_htmltag($mode).'">';

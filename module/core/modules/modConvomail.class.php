@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.5.7';
+		$this->version = '0.6.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -81,7 +81,23 @@ class modConvomail extends DolibarrModules
 
 		$this->dictionaries = array();
 		$this->boxes = array();
-		$this->cronjobs = array();
+		// Keeps OAuth tokens valid for automatic filing (core's Email Collector can't refresh per-account tokens itself)
+		$this->cronjobs = array(
+			0 => array(
+				'label'         => 'ConvomailCronRefreshTokens',
+				'jobtype'       => 'method',
+				'class'         => '/convomail/class/convomailoauth.class.php',
+				'objectname'    => 'ConvomailOAuth',
+				'method'        => 'refreshTokens',
+				'parameters'    => '',
+				'comment'       => 'ConvomailCronRefreshTokensHelp',
+				'frequency'     => 5,
+				'unitfrequency' => 60,
+				'status'        => 1,
+				'test'          => 'isModEnabled("convomail")',
+				'priority'      => 40,
+			),
+		);
 
 		// Permissions
 		$this->rights = array();
@@ -181,6 +197,21 @@ class modConvomail extends DolibarrModules
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=convomail',
 			'type'     => 'left',
+			'titre'    => 'ConvomailAllAccounts',
+			'prefix'   => img_picto('', 'fa-users-cog', 'class="paddingright pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => 'convomail_allaccounts',
+			'url'      => '/convomail/accounts.php',
+			'langs'    => 'convomail@convomail',
+			'position' => 140,
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "account", "admin")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=convomail',
+			'type'     => 'left',
 			'titre'    => 'ConvomailMyAccounts',
 			'prefix'   => img_picto('', 'user', 'class="paddingright pictofixedwidth"'),
 			'mainmenu' => 'convomail',
@@ -247,6 +278,12 @@ class modConvomail extends DolibarrModules
 
 		if ($this->_load_tables('/convomail/sql/') <= 0) {
 			return -1;
+		}
+		// Scheduled jobs and menu entries added by a newer version (jobs are skipped if they exist; menus are rebuilt)
+		$this->insert_cronjobs();
+		if (getDolGlobalString('CONVOMAIL_DB_VERSION') !== $this->version) {
+			$this->delete_menus();
+			$this->insert_menus();
 		}
 		// Schema is shared by all entities
 		dolibarr_set_const($this->db, 'CONVOMAIL_DB_VERSION', $this->version, 'chaine', 0, 'Convomail tables are at this version', 0);
