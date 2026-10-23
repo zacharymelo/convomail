@@ -72,7 +72,7 @@ Compose page ──> ConvomailTransport ──> user's SMTP server ──> recip
 | Dolibarr | 20.0 or later (tested on 23.0) |
 | PHP | 8.1 or later |
 | Core modules | Third parties, Agenda, FCKeditor (enabled automatically with Convomail); Projects optional |
-| Mail account | IMAP and SMTP access with a password or app password. OAuth is planned. |
+| Mail account | IMAP and SMTP access with a password or app password, or sign-in with Google or Microsoft 365 (OAuth, see [below](#sign-in-with-google-or-microsoft-365)). |
 
 ## Installation
 
