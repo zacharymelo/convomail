@@ -149,13 +149,9 @@ class ActionsConvomail
 		$langs->load('convomail@convomail');
 		$compose = dol_buildpath('/convomail/compose.php', 1);
 
-		if (in_array('thirdpartycard', $contexts) && $object->element === 'societe') {
-			print dolGetButtonAction('', $langs->trans('ConvomailSendEmail'), 'default', $compose.'?socid='.((int) $object->id), '', true);
-		} elseif (in_array('contactcard', $contexts) && $object->element === 'contact') {
-			print dolGetButtonAction('', $langs->trans('ConvomailSendEmail'), 'default', $compose.'?contactid='.((int) $object->id).'&socid='.((int) $object->socid), '', !empty($object->email));
-		} elseif (in_array('projectcard', $contexts) && $object->element === 'project') {
-			print dolGetButtonAction('', $langs->trans('ConvomailSendEmail'), 'default', $compose.'?projectid='.((int) $object->id).'&socid='.((int) $object->socid), '', true);
-		} elseif (in_array('actioncard', $contexts) && $object->element === 'action') {
+		// Third party, contact and project cards already have core's "Send email" button: no second one here.
+		// Sending that form through the user's mailbox is planned (docs/ROADMAP.md, "Core's Send email through the user's mailbox").
+		if (in_array('actioncard', $contexts) && $object->element === 'action') {
 			if (!empty($object->email_msgid) && in_array($object->type_code, array('AC_EMAIL', 'AC_EMAILIN_AUTO', 'AC_OTH_AUTO'))) {
 				print dolGetButtonAction('', $langs->trans('ConvomailReply'), 'default', $compose.'?replyto='.((int) $object->id), '', true);
 			}

@@ -37,7 +37,7 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 ## What it does
 
 - **Mail accounts per user.** A **Mail accounts** tab on each user card holds that user's IMAP and SMTP settings. It has presets for Gmail and Microsoft 365, a connection test and Sent folder detection.
-- **Compose from where you work.** An **Email from my mailbox** button on third party, contact and project cards opens a compose page with the recipient, third party and project filled in. **Agenda → Compose email** opens a blank one.
+- **Compose from the mailbox or the agenda.** **Compose email** in the mailbox, or **Agenda → Compose email**, opens the compose page; address suggestions find contacts and third parties as you type, and picking a project offers its contacts. (Third party, contact and project cards keep Dolibarr's own **Send email** button, which sends through the company mail server; sending it through your mailbox is [planned](docs/ROADMAP.md#cores-send-email-through-the-users-mailbox).)
 - **Reply from the agenda.** Any email event with a Message-ID gets a **Reply** button. The reply keeps the thread (In-Reply-To and References) and inherits the third party and project.
 - **Sent through the user's own server.** Mail goes out through the user's SMTP account, so it passes SPF/DKIM for their domain.
 - **Copy in the Sent folder.** A copy is stored in the user's IMAP Sent folder, so it also shows in their usual mail client. The Sent folder is detected automatically, and created if the server has none. If the copy fails, the email is still sent and logged, and the user sees a warning.
@@ -149,7 +149,7 @@ Notes:
 
 ## Using it
 
-1. Open a third party, contact or project and click **Email from my mailbox**.
+1. In the **Mailbox**, click **Compose email** (or **Agenda → Compose email**).
 2. Check the sender account, recipients, third party and project, write the message, attach files, and click **Send**.
 3. You land on the conversation view, where the message now appears.
 4. To answer, open the event and click **Reply**, or open the message in the **Mailbox**.
@@ -180,6 +180,8 @@ Notes:
 Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying Trash is left to your mail client.
 
 **Reading a message:** From, To, Cc and Date, with known contacts and third parties linked; the project line (see below); attachments to download. Opening a message marks it read on the server.
+
+**Email links:** clicking an email address link (`mailto:`) in a message opens Convomail's compose page, sending from the same account, with the link's recipients, Cc, subject and text filled in. Shift-click it to use your computer's mail app instead.
 
 **Conversation:** under the message, the other messages of the same conversation are listed oldest first: the ones it answers, and the replies to it, including those you sent (from the Sent folder) and those you archived. So after replying to an email, opening that email shows your reply below it. The messages after the one you opened are shown open; click any line to open or close it. The conversation follows the reply headers (In-Reply-To, References), the way mail apps thread, and looks in the current folder, Inbox, Sent and Archive. It loads just after the message, so it never slows opening one. The first time on a very large folder the mail server may take a few seconds to index those headers. Each user can turn it off with **Show conversation** under the folder list; Convomail then doesn't search for it at all.
 

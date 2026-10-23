@@ -294,12 +294,16 @@ if ($action == '') {
 		}
 	}
 
-	// Signature below the typing area and above any quote, inserted once when the form opens
+	// Signature below the typing area and above any quote, inserted once when the form opens. A new email
+	// prefilled with text (message=..., e.g. from a mailto: link) keeps that text above the signature.
 	if (getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature)) {
+		$prefilled = (!$srcmessage && !$replyevent && $message !== '');
 		if ($editorishtml) {
-			$message = '<p>&nbsp;</p><div class="convomail-signature">-- <br>'.$user->signature.'</div>'.$message;
+			$signature = '<div class="convomail-signature">-- <br>'.$user->signature.'</div>';
+			$message = $prefilled ? $message.'<p>&nbsp;</p>'.$signature : '<p>&nbsp;</p>'.$signature.$message;
 		} else {
-			$message = "\n\n-- \n".dol_string_nohtmltag($user->signature, 2).$message;
+			$signature = "-- \n".dol_string_nohtmltag($user->signature, 2);
+			$message = $prefilled ? $message."\n\n".$signature : "\n\n".$signature.$message;
 		}
 	} elseif ($editorishtml && $message === '') {
 		$message = '<p>&nbsp;</p>';

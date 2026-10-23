@@ -33,6 +33,8 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | AI writing tools | Compose: write from a prompt (replies use the message answered), rephrase, shorten or translate the typed text with core's AI module; signature and quote untouched, Undo | 0.8.0 |
 | Fixes | Replies keep the quote's indent and grey bar, and quoted plain-text mail keeps its line breaks (the editor's content filter dropped them) | 0.8.1 |
 | Fixes | Setup: Allowed mail servers shows one host per line again, and a list broken by an earlier save (literal `\n`) works and is repaired on the next save | 0.8.2 |
+| Changes | No more **Email from my mailbox** button on third party, contact and project cards, which already have core's **Send email** | next release |
+| Email links | `mailto:` links in messages open Convomail compose with recipients, Cc, subject and text; Shift-click opens the system mail app | next release |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
@@ -45,6 +47,37 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Follow-up nudges: an agenda to-do when an outgoing email has no reply after N days.
 - The last message on opportunity / project cards (hook on `projectcard`).
 - Response-time report per user and per customer.
+
+### Core's Send email through the user's mailbox
+Proposed 2026-10-23, not built. Place in the order to be agreed with the owner.
+
+**Goal:** one **Send email** button everywhere. Core's own form (on third parties, contacts, projects, proposals, orders, invoices…, with its document PDF and templates) sends through the user's own mailbox, and the copy lands in their Sent folder. That replaces Convomail's own button, removed from those cards for now. Today core's form sends through the company server: no Sent copy, and the user's domain checks (SPF/DKIM) may fail.
+
+**How core sends** (Dolibarr 23):
+- `core/actions_sendmails.inc.php` reads the form (`fromtype`: `user`, `company`, `robot`, aliases, `senderprofile_*`…), builds `CMailFile` with `sendcontext` `standard`, sends, then calls the card's trigger (`*_SENTBYMAIL`) with `email_msgid` = the CMailFile Message-ID.
+- `CMailFile` picks its send mode **in the constructor** (`MAIN_MAIL_SENDMODE_<CONTEXT>`, else `MAIN_MAIL_SENDMODE`) and reads the SMTP settings in `sendfile()` (`MAIN_MAIL_SMTP_SERVER_<CONTEXT>`…).
+- Hooks (context `mail`): `sendMail` before sending (returning 1 replaces the send) and `sendMailAfter` after it (`parameters['sent']`, the CMailFile as object).
+- Card pages run the `doActions` hook (context `globalcard` on nearly every card) **before** including `actions_sendmails.inc.php`.
+
+**Design:**
+1. **Decide** in `doActions` (context `globalcard`) when `action=send` arrives: route only when the module setting is on (off by default at first), the sender is the user's own address (`fromtype=user`) or a shared mailbox address they may send as, and that address is one of their usable Convomail accounts (`canSend()`). Anything else (company, robot, aliases) keeps core's company server.
+2. **Point core at the account**, in memory only and for that one email: set `MAIN_MAIL_SENDMODE_STANDARD=swiftmailer` and the `MAIN_MAIL_SMTP_*_STANDARD` keys from the account, password or XOAUTH2, by reusing `ConvomailTransport::overrideSmtpSettings()` with a context parameter. It has to happen in `doActions`, because the send mode is fixed when `CMailFile` is built.
+3. **Copy to Sent and restore** in `sendMailAfter` (context `mail`): when `sent` is true and the account doesn't save sent mail itself, append `$mailfile->message->toString()` to the Sent folder (the transport's `copyToSent()`), then restore the settings right away. Other emails sent in the same request (notifications, triggers) then go out as before. A failed Sent copy is a warning, as in compose.
+4. **Link it** in Convomail's trigger on `*_SENTBYMAIL`: add the `llx_convomail_message` row (account, direction 1, Message-ID). Let `ConvomailProjectResolver` and the conversation view accept core's `*_SENTBYMAIL` event codes beside `AC_EMAIL`, so these emails thread and file like Convomail's own.
+5. **Shared mailboxes:** core's From list doesn't know them. Show a shared mailbox there only if a hook on the form allows it, or ask the admin to add a sender profile with the same address (step 1 then matches it).
+
+**To check while building:**
+- A trigger that sends mail before `sendMailAfter` runs (setting leak).
+- Core's read receipt option.
+- Ticket and mass-mailing contexts, which must never be routed.
+- Message-ID consistency between the sent email, the Sent copy and the event.
+- What the user sees when the mailbox refuses the send.
+
+**Tests:**
+- A proposal with its PDF sent from its card arrives through the user's SMTP, with the same Message-ID in Sent and on the event.
+- Sending as the company address still uses the company server.
+- A notification triggered by the send is unaffected.
+- OAuth accounts; `server_saves_sent` accounts (no double copy).
 
 ### Smaller items
 - Publishing Dolibarr contacts to other address books (LDAP via core's LDAP module, or Google / Microsoft 365 contacts): discussed and parked by the owner (2026-10-23).

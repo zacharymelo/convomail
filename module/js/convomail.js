@@ -21,10 +21,67 @@
 		}
 	}
 
+	/**
+	 * Compose URL for a mailto: link (to, cc, bcc, subject, body), or '' if it names nobody
+	 */
+	function composeFromMailto(href, base) {
+		var m = /^mailto:([^?]*)(?:\?(.*))?$/i.exec(href.trim());
+		if (!m) {
+			return '';
+		}
+		var dec = function (s) {
+			try { return decodeURIComponent(s.replace(/\+/g, '%2B')); } catch (e) { return s; }
+		};
+		var fields = { to: [dec(m[1])], cc: [], bcc: [], subject: '', body: '' };
+		(m[2] || '').split('&').forEach(function (pair) {
+			var eq = pair.indexOf('=');
+			var key = (eq < 0 ? pair : pair.slice(0, eq)).toLowerCase();
+			var value = eq < 0 ? '' : dec(pair.slice(eq + 1));
+			if (key === 'to' || key === 'cc' || key === 'bcc') {
+				fields[key].push(value);
+			} else if (key === 'subject' || key === 'body') {
+				fields[key] = value;
+			}
+		});
+		var list = function (a) { return a.join(',').split(',').map(function (s) { return s.trim(); }).filter(Boolean).join(', '); };
+		if (!list(fields.to) && !list(fields.cc) && !list(fields.bcc)) {
+			return '';
+		}
+		var params = { sendto: list(fields.to), sendtocc: list(fields.cc), sendtobcc: list(fields.bcc), subject: fields.subject };
+		if (fields.body) {
+			var esc = document.createElement('div');
+			esc.textContent = fields.body;
+			params.message = '<p>' + esc.innerHTML.replace(/\r?\n/g, '<br>') + '</p>';
+		}
+		var url = base;
+		Object.keys(params).forEach(function (k) {
+			if (params[k]) {
+				url += '&' + k + '=' + encodeURIComponent(params[k]);
+			}
+		});
+		return url;
+	}
+
 	function bindFrames(root) {
 		qsa('iframe.convomail-body', root).forEach(function (frame) {
 			var onload = function () {
 				fit(frame);
+				// mailto: links open Convomail's compose page; with Shift (or another modifier) the computer's mail app
+				var doc = frame.contentDocument;
+				if (doc && !doc.cmMailto && frame.getAttribute('data-compose')) {
+					doc.cmMailto = true;
+					doc.addEventListener('click', function (ev) {
+						var a = ev.target.closest ? ev.target.closest('a[href]') : null;
+						if (!a || ev.shiftKey || ev.ctrlKey || ev.metaKey || ev.altKey || ev.button !== 0) {
+							return;
+						}
+						var url = /^\s*mailto:/i.test(a.getAttribute('href')) ? composeFromMailto(a.getAttribute('href'), frame.getAttribute('data-compose')) : '';
+						if (url) {
+							ev.preventDefault();
+							window.location.href = url;
+						}
+					});
+				}
 				var imgs = frame.contentDocument ? frame.contentDocument.images : [];
 				for (var j = 0; j < imgs.length; j++) {
 					imgs[j].addEventListener('load', function () { fit(frame); });
