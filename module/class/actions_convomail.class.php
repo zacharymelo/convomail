@@ -80,6 +80,50 @@ class ActionsConvomail
 	}
 
 	/**
+	 * On the card of an email sent with convomail, show the receipt status (rows of the card's field table)
+	 *
+	 * @param  array<string,mixed> $parameters  Hook parameters
+	 * @param  CommonObject        $object      Object of the card
+	 * @param  string              $action      Action
+	 * @param  HookManager         $hookmanager Hook manager
+	 * @return int                              0
+	 */
+	public function formObjectOptions($parameters, &$object, &$action, $hookmanager)
+	{
+		global $langs;
+
+		$contexts = explode(':', isset($parameters['context']) ? $parameters['context'] : '');
+		if (!isModEnabled('convomail') || !in_array('actioncard', $contexts) || !is_object($object) || $object->element !== 'action' || empty($object->id)) {
+			return 0;
+		}
+		if (!empty($action) && $action !== 'view') {
+			return 0;
+		}
+
+		dol_include_once('/convomail/class/convomailmessage.class.php');
+		$message = new ConvomailMessage($this->db);
+		if ($message->fetchByActioncomm($object->id) <= 0) {
+			return 0;
+		}
+
+		$langs->load('convomail@convomail');
+
+		$out = '<tr><td>'.$langs->trans('ConvomailReadReceiptRequested').'</td><td>'.yn($message->read_receipt).'</td></tr>';
+		$out .= '<tr><td>'.$langs->trans('ConvomailNbOpen').'</td><td>';
+		if (empty($message->track_key)) {
+			$out .= '<span class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingNotUsed').'</span>';
+		} elseif ((int) $message->nb_open > 0) {
+			$out .= $langs->trans('ConvomailOpensValue', (int) $message->nb_open, dol_print_date($message->date_first_open, 'dayhour'), dol_print_date($message->date_last_open, 'dayhour'));
+		} else {
+			$out .= '<span class="opacitymedium">'.$langs->trans('ConvomailNotOpenedYet').'</span>';
+		}
+		$out .= '</td></tr>';
+
+		$this->resprints = $out;
+		return 0;
+	}
+
+	/**
 	 * Add buttons in the action bar of cards.
 	 * Note: core prints nothing from ->resprints for this hook, so buttons are printed directly
 	 * inside the page's tabsAction div, as core-compatible modules do.

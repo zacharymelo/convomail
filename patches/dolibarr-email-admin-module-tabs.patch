@@ -1,0 +1,16 @@
+diff --git a/htdocs/core/lib/admin.lib.php b/htdocs/core/lib/admin.lib.php
+index ec1ba09..07eeb3f 100644
+--- a/htdocs/core/lib/admin.lib.php
++++ b/htdocs/core/lib/admin.lib.php
+@@ -2560,6 +2560,11 @@ function email_admin_prepare_head()
+ 	$head[$h][2] = 'common_ingoing';
+ 	$h++;
+ 
++	// Show more tabs from modules
++	// Entries must be declared in modules descriptor with line
++	// $this->tabs[] = array('data' => 'email_admin:+tabname:Title:mylangfile@mymodule:$user->admin:/mymodule/admin/mypage.php');   to add new tab
++	complete_head_from_modules($conf, $langs, null, $head, $h, 'email_admin');
++
+ 	complete_head_from_modules($conf, $langs, null, $head, $h, 'email_admin', 'remove');
+ 
+ 	return $head;

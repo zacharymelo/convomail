@@ -45,7 +45,8 @@ class ConvomailLogger
 	 * @param  ConvomailAccount    $account Account used
 	 * @param  array<string,mixed> $data    Keys: msgid, in_reply_to, subject, body, to, cc, bcc, socid,
 	 *                                      contactids (int[]), projectid, origin, originid,
-	 *                                      files (array of array('path','name')), sent_folder, sent_uid
+	 *                                      files (array of array('path','name')), sent_folder, sent_uid,
+	 *                                      read_receipt (0/1), track_key (open-tracking key or '')
 	 * @return int                          Event id if OK, <0 if KO
 	 */
 	public function logSent(User $user, ConvomailAccount $account, array $data)
@@ -108,6 +109,8 @@ class ConvomailLogger
 		$link->direction = ConvomailMessage::DIRECTION_OUT;
 		$link->fk_actioncomm = $eventid;
 		$link->date_message = $now;
+		$link->read_receipt = empty($data['read_receipt']) ? 0 : 1;
+		$link->track_key = empty($data['track_key']) ? null : (string) $data['track_key'];
 		if ($link->create($user) <= 0) {
 			$this->db->rollback();
 			$this->error = $link->error;

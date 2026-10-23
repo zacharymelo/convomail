@@ -15,6 +15,7 @@
 require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
 dol_include_once('/convomail/class/convomailaccount.class.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
+dol_include_once('/convomail/class/convomailtracker.class.php');
 
 /**
  * Class ConvomailTransport
@@ -86,7 +87,9 @@ class ConvomailTransport
 	 * @param  ConvomailAccount    $account Account to send with
 	 * @param  array<string,mixed> $msg     Keys: to, cc, bcc (comma-separated), subject, body (HTML),
 	 *                                      files (array of array('path','mime','name')), trackid,
-	 *                                      in_reply_to (Message-ID without brackets), upload_dir_tmp
+	 *                                      in_reply_to (Message-ID without brackets), upload_dir_tmp,
+	 *                                      read_receipt (1 = ask for a read receipt, Disposition-Notification-To),
+	 *                                      track_key (open-tracking key; adds the tracking image to what is sent, not to the Sent copy)
 	 * @return int                          >0 if sent, <0 if KO (see $this->error)
 	 */
 	public function send(ConvomailAccount $account, array $msg)
@@ -120,19 +123,26 @@ class ConvomailTransport
 
 		$inreplyto = trim((string) ($msg['in_reply_to'] ?? ''), " <>");
 
+		$body = (string) $msg['body'];
+		$pixel = '';
+		if (!empty($msg['track_key'])) {
+			$pixel = ConvomailTracker::pixelHtml($msg['track_key']);
+			$body .= $pixel;
+		}
+
 		$saved = $this->overrideSmtpSettings($account);
 
 		$mailfile = new CMailFile(
 			(string) $msg['subject'],
 			(string) $msg['to'],
 			$from,
-			(string) $msg['body'],
+			$body,
 			$filepaths,
 			$mimetypes,
 			$filenames,
 			(string) ($msg['cc'] ?? ''),
 			(string) ($msg['bcc'] ?? ''),
-			0,
+			empty($msg['read_receipt']) ? 0 : 1,
 			1,
 			'',
 			'',
@@ -162,6 +172,11 @@ class ConvomailTransport
 			$idheader = $mailfile->message->getHeaders()->get('Message-ID');
 			if ($idheader && !empty($mailfile->msgid)) {
 				$idheader->setId(trim((string) $mailfile->msgid, " <>"));
+			}
+			// The sender reading their own Sent copy must not count as an open: take the tracking image out
+			if ($pixel !== '') {
+				$sentbody = str_replace($pixel, '', (string) $mailfile->message->getBody());
+				$mailfile->message->setBody($sentbody, 'text/html');
 			}
 			$rawmime = $mailfile->message->toString();
 		}

@@ -32,7 +32,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/ajax.lib.php';
 dol_include_once('/convomail/lib/convomail.lib.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 
-$langs->loadLangs(array('admin', 'convomail@convomail'));
+$langs->loadLangs(array('admin', 'mails', 'convomail@convomail'));
 
 if (!$user->admin) {
 	accessforbidden();
@@ -59,11 +59,26 @@ if ($action == 'update') {
 
 llxHeader('', $langs->trans('ConvomailSetup'), '', '', 0, 0, '', '', '', 'mod-convomail page-admin');
 
-$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.$langs->trans('BackToModuleList').'</a>';
-print load_fiche_titre($langs->trans('ConvomailSetup'), $linkback, 'title_setup');
+// When core lets modules add tabs to Home > Setup > Emails (see patches/), show this page as one of those tabs
+$emailhead = email_admin_prepare_head();
+$inemailsetup = false;
+foreach ($emailhead as $tab) {
+	if (isset($tab[2]) && $tab[2] === 'convomail') {
+		$inemailsetup = true;
+		break;
+	}
+}
 
-$head = convomail_admin_prepare_head();
-print dol_get_fiche_head($head, 'settings', $langs->trans('Module511400Name'), -1, 'email');
+if ($inemailsetup) {
+	print load_fiche_titre($langs->trans('EMailsSetup'), '', 'title_setup');
+	print dol_get_fiche_head($emailhead, 'convomail', '', -1);
+} else {
+	$linkback = '<a href="'.DOL_URL_ROOT.'/admin/modules.php?restore_lastsearch_values=1">'.$langs->trans('BackToModuleList').'</a>';
+	print load_fiche_titre($langs->trans('ConvomailSetup'), $linkback, 'title_setup');
+
+	$head = convomail_admin_prepare_head();
+	print dol_get_fiche_head($head, 'settings', $langs->trans('Module194282Name'), -1, 'email');
+}
 
 // Library check
 if (!ConvomailHordeMailboxClient::loadLibrary()) {
@@ -85,6 +100,14 @@ print '</td><td class="opacitymedium">'.$langs->trans('ConvomailAllowedHostsDesc
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAllowSelfSigned').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_ALLOW_SELF_SIGNED').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailAllowSelfSignedDesc').'</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailReadReceiptDefault').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_READ_RECEIPT_DEFAULT').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailReadReceiptDefaultDesc').'</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailOpenTracking').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_OPEN_TRACKING').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingDesc', dol_buildpath('/convomail/public/open.php', 2)).'</td></tr>';
 
 // Debug mode (always last)
 print '<tr class="oddeven"><td>'.$langs->trans('DebugMode').'</td>';

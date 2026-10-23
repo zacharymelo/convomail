@@ -44,6 +44,11 @@ class ConvomailMessage extends CommonObject
 		'direction'     => array('type' => 'smallint', 'label' => 'Direction', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'default' => '1', 'position' => 40),
 		'fk_actioncomm' => array('type' => 'integer:ActionComm:comm/action/class/actioncomm.class.php', 'label' => 'Event', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 50),
 		'date_message'  => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 60),
+		'read_receipt'  => array('type' => 'smallint', 'label' => 'ConvomailReadReceiptRequested', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'default' => '0', 'position' => 70),
+		'track_key'     => array('type' => 'varchar(32)', 'label' => 'ConvomailTrackKey', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 71),
+		'nb_open'       => array('type' => 'integer', 'label' => 'ConvomailNbOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'default' => '0', 'position' => 72),
+		'date_first_open' => array('type' => 'datetime', 'label' => 'ConvomailDateFirstOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 73),
+		'date_last_open'  => array('type' => 'datetime', 'label' => 'ConvomailDateLastOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 74),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'position' => 500),
 		'tms'           => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 501),
 		'fk_user_creat' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserAuthor', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 510),
@@ -60,6 +65,11 @@ class ConvomailMessage extends CommonObject
 	public $direction;
 	public $fk_actioncomm;
 	public $date_message;
+	public $read_receipt;
+	public $track_key;
+	public $nb_open;
+	public $date_first_open;
+	public $date_last_open;
 	public $date_creation;
 	public $fk_user_creat;
 	public $import_key;
@@ -96,6 +106,50 @@ class ConvomailMessage extends CommonObject
 	public function fetch($id, $ref = null)
 	{
 		return $this->fetchCommon($id, null, ' AND t.entity IN ('.getEntity($this->element).')');
+	}
+
+	/**
+	 * Load the row of an open-tracking key. Not filtered by entity: the key is random and
+	 * comes from a public URL, where the entity is not known yet.
+	 *
+	 * @param  string $key 32 hex characters
+	 * @return int         >0 if found, 0 if not, <0 if KO
+	 */
+	public function fetchByTrackKey($key)
+	{
+		if (!preg_match('/^[a-f0-9]{32}$/', (string) $key)) {
+			return 0;
+		}
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX.$this->table_element;
+		$sql .= " WHERE track_key = '".$this->db->escape($key)."'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$obj = $this->db->fetch_object($resql);
+		return $obj ? $this->fetchCommon((int) $obj->rowid) : 0;
+	}
+
+	/**
+	 * Load the link row of an agenda event
+	 *
+	 * @param  int $fk_actioncomm Event id
+	 * @return int                >0 if found, 0 if not, <0 if KO
+	 */
+	public function fetchByActioncomm($fk_actioncomm)
+	{
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX.$this->table_element;
+		$sql .= " WHERE fk_actioncomm = ".((int) $fk_actioncomm);
+		$sql .= " AND entity IN (".getEntity($this->element).")";
+		$sql .= $this->db->plimit(1);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$obj = $this->db->fetch_object($resql);
+		return $obj ? $this->fetch((int) $obj->rowid) : 0;
 	}
 
 	/**

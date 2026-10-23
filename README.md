@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** phase 1 (send and log), version 0.1.0. Tested on Dolibarr 23.0 with PHP 8.2 against a GreenMail test server. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** phase 1 (send and log) plus read receipts, version 0.2.0. Tested on Dolibarr 23.0 with PHP 8.2 against a GreenMail test server. Not yet tested against real Gmail or Microsoft 365 servers.
 
 **Download:** [latest release](https://github.com/zacharymelo/convomail/releases/latest) (`module_convomail-<version>.zip`, includes the IMAP library).
 
@@ -14,9 +14,12 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Using it](#using-it)
+- [Read receipts and open tracking](#read-receipts-and-open-tracking)
 - [Replies and the Email Collector](#replies-and-the-email-collector)
 - [Privacy and security notes](#privacy-and-security-notes)
 - [What the module stores](#what-the-module-stores)
+- [Upgrading from 0.1.0](#upgrading-from-010)
+- [Optional core patch](#optional-core-patch)
 - [Roadmap](#roadmap)
 - [Development](#development)
 - [Repository layout](#repository-layout)
@@ -32,6 +35,7 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - **Logged to the agenda.** Each sent message becomes a "Send Email" (`AC_EMAIL`) event with subject, body, recipients and attachments.
   - It is linked to the third party, every recipient who is a known contact, the project and the originating document.
   - It appears on the existing conversation views of third parties, contacts and projects.
+- **Read receipts and open tracking.** Ask for a standard read receipt on any message. Optionally (off by default) track opens with an invisible image; the first open adds an "Email opened" event to the timeline.
 
 ## How it works
 
@@ -72,12 +76,14 @@ Enabling the module activates the core "Send Email" event type and adds an index
 
 ## Configuration
 
-Go to **Home → Setup → Modules → Convomail → Setup**:
+Go to **Home → Setup → Modules → Convomail → Setup** (or **Home → Setup → Emails → Convomail** with the [optional core patch](#optional-core-patch)):
 
 | Setting | Purpose |
 |---|---|
 | Allowed mail servers | One host per line, `*` as wildcard. When empty, any public server is allowed and private, loopback and reserved addresses are refused, so the server cannot be pointed at internal hosts. Add your internal mail server here if you use one. |
 | Accept self-signed certificates | For internal SMTP servers you trust. |
+| Request read receipts by default | Ticks "Request a read receipt" on the compose page. Users can untick it per message. |
+| Open tracking | Off by default. Adds an invisible image to sent messages and logs opens. See [Read receipts and open tracking](#read-receipts-and-open-tracking) before enabling. |
 | Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. |
 
 Each user then adds an account: **user card → Mail accounts → Add a mail account**. With Gmail, use an app password.
@@ -88,6 +94,24 @@ Each user then adds an account: **user card → Mail accounts → Add a mail acc
 2. Check the sender account, recipients, third party and project, write the message, attach files, and click **Send**.
 3. You land on the conversation view, where the message now appears.
 4. To answer, open the event and click **Reply**.
+
+## Read receipts and open tracking
+
+Convomail offers both, because they answer different questions:
+
+| | Read receipt request | Open tracking |
+|---|---|---|
+| How | Standard `Disposition-Notification-To` header | Invisible 1×1 image served by `custom/convomail/public/open.php` |
+| Recipient sees | Their mail app may ask "Send a read receipt?" | Nothing |
+| Reliability | The recipient can refuse; Gmail web and many apps ignore it | Approximate: image blocking misses opens; Apple Mail Privacy Protection and security scanners load images without anyone reading |
+| Where results appear | As emails in the sender's inbox (logged once phase 2 or an Email Collector reads them) | "Email opened" event on the timeline (first open), and an open count on the sent email's event card |
+| Default | Off; an admin can make it ticked by default | Off; an admin must switch it on |
+
+Before switching open tracking on:
+- Check the consent and disclosure rules that apply to you, for example GDPR and ePrivacy in the EU, or PIPEDA in Canada.
+- Dolibarr must be reachable from the internet at the URL shown in the setup, or no opens are recorded.
+- The tracking image is only in the delivered message. It is removed from the copy in the sender's Sent folder and from the logged event, so the sender reading their own copy is not counted.
+- Switching tracking off stops recording immediately; messages already sent keep their image but nothing is logged.
 
 ## Replies and the Email Collector
 
@@ -108,11 +132,31 @@ Phase 1 sends and logs; it does not read the inbox. Dolibarr's core **Email Coll
 | Table | Content |
 |---|---|
 | `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, encrypted password, Sent folder |
-| `llx_convomail_message` | One row per sent message: account, Message-ID, In-Reply-To, Sent folder UID, agenda event id |
+| `llx_convomail_message` | One row per sent message: account, Message-ID, In-Reply-To, Sent folder UID, agenda event id, read receipt flag, open-tracking key, open count and dates |
 | `llx_actioncomm` (core) | The agenda event for each message: subject, body, recipients, links |
 | Agenda documents directory | Copies of attachments, under the event id |
 
 Disabling the module removes menus and rights but keeps all data.
+
+## Upgrading from 0.1.0
+
+Version 0.2.0 changes the module ID from the private 511400 to the officially reserved **194282**, so the permission IDs change too (19428201–19428203).
+
+1. **Before** replacing the files, disable Convomail in Home → Setup → Modules.
+2. Deploy the 0.2.0 zip and enable Convomail again. This adds the new columns (`sql/update_0.2.0.sql`). Accounts, logged messages and settings are kept.
+3. Grant the Convomail permissions to users again; the old ones do not carry over.
+
+If you replaced the files without disabling first, disable and re-enable the module, then remove the old permission rows:
+
+```sql
+DELETE FROM llx_user_rights WHERE fk_id IN (511401, 511402, 511403);
+DELETE FROM llx_usergroup_rights WHERE fk_id IN (511401, 511402, 511403);
+DELETE FROM llx_rights_def WHERE id IN (511401, 511402, 511403);
+```
+
+## Optional core patch
+
+Dolibarr core does not yet let modules add tabs to **Home → Setup → Emails**. With [patches/dolibarr-email-admin-module-tabs.patch](patches/dolibarr-email-admin-module-tabs.patch) applied, the Convomail setup appears there as a tab next to *Incoming emails*. It is a 5-line change, proposed upstream; see [patches/README.md](patches/README.md) for what it does, how to apply and undo it, and its side effects. Convomail works the same without it.
 
 ## Roadmap
 
@@ -121,6 +165,7 @@ Convomail is built as a module first, with the aim of proposing webmail for Doli
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Send and log | Accounts, compose, reply, user SMTP, Sent copy, agenda events | **Done (0.1.0)** |
+| 1b. Receipts | Read receipt request, open tracking (off by default), Email setup tab with the optional core patch | **Done (0.2.0)** |
 | 2. Read and file | Inbox and reading pane, HTML sanitizer, "Log to..." action, per-user OAuth for Google and Microsoft | Planned |
 | 3. Automatic conversation | Sync job, auto-logging by policy, replies filed to their project, shared team inboxes | Planned |
 | 4. Sales features | Awaiting-reply columns, follow-up nudges, last message on opportunity cards, response-time reports | Planned |
@@ -146,6 +191,7 @@ docker run --rm -v "$PWD/module":/app -w /app composer:2 install --no-dev
 docker-compose.yml        Dev stack: Dolibarr, MariaDB, GreenMail
 bin/build.py              Release build
 UPSTREAM.md               Core changes to propose
+patches/                  Optional core patch (Email setup tab) and the held upstream PR draft
 module/                   Module source (installed as custom/convomail)
   core/modules/           Module descriptor
   class/                  Account, message, IMAP client, transport, matcher, logger, hooks
@@ -154,6 +200,7 @@ module/                   Module source (installed as custom/convomail)
   user_accounts.php       Mail accounts tab on the user card
   compose.php             Compose, reply, send
   ajax/debug.php          Diagnostics (admin + debug mode)
+  public/open.php         Open-tracking image (public, no login)
   langs/en_US/            Translations
 ```
 

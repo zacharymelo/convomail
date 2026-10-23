@@ -30,15 +30,15 @@ class modConvomail extends DolibarrModules
 
 		$this->db = $db;
 
-		// Private range (>500000). Reserve an official ID before publishing on DoliStore.
-		$this->numero = 511400;
+		// Official ID from the range reserved by Zach Melo (194281-194309). v0.1.0 used the private ID 511400.
+		$this->numero = 194282;
 
 		$this->family = "crm";
 		$this->module_position = '50';
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.1.0';
+		$this->version = '0.2.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -69,6 +69,9 @@ class modConvomail extends DolibarrModules
 		// Mail accounts tab on the user card
 		$this->tabs = array();
 		$this->tabs[] = array('data' => 'user:+convomail:MailAccounts,ConvomailAccount,/convomail/class/convomailaccount.class.php,countForUser:convomail@convomail:$user->hasRight(\'convomail\', \'account\', \'read\'):/convomail/user_accounts.php?id=__ID__');
+		// Tab in Home > Setup > Emails. Shown only once core calls complete_head_from_modules(..., 'email_admin') in add mode:
+		// see patches/dolibarr-email-admin-module-tabs.patch (proposed upstream). Without it, the setup page is reached from the module list.
+		$this->tabs[] = array('data' => 'email_admin:+convomail:ConvomailEmailTab:convomail@convomail:$user->admin:/convomail/admin/setup.php');
 
 		$this->dictionaries = array();
 		$this->boxes = array();
@@ -81,7 +84,7 @@ class modConvomail extends DolibarrModules
 		$r = 0;
 
 		$r++;
-		$this->rights[$r][0] = 511401;
+		$this->rights[$r][0] = 19428201;
 		$this->rights[$r][1] = 'Use and manage own mail accounts';
 		$this->rights[$r][2] = 'r';
 		$this->rights[$r][3] = 0;
@@ -89,7 +92,7 @@ class modConvomail extends DolibarrModules
 		$this->rights[$r][5] = 'read';
 
 		$r++;
-		$this->rights[$r][0] = 511402;
+		$this->rights[$r][0] = 19428202;
 		$this->rights[$r][1] = 'Send email from Dolibarr';
 		$this->rights[$r][2] = 'w';
 		$this->rights[$r][3] = 0;
@@ -97,7 +100,7 @@ class modConvomail extends DolibarrModules
 		$this->rights[$r][5] = 'send';
 
 		$r++;
-		$this->rights[$r][0] = 511403;
+		$this->rights[$r][0] = 19428203;
 		$this->rights[$r][1] = 'Manage the mail accounts of all users';
 		$this->rights[$r][2] = 'w';
 		$this->rights[$r][3] = 0;

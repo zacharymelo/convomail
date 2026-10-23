@@ -38,6 +38,7 @@ dol_include_once('/convomail/class/convomailaccount.class.php');
 dol_include_once('/convomail/class/convomailtransport.class.php');
 dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomaillogger.class.php');
+dol_include_once('/convomail/class/convomailtracker.class.php');
 
 $langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'other'));
 
@@ -102,6 +103,16 @@ $subject = GETPOST('subject', 'alphanohtml');
 // collapses its line breaks; it is escaped before use, so it can never carry markup.
 $editorishtml = isModEnabled('fckeditor') && getDolGlobalInt('FCKEDITOR_ENABLE_MAIL');
 $message = $editorishtml ? GETPOST('message', 'restricthtml') : GETPOST('message', 'none');
+
+// Receipts: defaults from setup when the form is first shown, the user's choice once posted
+$trackingavailable = ConvomailTracker::isEnabled();
+if ($action == '') {
+	$readreceipt = getDolGlobalInt('CONVOMAIL_READ_RECEIPT_DEFAULT') ? 1 : 0;
+	$trackopens = $trackingavailable ? 1 : 0;
+} else {
+	$readreceipt = GETPOSTINT('read_receipt') ? 1 : 0;
+	$trackopens = ($trackingavailable && GETPOSTINT('track_opens')) ? 1 : 0;
+}
 
 if ($action == '') {
 	if ($replyevent) {
@@ -233,6 +244,8 @@ if ($action == 'send') {
 			'contactid' => !empty($contactids) ? $contactids[0] : 0,
 		));
 
+		$trackkey = $trackopens ? ConvomailTracker::newKey() : '';
+
 		$transport = new ConvomailTransport($db);
 		$result = $transport->send($account, array(
 			'to'             => $sendto,
@@ -244,6 +257,8 @@ if ($action == 'send') {
 			'trackid'        => $trackid,
 			'in_reply_to'    => $replyevent ? $replyevent->email_msgid : '',
 			'upload_dir_tmp' => $upload_dir_tmp,
+			'read_receipt'   => $readreceipt,
+			'track_key'      => $trackkey,
 		));
 
 		if ($result < 0) {
@@ -266,6 +281,8 @@ if ($action == 'send') {
 				'files'       => $files,
 				'sent_folder' => $transport->sentFolder,
 				'sent_uid'    => $transport->sentUid,
+				'read_receipt' => $readreceipt,
+				'track_key'   => $trackkey,
 			));
 
 			if (is_dir($upload_dir_tmp)) {
@@ -362,6 +379,15 @@ if ($origin && $originid > 0) {
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
 
 print '<tr><td>'.$langs->trans('MailFile').'</td><td><input type="file" name="attachments[]" multiple></td></tr>';
+
+print '<tr><td>'.$langs->trans('ConvomailReceipts').'</td><td>';
+print '<label class="marginrightonly"><input type="checkbox" name="read_receipt" value="1"'.($readreceipt ? ' checked' : '').'> '.$langs->trans('ConvomailRequestReadReceipt').'</label>';
+print $form->textwithpicto('', $langs->trans('ConvomailRequestReadReceiptHelp'));
+if ($trackingavailable) {
+	print '<br><label class="marginrightonly"><input type="checkbox" name="track_opens" value="1"'.($trackopens ? ' checked' : '').'> '.$langs->trans('ConvomailTrackOpens').'</label>';
+	print $form->textwithpicto('', $langs->trans('ConvomailTrackOpensHelp'));
+}
+print '</td></tr>';
 
 print '<tr><td colspan="2">';
 $editor = new DolEditor('message', $message, '', 320, 'dolibarr_mailings', 'In', true, true, $editorishtml, 20, '90%');

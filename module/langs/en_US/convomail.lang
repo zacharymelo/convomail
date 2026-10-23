@@ -1,13 +1,13 @@
 # Copyright (C) 2026 DPG Supply
 
 # Module
-Module511400Name = Convomail
-Module511400Desc = Send email from Dolibarr through each user's own mailbox and log every message to the agenda
+Module194282Name = Convomail
+Module194282Desc = Send email from Dolibarr through each user's own mailbox and log every message to the agenda
 
 # Permissions
-Permission511401 = Use and manage own mail accounts
-Permission511402 = Send email from Dolibarr
-Permission511403 = Manage the mail accounts of all users
+Permission19428201 = Use and manage own mail accounts
+Permission19428202 = Send email from Dolibarr
+Permission19428203 = Manage the mail accounts of all users
 
 # Menus and titles
 MailAccounts = Mail accounts
@@ -16,6 +16,7 @@ ComposeEmail = Compose email
 ConvomailSendEmail = Email from my mailbox
 ConvomailReply = Reply
 ConvomailSetup = Convomail setup
+ConvomailEmailTab = Convomail (user mailboxes)
 
 # Account fields
 ConvomailProvider = Provider
@@ -61,6 +62,27 @@ ConvomailErrorHostNotAllowed = The server %s is not allowed. An administrator ca
 ConvomailWarningNoRawMessage = The email was sent, but no copy could be saved to your Sent folder.
 ConvomailWarningSentFolderNotFound = No Sent folder found on the IMAP server. %s
 ConvomailWarningSentCopyFailed = The email was sent, but saving a copy to your Sent folder failed: %s
+
+# Read receipts and open tracking
+ConvomailReceipts = Receipts
+ConvomailRequestReadReceipt = Request a read receipt
+ConvomailRequestReadReceiptHelp = Asks the recipient's mail app to confirm the message was read. The recipient can refuse, and many apps ignore the request. Receipts arrive as emails in your inbox.
+ConvomailTrackOpens = Track when opened
+ConvomailTrackOpensHelp = Adds an invisible image. When the recipient's mail app loads it, an "Email opened" event is added to the agenda. Approximate: apps that block images miss opens, and some (Apple Mail, security scanners) load images without anyone reading.
+ConvomailOpenedEventLabel = Email opened: %s
+ConvomailOpenedEventNote = Opened by a recipient of the email sent to %s on %s. Open tracking is approximate.
+ConvomailReadReceiptRequested = Read receipt requested
+ConvomailTrackKey = Tracking key
+ConvomailNbOpen = Opens
+ConvomailDateFirstOpen = First opened
+ConvomailDateLastOpen = Last opened
+ConvomailOpensValue = %s time(s), first %s, last %s
+ConvomailNotOpenedYet = Not opened yet
+ConvomailOpenTrackingNotUsed = Not tracked
+ConvomailReadReceiptDefault = Request read receipts by default
+ConvomailReadReceiptDefaultDesc = Ticks "Request a read receipt" on the compose page. Users can untick it for each message.
+ConvomailOpenTracking = Open tracking
+ConvomailOpenTrackingDesc = Adds an invisible image to sent messages and logs an "Email opened" event when it loads. Off by default. Check the consent and disclosure rules that apply to you (for example GDPR/ePrivacy in the EU, PIPEDA in Canada) before enabling it. The image is served from %s, which must be reachable from the internet. Opens are approximate.
 
 # Setup
 ConvomailLibraryMissing = The IMAP library is missing. Install the module from a release zip, or run "composer install" in the module folder.
