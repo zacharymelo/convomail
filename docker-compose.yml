@@ -37,6 +37,8 @@ services:
       - dolibarr_html:/var/www/html
       - dolibarr_docs:/var/www/documents
       - ./module:/var/www/html/custom/convomail
+      # Document Browser (github.com/zacharymelo/doli-docbrowser), checked out next to this repo
+      - ../doli-docbrowser/module:/var/www/html/custom/docbrowser
 
   # Test mail server for development: SMTP on 3025, IMAP on 3143, no TLS.
   # Authentication is disabled, so any login/password is accepted and the mailbox is created on first use.

@@ -276,3 +276,5 @@ ConvomailSharedMailboxes = Shared mailboxes
 ConvomailPersonalAccounts = Personal accounts of users
 ConvomailNoShared = No shared mailbox yet: create one with New shared mailbox.
 
+# Document Browser module (optional)
+ConvomailDocBrowserOverLimit = Over %s in total: the largest files picked from Dolibarr will be sent as share links.
