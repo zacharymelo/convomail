@@ -242,7 +242,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 5. Under 768px wide, rows open `message.php` instead, the same view on a page.
 
 ### 6.3 File a message (Log to…)
-- **One click** in the pane: POST `ajax/action.php action=log` with the resolved project, third party and contacts.
+- **One click** in the pane: POST `ajax/action.php action=log` with the resolved project, third party and contacts. The JS then reloads the pane and the list rows (`refreshRows()`: fetches the current list page and swaps its `.cm-rows`, keeping the selection, ticked rows and scroll), so project chips and replies filed with it show at once.
 - **Full form** on `message.php?action=log`: choose third party, contacts and project, then POST `action=confirm_log`. A posted Cancel never logs.
 - Both call `ConvomailView::logMessage()`:
   1. returns 0 if the Message-ID already has an event;

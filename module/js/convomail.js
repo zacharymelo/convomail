@@ -194,6 +194,33 @@
 			}
 		}
 
+		// Reload the rows of the current page (after filing: project chips, logged state, thread replies filed
+		// with it), keeping the open message selected, ticked rows and the scroll position
+		function refreshRows() {
+			return fetch(app.getAttribute('data-self'), { credentials: 'same-origin' })
+				.then(function (r) { return r.ok ? r.text() : ''; })
+				.then(function (html) {
+					var fresh = html ? new DOMParser().parseFromString(html, 'text/html').querySelector('.cm-rows') : null;
+					if (!fresh) {
+						return;
+					}
+					var cur = currentUid();
+					var ticked = qsa('.cm-check:checked', rowsBox).map(function (c) { return c.value; });
+					var scroll = rowsBox.scrollTop;
+					rowsBox.innerHTML = fresh.innerHTML;
+					rows().forEach(function (r) {
+						var uid = r.getAttribute('data-uid');
+						r.classList.toggle('selected', parseInt(uid, 10) === cur);
+						var box = qs('.cm-check', r);
+						if (box && ticked.indexOf(uid) !== -1) {
+							box.checked = true;
+						}
+					});
+					rowsBox.scrollTop = scroll;
+				})
+				.catch(function () { /* the list stays as it was */ });
+		}
+
 		function run(action, uids, extra) {
 			if (!uids.length) {
 				return;
@@ -223,6 +250,9 @@
 				}
 				if ((action === 'flag' || action === 'unflag' || action === 'log') && uids.indexOf(currentUid()) !== -1) {
 					openMessage(currentUid());
+				}
+				if (action === 'log') {
+					refreshRows();
 				}
 				qsa('.cm-check:checked', rowsBox).forEach(function (c) { c.checked = false; });
 				notify(data.message, true);
