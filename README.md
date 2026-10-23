@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** version 0.6.1: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, replies logged automatically through Dolibarr's Email Collector), rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), and shared mailboxes. Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.6.2: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, replies logged automatically through Dolibarr's Email Collector), rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), and shared mailboxes. Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
 
 ![Convomail mailbox](docs/mailbox.jpg)
 
