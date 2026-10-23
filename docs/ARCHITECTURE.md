@@ -374,7 +374,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 - **Ownership:** every page and endpoint that touches a mailbox goes through `convomail_get_usable_account()`. It requires an enabled account owned by the user, or `account->admin`. Compose and reply additionally require the user's *own* account.
 - **CSRF:** core's token check on every POST, including `ajax/action.php`. State-changing GET links carry `token=`.
 - **Incoming HTML:**
-  1. HTMLPurifier strips scripts, forms, frames, event handlers and `javascript:` URLs; external resources are removed unless "Show images";
+  1. HTMLPurifier strips scripts, forms, frames, event handlers and `javascript:` URLs; external resources are removed unless "Show images". `CSS.AllowTricky` is on, so `display`, `visibility` and `overflow` survive (newsletters hide their preview text with them); positioning (`position`, `top`, `z-index`...) is still removed;
   2. the result is shown in `<iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox">`, with no `allow-scripts`;
   3. a CSP inside the frame allows only inline styles and images from `data:` and this Dolibarr (plus https/http when images are allowed).
 - **Attachments:** always `Content-Disposition: attachment`, except raster images requested inline; `X-Content-Type-Options: nosniff`; `Content-Security-Policy: default-src 'none'; sandbox`. Part ids are validated (`^[0-9]+(\.[0-9]+)*$`).

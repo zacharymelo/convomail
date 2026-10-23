@@ -237,6 +237,9 @@ class ConvomailRenderer
 		$config->set('Cache.SerializerPath', is_writable($cachedir) ? $cachedir : null);
 		$config->set('URI.AllowedSchemes', array('http' => true, 'https' => true, 'mailto' => true, 'cid' => true, 'data' => true));
 		$config->set('URI.DisableExternalResources', !$allowImages);
+		// Keep display, visibility and overflow: newsletters hide their preview text with display:none and
+		// overflow:hidden; without them it shows as a stray column of single letters. Positioning stays refused.
+		$config->set('CSS.AllowTricky', true);
 		$config->set('HTML.TargetBlank', true);
 		$config->set('HTML.TargetNoopener', true);
 		$config->set('HTML.TargetNoreferrer', true);
