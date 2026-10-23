@@ -16,6 +16,7 @@ CREATE TABLE llx_convomail_account(
     login           VARCHAR(255)  NOT NULL,
     pass_crypted    VARCHAR(255),
     sent_folder     VARCHAR(255),
+    server_saves_sent SMALLINT    NOT NULL DEFAULT 0,
     is_default      SMALLINT      NOT NULL DEFAULT 0,
     status          SMALLINT      NOT NULL DEFAULT 1,
     date_creation   DATETIME      NOT NULL,

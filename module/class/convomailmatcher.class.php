@@ -47,6 +47,81 @@ class ConvomailMatcher
 	}
 
 	/**
+	 * For each address, the contact (and its third party) or the third party it belongs to
+	 *
+	 * @param  string[] $emails Bare addresses
+	 * @return array<string,array{contactid:int,socid:int}> Keyed by lowercase address; unknown addresses are absent
+	 */
+	public function mapEmails(array $emails)
+	{
+		$map = array();
+		$emails = array_values(array_unique(array_filter(array_map('strtolower', array_map('trim', $emails)))));
+		if (empty($emails)) {
+			return $map;
+		}
+		$in = array();
+		foreach ($emails as $email) {
+			$in[] = "'".$this->db->escape($email)."'";
+		}
+		$inlist = implode(',', $in);
+
+		$sql = "SELECT sp.rowid, sp.fk_soc, LOWER(sp.email) as email FROM ".MAIN_DB_PREFIX."socpeople as sp";
+		$sql .= " WHERE LOWER(sp.email) IN (".$inlist.") AND sp.statut = 1";
+		$sql .= " AND sp.entity IN (".getEntity('contact').")";
+		$resql = $this->db->query($sql);
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				if (!isset($map[$obj->email])) {
+					$map[$obj->email] = array('contactid' => (int) $obj->rowid, 'socid' => (int) $obj->fk_soc);
+				}
+			}
+		}
+
+		$sql = "SELECT s.rowid, LOWER(s.email) as email FROM ".MAIN_DB_PREFIX."societe as s";
+		$sql .= " WHERE LOWER(s.email) IN (".$inlist.") AND s.status = 1";
+		$sql .= " AND s.entity IN (".getEntity('societe').")";
+		$resql = $this->db->query($sql);
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				if (!isset($map[$obj->email])) {
+					$map[$obj->email] = array('contactid' => 0, 'socid' => (int) $obj->rowid);
+				}
+			}
+		}
+		return $map;
+	}
+
+	/**
+	 * Agenda events already holding these Message-IDs
+	 *
+	 * @param  string[] $msgids Message-IDs without angle brackets
+	 * @return array<string,int> Message-ID => event id
+	 */
+	public function loggedEvents(array $msgids)
+	{
+		$map = array();
+		$msgids = array_values(array_unique(array_filter($msgids)));
+		if (empty($msgids)) {
+			return $map;
+		}
+		$in = array();
+		foreach ($msgids as $msgid) {
+			$in[] = "'".$this->db->escape($msgid)."'";
+		}
+		$sql = "SELECT a.id, a.email_msgid FROM ".MAIN_DB_PREFIX."actioncomm as a";
+		$sql .= " WHERE a.email_msgid IN (".implode(',', $in).")";
+		$sql .= " AND a.code IN ('AC_EMAIL', 'AC_EMAIL_IN')";
+		$sql .= " AND a.entity IN (".getEntity('agenda').")";
+		$resql = $this->db->query($sql);
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				$map[$obj->email_msgid] = (int) $obj->id;
+			}
+		}
+		return $map;
+	}
+
+	/**
 	 * Match addresses to contacts, then to third parties.
 	 *
 	 * @param  string[] $emails Bare addresses

@@ -207,6 +207,10 @@ class ConvomailTransport
 	{
 		global $langs;
 
+		if (!empty($account->server_saves_sent)) {
+			// The mail server stores its own copy of what it sends (Microsoft 365, Gmail); a second copy would be a duplicate
+			return;
+		}
 		if ($rawmime === '') {
 			$this->warnings[] = $langs->trans('ConvomailWarningNoRawMessage');
 			return;

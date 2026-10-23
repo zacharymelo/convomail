@@ -63,6 +63,36 @@ ConvomailWarningNoRawMessage = The email was sent, but no copy could be saved to
 ConvomailWarningSentFolderNotFound = No Sent folder found on the IMAP server. %s
 ConvomailWarningSentCopyFailed = The email was sent, but saving a copy to your Sent folder failed: %s
 
+# Mailbox
+Mailbox = Mailbox
+ConvomailMyAccounts = My mail accounts
+ConvomailFolderInbox = Inbox
+ConvomailFolderSent = Sent
+ConvomailFolderDrafts = Drafts
+ConvomailFolderJunk = Junk
+ConvomailFolderTrash = Trash
+ConvomailFolderArchive = Archive
+ConvomailLogged = Logged
+ConvomailLoggedOpenEvent = Logged in the agenda: open the event
+ConvomailLoggedOk = Message logged to the agenda.
+ConvomailNoMessage = No message in this folder.
+ConvomailNoSubject = (no subject)
+ConvomailHasAttachments = Has attachments
+ConvomailAnswered = Answered
+ConvomailMessageNotFound = This message no longer exists on the mail server.
+ConvomailUnnamedPart = Part %s
+ConvomailReplyAll = Reply all
+ConvomailForward = Forward
+ConvomailForwardedHeader = Forwarded message from %s on %s, subject: %s
+ConvomailMarkUnread = Mark as unread
+ConvomailLogTo = Log to...
+ConvomailLogToConfirm = Log to agenda
+ConvomailCopyAttachments = Copy the %s attachment(s) to the agenda event
+ConvomailImagesBlocked = Remote images are blocked to protect your privacy.
+ConvomailShowImages = Show images
+ConvomailServerSavesSent = Server saves sent mail itself
+ConvomailServerSavesSentHelp = Tick this when your mail server already keeps a copy of what you send in its Sent folder (Microsoft 365 and Gmail do), so Convomail does not add a second copy.
+
 # Read receipts and open tracking
 ConvomailReceipts = Receipts
 ConvomailRequestReadReceipt = Request a read receipt

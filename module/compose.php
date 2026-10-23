@@ -39,6 +39,9 @@ dol_include_once('/convomail/class/convomailtransport.class.php');
 dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
+dol_include_once('/convomail/class/hordemailboxclient.class.php');
+dol_include_once('/convomail/class/convomailrenderer.class.php');
+dol_include_once('/convomail/lib/convomail.lib.php');
 
 $langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'other'));
 
@@ -51,6 +54,10 @@ $origin    = GETPOST('origin', 'aZ09');
 $originid  = GETPOSTINT('originid');
 $replyto   = GETPOSTINT('replyto');
 $accountid = GETPOSTINT('accountid');
+// Reply to / forward a message of the mailbox
+$srcfolder = GETPOST('folder', 'restricthtml');
+$srcuid    = GETPOSTINT('uid');
+$mode      = GETPOST('mode', 'aZ09');
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'message', 'send')) {
 	accessforbidden();
@@ -66,6 +73,46 @@ $logger = new ConvomailLogger($db);
 $replyevent = $replyto > 0 ? $logger->fetchReplyTarget($replyto) : null;
 if ($replyto > 0 && !$replyevent) {
 	accessforbidden($langs->trans('ConvomailErrorReplyTargetNotEmail'));
+}
+
+$srcmessage = null;
+$srcclient = null;
+$srcrenderer = null;
+$srcevent = null;
+if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall', 'forward'), true)) {
+	// Only from the user's own accounts: replies go out from the mailbox the message is in
+	$srcaccount = convomail_get_usable_account($db, $user, $accountid);
+	if (!$srcaccount || (int) $srcaccount->fk_user !== (int) $user->id) {
+		accessforbidden();
+	}
+	$srcclient = new ConvomailHordeMailboxClient($srcaccount);
+	$srcmessage = $srcclient->fetchMessage($srcfolder, $srcuid, false);
+	if ($srcmessage === false) {
+		accessforbidden($langs->trans('ConvomailMessageNotFound'));
+	}
+	$srcattachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $srcaccount->id).'&folder='.urlencode($srcfolder).'&uid='.((int) $srcuid);
+	$srcrenderer = new ConvomailRenderer($srcclient, $srcfolder, $srcuid, $srcmessage, $srcattachmentbase);
+	$accountid = (int) $srcaccount->id;
+
+	// If the message was logged, the reply inherits that event's third party and project
+	if ($srcmessage['msgid'] !== '') {
+		$srcmatcher = new ConvomailMatcher($db);
+		$srclogged = $srcmatcher->loggedEvents(array($srcmessage['msgid']));
+		if (!empty($srclogged[$srcmessage['msgid']])) {
+			$srcevent = new ActionComm($db);
+			if ($srcevent->fetch($srclogged[$srcmessage['msgid']]) <= 0) {
+				$srcevent = null;
+			}
+		}
+	}
+}
+
+// Message-ID this message answers (none for a forward)
+$inreplyto = '';
+if ($replyevent) {
+	$inreplyto = $replyevent->email_msgid;
+} elseif ($srcmessage && $mode !== 'forward') {
+	$inreplyto = $srcmessage['msgid'];
 }
 
 /**
@@ -115,7 +162,61 @@ if ($action == '') {
 }
 
 if ($action == '') {
-	if ($replyevent) {
+	if ($srcmessage) {
+		$myemails = array();
+		foreach ($accounts as $acc) {
+			$myemails[] = strtolower($acc->email);
+		}
+		$notmine = function ($list) use ($myemails) {
+			return array_values(array_filter($list, function ($a) use ($myemails) {
+				return !in_array($a['email'], $myemails, true);
+			}));
+		};
+		$fromme = $srcmessage['from'] && in_array($srcmessage['from'][0]['email'], $myemails, true);
+
+		if ($mode === 'reply') {
+			// Our own message: follow up to its recipients. Theirs: Reply-To, else From.
+			$sendto = convomail_format_addresses($fromme ? $srcmessage['to'] : ($srcmessage['reply_to'] ?: $srcmessage['from']), true);
+		} elseif ($mode === 'replyall') {
+			$sendto = convomail_format_addresses($notmine(array_merge($srcmessage['reply_to'] ?: $srcmessage['from'], $srcmessage['to'])), true);
+			$sendtocc = convomail_format_addresses($notmine($srcmessage['cc']), true);
+		}
+
+		$basesubject = $srcmessage['subject'];
+		if ($mode === 'forward') {
+			$subject = preg_match('/^(fwd?|tr|wg):/i', $basesubject) ? $basesubject : 'Fwd: '.$basesubject;
+		} else {
+			$subject = preg_match('/^(re|aw|sv):/i', $basesubject) ? $basesubject : 'Re: '.$basesubject;
+		}
+
+		$fromtext = convomail_format_addresses($srcmessage['from'], true);
+		$intro = ($mode === 'forward')
+			? $langs->trans('ConvomailForwardedHeader', $fromtext, dol_print_date($srcmessage['date'], 'dayhour'), $srcmessage['subject'])
+			: $langs->trans('ConvomailOnDateWrote', dol_print_date($srcmessage['date'], 'dayhour'), $fromtext);
+		$quotedhtml = $srcrenderer->cleanBody(false, true);
+		if ($editorishtml) {
+			$message = '<br><br><div class="convomail-quote">'.dol_escape_htmltag($intro).'</div>';
+			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$quotedhtml.'</blockquote>';
+		} else {
+			$quoted = dol_string_nohtmltag($quotedhtml, 2);
+			$message = "\n\n".$intro."\n> ".str_replace("\n", "\n> ", trim($quoted));
+		}
+
+		if ($srcevent) {
+			$socid = $socid ?: (int) $srcevent->socid;
+			$projectid = $projectid ?: (int) $srcevent->fk_project;
+		} else {
+			$people = array();
+			foreach (array('from', 'to', 'cc') as $k) {
+				foreach ($notmine($srcmessage[$k]) as $a) {
+					$people[] = $a['email'];
+				}
+			}
+			$srcmatcher = new ConvomailMatcher($db);
+			$suggest = $srcmatcher->matchRecipients($people);
+			$socid = $socid ?: (int) $suggest['socid'];
+		}
+	} elseif ($replyevent) {
 		$myemails = array();
 		foreach ($accounts as $acc) {
 			$myemails[] = strtolower($acc->email);
@@ -175,6 +276,10 @@ if ($action == '') {
  */
 
 if ($cancel) {
+	if ($srcmessage) {
+		header('Location: '.dol_buildpath('/convomail/message.php', 1).'?accountid='.((int) $accountid).'&folder='.urlencode($srcfolder).'&uid='.((int) $srcuid));
+		exit;
+	}
 	header('Location: '.convomail_back_url($socid, $projectid, $replyto));
 	exit;
 }
@@ -225,6 +330,26 @@ if ($action == 'send') {
 		}
 	}
 
+	// Forward: re-attach the original attachments the user kept ticked
+	if (!$error && $srcmessage && $mode === 'forward') {
+		$keep = GETPOST('fwdparts', 'array');
+		foreach ($srcrenderer->attachments() as $att) {
+			if (!in_array((string) $att['id'], $keep, true)) {
+				continue;
+			}
+			$content = $srcclient->fetchPart($srcfolder, $srcuid, $att['id']);
+			if ($content === false) {
+				setEventMessages($langs->trans('ErrorFailedToSaveFile').': '.$att['name'], null, 'errors');
+				$error++;
+				continue;
+			}
+			dol_mkdir($upload_dir_tmp);
+			$safename = dol_sanitizeFileName($att['name'] !== '' ? $att['name'] : 'part-'.$att['id']);
+			file_put_contents($upload_dir_tmp.'/'.$safename, $content['data']);
+			$files[] = array('path' => $upload_dir_tmp.'/'.$safename, 'mime' => $att['type'] ?: dol_mimetype($safename), 'name' => $safename);
+		}
+	}
+
 	if (!$error) {
 		$matcher = new ConvomailMatcher($db);
 		$match = $matcher->matchRecipients($recipients);
@@ -255,7 +380,7 @@ if ($action == 'send') {
 			'body'           => $body,
 			'files'          => $files,
 			'trackid'        => $trackid,
-			'in_reply_to'    => $replyevent ? $replyevent->email_msgid : '',
+			'in_reply_to'    => $inreplyto,
 			'upload_dir_tmp' => $upload_dir_tmp,
 			'read_receipt'   => $readreceipt,
 			'track_key'      => $trackkey,
@@ -267,7 +392,7 @@ if ($action == 'send') {
 		} else {
 			$eventid = $logger->logSent($user, $account, array(
 				'msgid'       => $transport->msgid,
-				'in_reply_to' => $replyevent ? $replyevent->email_msgid : '',
+				'in_reply_to' => $inreplyto,
 				'subject'     => $subject,
 				'body'        => $body,
 				'to'          => $sendto,
@@ -347,6 +472,11 @@ print '<input type="hidden" name="origin" value="'.dol_escape_htmltag($origin).'
 print '<input type="hidden" name="originid" value="'.((int) $originid).'">';
 print '<input type="hidden" name="contactid" value="'.((int) $contactid).'">';
 print '<input type="hidden" name="replyto" value="'.((int) $replyto).'">';
+if ($srcmessage) {
+	print '<input type="hidden" name="folder" value="'.dol_escape_htmltag($srcfolder).'">';
+	print '<input type="hidden" name="uid" value="'.((int) $srcuid).'">';
+	print '<input type="hidden" name="mode" value="'.dol_escape_htmltag($mode).'">';
+}
 
 print '<table class="border centpercent tableforfieldcreate">';
 
@@ -378,7 +508,16 @@ if ($origin && $originid > 0) {
 
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
 
-print '<tr><td>'.$langs->trans('MailFile').'</td><td><input type="file" name="attachments[]" multiple></td></tr>';
+print '<tr><td>'.$langs->trans('MailFile').'</td><td>';
+if ($srcmessage && $mode === 'forward') {
+	$keep = ($action == '') ? null : GETPOST('fwdparts', 'array');
+	foreach ($srcrenderer->attachments() as $att) {
+		$name = $att['name'] !== '' ? $att['name'] : $langs->trans('ConvomailUnnamedPart', $att['id']);
+		$checked = ($keep === null || in_array((string) $att['id'], $keep, true));
+		print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).'</label><br>';
+	}
+}
+print '<input type="file" name="attachments[]" multiple></td></tr>';
 
 print '<tr><td>'.$langs->trans('ConvomailReceipts').'</td><td>';
 print '<label class="marginrightonly"><input type="checkbox" name="read_receipt" value="1"'.($readreceipt ? ' checked' : '').'> '.$langs->trans('ConvomailRequestReadReceipt').'</label>';

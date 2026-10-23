@@ -93,6 +93,7 @@ function convomail_account_from_post(ConvomailAccount $account)
 	$account->smtp_encryption = GETPOST('smtp_encryption', 'aZ09');
 	$account->login           = trim(GETPOST('login', 'alphanohtml'));
 	$account->sent_folder     = trim(GETPOST('sent_folder', 'alphanohtml'));
+	$account->server_saves_sent = GETPOSTINT('server_saves_sent') ? 1 : 0;
 	$account->is_default      = GETPOSTINT('is_default') ? 1 : 0;
 	$account->status          = GETPOSTINT('status') ? ConvomailAccount::STATUS_ENABLED : ConvomailAccount::STATUS_DISABLED;
 	// Empty password field keeps the stored one
@@ -268,6 +269,9 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print $form->selectarray('imap_encryption', $encryptions, $account->imap_encryption).'</td></tr>';
 	print '<tr><td>'.$langs->trans('ConvomailSentFolder').'</td><td><input type="text" name="sent_folder" class="minwidth300" value="'.dol_escape_htmltag($account->sent_folder).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSentFolderAuto')).'"></td></tr>';
 
+	print '<tr><td>'.$langs->trans('ConvomailServerSavesSent').'</td><td><input type="checkbox" name="server_saves_sent" value="1"'.($account->server_saves_sent ? ' checked' : '').'> ';
+	print $form->textwithpicto('', $langs->trans('ConvomailServerSavesSentHelp')).'</td></tr>';
+
 	print '<tr class="liste_titre"><td colspan="2">'.$langs->trans('ConvomailOutgoingSmtp').'</td></tr>';
 	print '<tr><td class="fieldrequired">'.$langs->trans('ConvomailSmtpHost').'</td><td><input type="text" name="smtp_host" class="minwidth300" value="'.dol_escape_htmltag($account->smtp_host).'"></td></tr>';
 	print '<tr><td>'.$langs->trans('ConvomailSmtpPort').'</td><td><input type="number" name="smtp_port" class="width75" value="'.((int) $account->smtp_port).'"> ';
@@ -293,6 +297,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 				$.each(["imap_host", "imap_port", "smtp_host", "smtp_port"], function (i, f) { $("[name=" + f + "]").val(p[f]); });
 				$("[name=imap_encryption]").val(p.imap_encryption).trigger("change");
 				$("[name=smtp_encryption]").val(p.smtp_encryption).trigger("change");
+				$("[name=server_saves_sent]").prop("checked", !!p.server_saves_sent);
 			});
 		});
 		</script>';

@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** phase 1 (send and log) plus read receipts, version 0.2.0. Tested on Dolibarr 23.0 with PHP 8.2 against a GreenMail test server. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.3.0: send and log, read receipts, and the mailbox (read, reply, forward, log to the agenda). Tested on Dolibarr 23.0 with PHP 8.2 against a GreenMail test server. Not yet tested against real Gmail or Microsoft 365 servers.
 
 **Download:** [latest release](https://github.com/zacharymelo/convomail/releases/latest) (`module_convomail-<version>.zip`, includes the IMAP library).
 
@@ -14,11 +14,13 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Using it](#using-it)
+- [The mailbox](#the-mailbox)
+- [Which email account is used](#which-email-account-is-used)
 - [Read receipts and open tracking](#read-receipts-and-open-tracking)
 - [Replies and the Email Collector](#replies-and-the-email-collector)
 - [Privacy and security notes](#privacy-and-security-notes)
 - [What the module stores](#what-the-module-stores)
-- [Upgrading from 0.1.0](#upgrading-from-010)
+- [Upgrading](#upgrading)
 - [Optional core patch](#optional-core-patch)
 - [Roadmap](#roadmap)
 - [Development](#development)
@@ -36,6 +38,7 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
   - It is linked to the third party, every recipient who is a known contact, the project and the originating document.
   - It appears on the existing conversation views of third parties, contacts and projects.
 - **Read receipts and open tracking.** Ask for a standard read receipt on any message. Optionally (off by default) track opens with an invisible image; the first open adds an "Email opened" event to the timeline.
+- **A mailbox inside Dolibarr.** A **Mailbox** tab in the top menu opens the user's folders and messages. Messages open on their own page, shown safely, with **Reply**, **Reply all**, **Forward** and **Log to…** to file a received message on a customer or project timeline.
 
 ## How it works
 
@@ -86,14 +89,37 @@ Go to **Home → Setup → Modules → Convomail → Setup** (or **Home → Setu
 | Open tracking | Off by default. Adds an invisible image to sent messages and logs opens. See [Read receipts and open tracking](#read-receipts-and-open-tracking) before enabling. |
 | Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. |
 
-Each user then adds an account: **user card → Mail accounts → Add a mail account**. With Gmail, use an app password.
+Each user then adds an account: **user card → Mail accounts → Add a mail account**. With Gmail, use an app password. The Gmail and Microsoft 365 presets tick **Server saves sent mail itself**, because those servers keep their own copy of what you send; for other servers leave it unticked so Convomail stores the copy.
 
 ## Using it
 
 1. Open a third party, contact or project and click **Email from my mailbox**.
 2. Check the sender account, recipients, third party and project, write the message, attach files, and click **Send**.
 3. You land on the conversation view, where the message now appears.
-4. To answer, open the event and click **Reply**.
+4. To answer, open the event and click **Reply**, or open the message in the **Mailbox**.
+
+## The mailbox
+
+**Mailbox** in the top menu (next to Agenda) opens the mailbox of the current account. The tab shows to every user with the *Use and manage own mail accounts* permission; a user who has no account yet is offered a link to add one.
+
+- **Folders** on the left (Inbox, Drafts, Sent, Archive, Junk, Trash first, then your own folders) with unread counts. The list is cached for 5 minutes; **Refresh** reloads it.
+- **Messages**, newest first, 25 per page, with search (headers and body). Unread messages are bold. A paperclip marks attachments, and the **Logged** column links to the agenda event when the message is already on a timeline. When the sender (or, in Sent, the recipient) is a known contact or third party, their name links to the record.
+- **Opening a message** marks it read on the server; **Mark as unread** undoes that. The header lists From, To, Cc and Date, with known contacts and third parties linked, and the attachments to download.
+- **Reply / Reply all / Forward** open the compose page with the recipients, `Re:`/`Fwd:` subject and quoted text filled in. A reply threads with the original (In-Reply-To) and takes the third party and project of the logged event if there is one, otherwise of the matched contacts. A forward keeps the original attachments (untick any you don't want).
+- **Log to…** files a received message on the agenda: choose the third party, contacts and project (prefilled from the sender and recipients), and optionally copy the attachments to the event. Received mail is recorded like Dolibarr's Email Collector does (code `AC_EMAIL_IN`, type "automatically inserted"); mail sent from one of your accounts as `AC_EMAIL`. A message can be logged once.
+
+**How messages are shown safely:**
+- Email HTML is cleaned with [HTMLPurifier](http://htmlpurifier.org/): scripts, forms, frames, event handlers and `javascript:` links are removed.
+- The result is displayed in a sandboxed frame where scripts cannot run, with a content security policy that only allows images from this Dolibarr.
+- Remote images are blocked until you click **Show images**, so tracking pixels in incoming mail don't report that you opened it.
+- Attachments are always downloads (only PNG, JPEG, GIF and WebP images appear inline), sent with `nosniff` and a sandbox policy.
+
+## Which email account is used
+
+- Each user adds one or more accounts on their user card → **Mail accounts**, and ticks **Default** on the one to use first.
+- **In the Mailbox**, the account switcher at the top lists the user's enabled accounts. It opens on the account and folder used last, otherwise the default account.
+- **When composing**, the **From** list shows the same accounts. It starts on the account of the mailbox you came from, or the account a message you are replying to arrived in, otherwise the default.
+- Users only ever see and send from their own accounts. A user with *Manage the mail accounts of all users* can set up and open other users' mailboxes, but replies always go out from their own accounts.
 
 ## Read receipts and open tracking
 
@@ -104,7 +130,7 @@ Convomail offers both, because they answer different questions:
 | How | Standard `Disposition-Notification-To` header | Invisible 1×1 image served by `custom/convomail/public/open.php` |
 | Recipient sees | Their mail app may ask "Send a read receipt?" | Nothing |
 | Reliability | The recipient can refuse; Gmail web and many apps ignore it | Approximate: image blocking misses opens; Apple Mail Privacy Protection and security scanners load images without anyone reading |
-| Where results appear | As emails in the sender's inbox (logged once phase 2 or an Email Collector reads them) | "Email opened" event on the timeline (first open), and an open count on the sent email's event card |
+| Where results appear | As emails in the sender's inbox (visible in the Mailbox; file them with Log to… or an Email Collector) | "Email opened" event on the timeline (first open), and an open count on the sent email's event card |
 | Default | Off; an admin can make it ticked by default | Off; an admin must switch it on |
 
 Before switching open tracking on:
@@ -115,7 +141,7 @@ Before switching open tracking on:
 
 ## Replies and the Email Collector
 
-Phase 1 sends and logs; it does not read the inbox. Dolibarr's core **Email Collector** can already log incoming replies:
+Received mail is logged when a user clicks **Log to…** in the Mailbox; automatic logging is planned (phase 3). Until then, Dolibarr's core **Email Collector** can log incoming replies automatically:
 
 - Convomail puts a Dolibarr tracking code in each Message-ID, using the same format as core: `proj<id>`, `pro`/`ord`/`inv<id>`, `thi<id>` or `ctc<id>`.
 - Point an Email Collector at the user's mailbox with a "record event" operation. It recognises replies through their In-Reply-To and References headers and files them on the same project or third party.
@@ -126,21 +152,25 @@ Phase 1 sends and logs; it does not read the inbox. Dolibarr's core **Email Coll
 - Users only see and use their own accounts unless they have the "manage all accounts" right.
 - Logged emails are ordinary agenda events and follow Dolibarr's agenda permissions. Anyone allowed to read the third party's events can read the email body.
 - Plain-text messages are escaped before sending. HTML from the rich-text editor goes through Dolibarr's HTML sanitizer.
+- Incoming mail is cleaned and sandboxed before display; see [The mailbox](#the-mailbox). Logged copies store the cleaned HTML, with inline images replaced by their names (the files themselves are copied to the event).
+- The mailbox talks to the mail server on every page; Dolibarr does not keep a copy of the mailbox.
 
 ## What the module stores
 
 | Table | Content |
 |---|---|
-| `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, encrypted password, Sent folder |
-| `llx_convomail_message` | One row per sent message: account, Message-ID, In-Reply-To, Sent folder UID, agenda event id, read receipt flag, open-tracking key, open count and dates |
+| `llx_convomail_account` | One row per mail account: user, servers, ports, encryption, login, encrypted password, Sent folder, whether the server saves sent mail itself |
+| `llx_convomail_message` | One row per sent or logged message: account, direction, folder and UID, Message-ID, In-Reply-To, agenda event id, read receipt flag, open-tracking key, open count and dates |
 | `llx_actioncomm` (core) | The agenda event for each message: subject, body, recipients, links |
 | Agenda documents directory | Copies of attachments, under the event id |
 
 Disabling the module removes menus and rights but keeps all data.
 
-## Upgrading from 0.1.0
+## Upgrading
 
-Version 0.2.0 changes the module ID from the private 511400 to the officially reserved **194282**, so the permission IDs change too (19428201–19428203).
+**From 0.2.0:** deploy the new zip, then disable and re-enable Convomail (this adds the Mailbox menu and the `server_saves_sent` column from `sql/update_0.3.0.sql`). For Microsoft 365 and Gmail accounts, tick **Server saves sent mail itself** on the account, or the Sent folder gets two copies of each message.
+
+**From 0.1.0:** version 0.2.0 changes the module ID from the private 511400 to the officially reserved **194282**, so the permission IDs change too (19428201–19428203).
 
 1. **Before** replacing the files, disable Convomail in Home → Setup → Modules.
 2. Deploy the 0.2.0 zip and enable Convomail again. This adds the new columns (`sql/update_0.2.0.sql`). Accounts, logged messages and settings are kept.
@@ -166,7 +196,8 @@ Convomail is built as a module first, with the aim of proposing webmail for Doli
 |---|---|---|
 | 1. Send and log | Accounts, compose, reply, user SMTP, Sent copy, agenda events | **Done (0.1.0)** |
 | 1b. Receipts | Read receipt request, open tracking (off by default), Email setup tab with the optional core patch | **Done (0.2.0)** |
-| 2. Read and file | Inbox and reading pane, HTML sanitizer, "Log to..." action, per-user OAuth for Google and Microsoft | Planned |
+| 2. Read and file | Mailbox (folders, list, message page), safe HTML display, reply / reply all / forward, Log to… | **Done (0.3.0)** |
+| 2b. OAuth | Sign in with Google and Microsoft instead of app passwords | Planned |
 | 3. Automatic conversation | Sync job, auto-logging by policy, replies filed to their project, shared team inboxes | Planned |
 | 4. Sales features | Awaiting-reply columns, follow-up nudges, last message on opportunity cards, response-time reports | Planned |
 
@@ -194,16 +225,20 @@ UPSTREAM.md               Core changes to propose
 patches/                  Optional core patch (Email setup tab) and the held upstream PR draft
 module/                   Module source (installed as custom/convomail)
   core/modules/           Module descriptor
-  class/                  Account, message, IMAP client, transport, matcher, logger, hooks
+  class/                  Account, message, IMAP client, renderer, transport, matcher, logger, tracker, hooks
   sql/                    Tables and indexes
   admin/setup.php         Setup page
   user_accounts.php       Mail accounts tab on the user card
-  compose.php             Compose, reply, send
+  mailbox.php             Mailbox: account switcher, folders, message list
+  message.php             One message: safe body, attachments, reply/forward, Log to…
+  attachment.php          Attachment download / inline image
+  compose.php             Compose, reply, forward, send
   ajax/debug.php          Diagnostics (admin + debug mode)
   public/open.php         Open-tracking image (public, no login)
+  css/, js/               Mailbox styles; sizing of the message frame
   langs/en_US/            Translations
 ```
 
 ## Licence
 
-GPL-3.0-or-later, see [LICENSE](LICENSE). Bundles [bytestream/horde-imap-client](https://packagist.org/packages/bytestream/horde-imap-client) and its Horde dependencies (LGPL-2.1).
+GPL-3.0-or-later, see [LICENSE](LICENSE). Bundles [bytestream/horde-imap-client](https://packagist.org/packages/bytestream/horde-imap-client) and its Horde dependencies (LGPL-2.1), and [HTMLPurifier](https://github.com/ezyang/htmlpurifier) (LGPL-2.1-or-later).

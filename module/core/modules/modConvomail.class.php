@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.2.0';
+		$this->version = '0.3.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -107,9 +107,87 @@ class modConvomail extends DolibarrModules
 		$this->rights[$r][4] = 'account';
 		$this->rights[$r][5] = 'admin';
 
-		// Menus: one left entry under Agenda
+		// Menus
+		// Mailbox tab for users allowed to use their own mail accounts. Users without an account yet
+		// land on a prompt to add one (mailbox.php).
 		$this->menu = array();
 		$r = 0;
+		$this->menu[$r++] = array(
+			'fk_menu'  => 0,
+			'type'     => 'top',
+			'titre'    => 'Mailbox',
+			'prefix'   => img_picto('', $this->picto, 'class="pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => '',
+			'url'      => '/convomail/mailbox.php',
+			'langs'    => 'convomail@convomail',
+			'position' => 87,	// right after Agenda (86)
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "account", "read")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=convomail',
+			'type'     => 'left',
+			'titre'    => 'ConvomailFolderInbox',
+			'prefix'   => img_picto('', 'email', 'class="paddingright pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => 'convomail_inbox',
+			'url'      => '/convomail/mailbox.php?role=inbox',
+			'langs'    => 'convomail@convomail',
+			'position' => 100,
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "account", "read")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=convomail',
+			'type'     => 'left',
+			'titre'    => 'ConvomailFolderSent',
+			'prefix'   => img_picto('', 'fa-paper-plane', 'class="paddingright pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => 'convomail_sent',
+			'url'      => '/convomail/mailbox.php?role=sent',
+			'langs'    => 'convomail@convomail',
+			'position' => 110,
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "account", "read")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=convomail',
+			'type'     => 'left',
+			'titre'    => 'ComposeEmail',
+			'prefix'   => img_picto('', 'fa-pen', 'class="paddingright pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => 'convomail_compose_mb',
+			'url'      => '/convomail/compose.php',
+			'langs'    => 'convomail@convomail',
+			'position' => 120,
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "message", "send")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=convomail',
+			'type'     => 'left',
+			'titre'    => 'ConvomailMyAccounts',
+			'prefix'   => img_picto('', 'user', 'class="paddingright pictofixedwidth"'),
+			'mainmenu' => 'convomail',
+			'leftmenu' => 'convomail_accounts',
+			'url'      => '/convomail/user_accounts.php?id=__USER_ID__',
+			'langs'    => 'convomail@convomail',
+			'position' => 130,
+			'enabled'  => 'isModEnabled("convomail")',
+			'perms'    => '$user->hasRight("convomail", "account", "read")',
+			'target'   => '',
+			'user'     => 0,
+		);
+		// Compose under Agenda, for users who send from Dolibarr
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=agenda',
 			'type'     => 'left',

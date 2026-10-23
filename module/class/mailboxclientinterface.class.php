@@ -51,6 +51,58 @@ interface ConvomailMailboxClient
 	public function append($rawMime, $folder, array $flags = array());
 
 	/**
+	 * Selectable folders with their role and counts.
+	 *
+	 * @return array<int,array{name:string,label:string,role:string,messages:int,unseen:int}>|false
+	 *         role is one of inbox, sent, drafts, junk, trash, archive or ''. false on error.
+	 */
+	public function listFolders();
+
+	/**
+	 * One page of messages, newest first.
+	 *
+	 * @param  string $folder     Folder name
+	 * @param  int    $offset     Index of the first message (0 = newest)
+	 * @param  int    $limit      Page size
+	 * @param  string $searchText Text to search in headers and body ('' = all)
+	 * @return array{total:int,messages:array<int,array<string,mixed>>}|false
+	 *         Each message: uid, msgid, subject, date (timestamp), from, to, cc (lists of array{name,email}),
+	 *         seen, answered, flagged, size, has_attachments. false on error.
+	 */
+	public function listMessages($folder, $offset, $limit, $searchText = '');
+
+	/**
+	 * Headers and MIME structure of one message.
+	 *
+	 * @param  string $folder   Folder name
+	 * @param  int    $uid      Message UID
+	 * @param  bool   $markSeen Set the \Seen flag on the server
+	 * @return array<string,mixed>|false Same keys as a listMessages() entry, plus in_reply_to, references,
+	 *                                   and parts: array of array{id,type,charset,name,disposition,cid,size}. false if not found.
+	 */
+	public function fetchMessage($folder, $uid, $markSeen = true);
+
+	/**
+	 * Content of one MIME part, transfer-decoded (charset not converted).
+	 *
+	 * @param  string $folder Folder name
+	 * @param  int    $uid    Message UID
+	 * @param  string $partId MIME part id, for example '2' or '1.2'
+	 * @return array{data:string,type:string,charset:string,name:string}|false
+	 */
+	public function fetchPart($folder, $uid, $partId);
+
+	/**
+	 * Set or clear the \Seen flag.
+	 *
+	 * @param  string $folder Folder name
+	 * @param  int    $uid    Message UID
+	 * @param  bool   $seen   true = read, false = unread
+	 * @return bool
+	 */
+	public function setSeen($folder, $uid, $seen);
+
+	/**
 	 * @return string Last error
 	 */
 	public function getError();

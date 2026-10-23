@@ -48,6 +48,7 @@ class ConvomailAccount extends CommonObject
 		'login'           => array('type' => 'varchar(255)', 'label' => 'Login', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'position' => 60),
 		'pass_crypted'    => array('type' => 'varchar(255)', 'label' => 'Password', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 61),
 		'sent_folder'     => array('type' => 'varchar(255)', 'label' => 'ConvomailSentFolder', 'enabled' => 1, 'visible' => 1, 'notnull' => 0, 'position' => 70),
+		'server_saves_sent' => array('type' => 'smallint', 'label' => 'ConvomailServerSavesSent', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 75),
 		'is_default'      => array('type' => 'smallint', 'label' => 'Default', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 80),
 		'status'          => array('type' => 'smallint', 'label' => 'Status', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '1', 'position' => 1000),
 		'date_creation'   => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'position' => 500),
@@ -71,6 +72,7 @@ class ConvomailAccount extends CommonObject
 	public $login;
 	public $pass_crypted;
 	public $sent_folder;
+	public $server_saves_sent;
 	public $is_default;
 	public $status;
 	public $date_creation;
@@ -116,6 +118,7 @@ class ConvomailAccount extends CommonObject
 			return -1;
 		}
 		$this->db->commit();
+		self::clearSessionCache();
 		return $this->id;
 	}
 
@@ -155,6 +158,7 @@ class ConvomailAccount extends CommonObject
 			return -1;
 		}
 		$this->db->commit();
+		self::clearSessionCache();
 		return 1;
 	}
 
@@ -167,7 +171,28 @@ class ConvomailAccount extends CommonObject
 	 */
 	public function delete(User $user, $notrigger = 0)
 	{
-		return $this->deleteCommon($user, $notrigger);
+		$result = $this->deleteCommon($user, $notrigger);
+		if ($result > 0) {
+			self::clearSessionCache();
+			}
+		return $result;
+	}
+
+	/**
+	 * Forget the cached folder lists of the session
+	 *
+	 * @return void
+	 */
+	public static function clearSessionCache()
+	{
+		if (!isset($_SESSION)) {
+			return;
+		}
+		foreach (array_keys($_SESSION) as $key) {
+			if (strpos((string) $key, 'convomail_folders_') === 0) {
+				unset($_SESSION[$key]);
+			}
+		}
 	}
 
 	/**

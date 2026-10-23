@@ -126,6 +126,83 @@ class ConvomailLogger
 	}
 
 	/**
+	 * Record a message read in the mailbox as an agenda event ("Log to..."), coded like Email Collector does:
+	 * type AC_OTH_AUTO + code AC_EMAIL_IN for received mail, AC_EMAIL for mail sent from one of the user's accounts.
+	 *
+	 * @param  User                $user    User filing the message
+	 * @param  ConvomailAccount    $account Mailbox it was read from
+	 * @param  array<string,mixed> $data    Keys: msgid, in_reply_to, subject, body (clean HTML), from, to, cc (header strings),
+	 *                                      date (timestamp), outgoing (bool), socid, contactids (int[]), projectid,
+	 *                                      folder, uid, files (array of array('path','name'))
+	 * @return int                          Event id if OK, <0 if KO
+	 */
+	public function logReceived(User $user, ConvomailAccount $account, array $data)
+	{
+		$date = !empty($data['date']) ? (int) $data['date'] : dol_now();
+		$outgoing = !empty($data['outgoing']);
+
+		$this->db->begin();
+
+		$event = new ActionComm($this->db);
+		$event->type_code = $outgoing ? 'AC_EMAIL' : 'AC_OTH_AUTO';
+		$event->code = $outgoing ? 'AC_EMAIL' : 'AC_EMAIL_IN';
+		$event->label = dol_trunc((string) ($data['subject'] !== '' ? $data['subject'] : $data['from']), 128);
+		$event->note_private = (string) $data['body'];
+		$event->datep = $date;
+		$event->datef = $date;
+		$event->durationp = 0;
+		$event->percentage = -1;
+		$event->authorid = $user->id;
+		$event->userownerid = $user->id;
+		$event->socid = (int) ($data['socid'] ?? 0);
+		$event->fk_project = (int) ($data['projectid'] ?? 0);
+
+		$event->email_msgid = (string) $data['msgid'];
+		$event->email_from = (string) $data['from'];
+		$event->email_sender = (string) $data['from'];
+		$event->email_to = (string) ($data['to'] ?? '');
+		$event->email_tocc = (string) ($data['cc'] ?? '');
+		$event->email_subject = (string) $data['subject'];
+
+		foreach ((array) ($data['contactids'] ?? array()) as $contactid) {
+			if ((int) $contactid > 0) {
+				$event->socpeopleassigned[(int) $contactid] = (int) $contactid;
+			}
+		}
+
+		$eventid = $event->create($user);
+		if ($eventid <= 0) {
+			$this->db->rollback();
+			$this->error = $event->error;
+			$this->errors = $event->errors;
+			return -1;
+		}
+
+		$link = new ConvomailMessage($this->db);
+		$link->fk_account = $account->id;
+		$link->folder = (string) ($data['folder'] ?? '');
+		$link->uid = (int) ($data['uid'] ?? 0);
+		$link->msgid = (string) $data['msgid'];
+		$link->in_reply_to = (string) ($data['in_reply_to'] ?? '');
+		$link->direction = $outgoing ? ConvomailMessage::DIRECTION_OUT : ConvomailMessage::DIRECTION_IN;
+		$link->fk_actioncomm = $eventid;
+		$link->date_message = $date;
+		// Callers check first that the Message-ID has no event yet (ConvomailMatcher::loggedEvents())
+		if ($link->create($user) <= 0) {
+			$this->db->rollback();
+			$this->error = $link->error;
+			$this->errors = $link->errors;
+			return -1;
+		}
+
+		$this->db->commit();
+
+		$this->copyAttachments($eventid, (array) ($data['files'] ?? array()));
+
+		return $eventid;
+	}
+
+	/**
 	 * Copy attachments into the event's document directory, as core does with MAIN_COPY_FILE_IN_EVENT_AUTO
 	 *
 	 * @param  int                          $eventid Event id

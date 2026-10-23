@@ -1,0 +1,19 @@
+/* Copyright (C) 2026 DPG Supply - convomail mailbox styles */
+
+.convomail-mailbox { display: flex; gap: 16px; align-items: flex-start; }
+.convomail-folders { flex: 0 0 210px; }
+.convomail-folders a { display: flex; justify-content: space-between; padding: 6px 8px; border-radius: 4px; text-decoration: none; }
+.convomail-folders a:hover { background: var(--colorbacklinepairhover, #eef); }
+.convomail-folders a.active { background: var(--colorbacklinepairhover, #e4e8f4); font-weight: 600; }
+.convomail-folders .badge { margin-left: 6px; }
+.convomail-list { flex: 1 1 auto; min-width: 0; }
+.convomail-list tr.unread td { font-weight: 600; }
+.convomail-list td.convomail-subject a { display: block; }
+.convomail-list .convomail-snippet { font-weight: normal; }
+.convomail-body { width: 100%; min-height: 200px; border: 1px solid var(--colortopbordertitle1, #ddd); border-radius: 4px; background: #fff; }
+.convomail-headers td.titlefield { width: 120px; }
+.convomail-imagesblocked { margin: 6px 0; }
+@media (max-width: 768px) {
+	.convomail-mailbox { flex-direction: column; }
+	.convomail-folders { flex-basis: auto; width: 100%; }
+}
