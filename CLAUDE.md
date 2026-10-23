@@ -53,7 +53,7 @@ Only when asked:
 
 **Optional modules**
 - Document Browser (`docbrowser`, repo `../doli-docbrowser`, mounted in the dev stack) is used only when `isModEnabled('docbrowser')` and its class loads. Never make Convomail depend on it. Its keys are re-checked on send with `DocBrowserService::resolve()`; never accept a path from the form.
-- CKEditor drops the `convomail-signature` / `convomail-quote` classes and even the reply's `<blockquote>`, so code that looks for the signature or quote matches the "-- " line and the quote intro text (`convomail_insert_before_signature()`, `splitBody()` in `js/convomail-compose.js`). `$intro` is plain text (`transnoentitiesnoconv`), escaped once where it goes into HTML.
+- CKEditor's content filter (ACF) keeps only what the toolbar can make: compose passes extra allowed content to `DolEditor::Create()` (blockquote with its border, `white-space`/`word-wrap` on div, the `convomail-signature` / `convomail-quote` classes, after core's own extras). The send path still drops the classes, so code that looks for the signature or quote also matches the "-- " line and the quote intro text (`convomail_insert_before_signature()`, `splitBody()` in `js/convomail-compose.js`). CKEditor also writes a line break after each `<br>`: stored/quoted plain text uses `<br>` without `pre-wrap` (`cleanBody(…, true)`), or each break shows twice. `$intro` is plain text (`transnoentitiesnoconv`), escaped once where it goes into HTML.
 - Core's AI endpoint answers HTTP 200 with "Error returned by API call: …" when the provider is unreachable. Test the AI tools with a fake OpenAI-compatible server and `AI_API_SERVICE=custom` (`AI_API_CUSTOM_URL`, `AI_API_CUSTOM_KEY`).
 
 **Module descriptor**
