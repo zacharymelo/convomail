@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.5.4)
+## Where it stands (0.5.5)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -20,6 +20,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | Tables upgrade themselves after new files are deployed (accounts looked lost when 0.5.x files ran on 0.4.x tables); a failure to load accounts is shown as an error | 0.5.2 |
 | Third party from an email | Create third party (core form, prefilled from the address) or Add as contact of the third party using the domain; then add the contact and log the email in one step. Fix: replies quoting collected emails were refused by core's injection filter | 0.5.3 |
 | Web form email | The Reply-To person is treated as the sender when it differs from From: list ("X via site"), reading pane, project suggestion, filing, Create third party, Reply; form mail sent as the user's own address is logged as received | 0.5.4 |
+| Fixes | The message list updates as soon as an email is filed from the reading pane | 0.5.5 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
