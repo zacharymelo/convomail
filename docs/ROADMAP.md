@@ -44,6 +44,7 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Response-time report per user and per customer.
 
 ### Smaller items
+- AI writing tools in compose: when core's AI module is enabled, offer its email text generation and enhancement on the compose page, as core's Send by email form does (`FormAi::getSectionForAIEnhancement('textgenerationemail', …)` on the message body, prompts and provider from the AI module setup). Added by the owner (2026-10-23).
 - Publishing Dolibarr contacts to other address books (LDAP via core's LDAP module, or Google / Microsoft 365 contacts): discussed and parked by the owner (2026-10-23).
 - Search across folders, and Gmail's own search syntax (`X-GM-RAW`) for fast text search on Gmail.
 - Save drafts to the IMAP Drafts folder.
