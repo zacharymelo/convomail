@@ -12,7 +12,7 @@
  * \ingroup convomail
  * \brief   One message on its own page (phones, direct links) and the full "Log to..." form
  *
- * GET parameters: accountid, folder, uid, showimages, action (log)
+ * GET parameters: accountid, folder, uid, showimages, action (log), newthirdparty (back from core's third party form)
  */
 
 $res = 0;
@@ -38,6 +38,11 @@ $accountid  = GETPOSTINT('accountid');
 $folder     = GETPOST('folder', 'restricthtml');
 $uid        = GETPOSTINT('uid');
 $action     = GETPOST('action', 'aZ09');
+// Back from core's third party form: a flag, not an action, because core redirects there without a token
+// and CSRF level 3 (MAIN_SECURITY_CSRF_WITH_TOKEN) refuses any GET action without one
+if ($action === '' && GETPOSTINT('newthirdparty')) {
+	$action = 'thirdpartycreated';
+}
 $showimages = GETPOSTINT('showimages');
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read')) {

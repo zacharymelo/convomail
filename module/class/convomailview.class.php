@@ -113,7 +113,7 @@ class ConvomailView
 
 	/**
 	 * Core "new third party" form prefilled from an address, coming back to the message afterwards
-	 * (message.php, action=thirdpartycreated; core adds &socid=<new id>). A company domain gives the company name
+	 * (message.php, newthirdparty=1; core adds &socid=<new id>). A company domain gives the company name
 	 * and website; a public mail service (Gmail...) gives the person's name.
 	 *
 	 * @param  ConvomailAccount               $account Account
@@ -134,7 +134,7 @@ class ConvomailView
 			$params['url'] = 'https://'.preg_replace('/^(mail|smtp|email|mx)\./', '', $domain);
 		}
 		$params['backtopage'] = dol_buildpath('/convomail/message.php', 1).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid)
-			.'&action=thirdpartycreated&addr='.urlencode($person['email']).'&addrname='.urlencode($person['name']);
+			.'&newthirdparty=1&addr='.urlencode($person['email']).'&addrname='.urlencode($person['name']);
 		return DOL_URL_ROOT.'/societe/card.php?'.http_build_query($params);
 	}
 
