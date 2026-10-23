@@ -481,7 +481,7 @@ if (empty($accounts)) {
 $accountoptions = array();
 $defaultaccountid = 0;
 foreach ($accounts as $acc) {
-	$accountoptions[$acc->id] = ($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).($acc->isShared() ? ' ('.$langs->transnoentitiesnoconv('ConvomailShared').')' : '');
+	$accountoptions[$acc->id] = $acc->choiceLabel();
 	if (!$defaultaccountid) {
 		$defaultaccountid = $acc->id;	// own default account first, see fetchAllUsableBy()
 	}

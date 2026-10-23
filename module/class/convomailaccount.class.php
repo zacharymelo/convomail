@@ -684,6 +684,24 @@ class ConvomailAccount extends CommonObject
 	}
 
 	/**
+	 * Name and address of the account for a dropdown, e.g. "Sales Team — sales@example.com (shared)".
+	 * No angle brackets: Dolibarr's dropdowns render option text as HTML, where "<sales@...>" would vanish as a tag.
+	 *
+	 * @return string Plain text (escape before printing)
+	 */
+	public function choiceLabel()
+	{
+		global $langs;
+
+		$label = trim((string) $this->label);
+		$out = ($label !== '' && strcasecmp($label, (string) $this->email) !== 0) ? $label.' — '.$this->email : (string) $this->email;
+		if ($this->isShared()) {
+			$out .= ' ('.$langs->transnoentitiesnoconv('ConvomailShared').')';
+		}
+		return $out;
+	}
+
+	/**
 	 * Page where the account is managed: the owner's Mail accounts tab, or the admin dashboard for a shared mailbox
 	 *
 	 * @return string Relative URL

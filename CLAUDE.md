@@ -93,6 +93,7 @@ Only when asked:
 - Test collectors and the OAuth path on the dev stack: `dev/oauth/start.sh`, then turn on PHP-IMAP from Shared mail accounts.
 
 **Other**
+- Dolibarr's searchable dropdowns (select2, via `$form->selectarray()`) render option text as HTML: `Name <address>` loses the address as an unknown tag. Use `ConvomailAccount::choiceLabel()` ("Name — address") for account choices.
 - Core's WAF (`waf.inc.php`) refuses a whole POST when a value contains `<style`, `<script`, `<iframe`, `on…=` handlers or `=data:`. Anything Convomail puts into the compose editor (quotes, templates) must go through `ConvomailRenderer::purify()` first. The refusal page hides `paramkey` / `paramvalue` in an HTML comment: view the page source to see which field.
 - Core's `ajax_autocompleter()` fills one hidden id field; for address lists use jQuery UI `autocomplete()` directly in multi-value mode (`js/convomail-compose.js`), and trim trailing separators server-side.
 - Module CSS/JS passed to `llxHeader()` is linked without a version, so browsers keep the old file after an upgrade. Pages pass `convomail_assets(...)` as the `$head` argument instead (version = file time).

@@ -207,10 +207,10 @@ $accountstatic = new ConvomailAccount($db);
 $myaccounts = $accountstatic->fetchAllUsableBy($user, true);
 $options = array();
 foreach (is_array($myaccounts) ? $myaccounts : array() as $acc) {
-	$options[$acc->id] = ($acc->label ? $acc->label.' <'.$acc->email.'>' : $acc->email).($acc->isShared() ? ' ('.$langs->transnoentitiesnoconv('ConvomailShared').')' : '');
+	$options[$acc->id] = $acc->choiceLabel();
 }
 if (!isset($options[$account->id])) {
-	$options[$account->id] = $account->email;
+	$options[$account->id] = $account->choiceLabel();
 }
 
 $selfbase = $_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($folder);
