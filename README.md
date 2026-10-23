@@ -105,7 +105,7 @@ Go to **Home → Setup → Modules → Convomail → Setup** (or **Home → Setu
 | Add the user's signature | On by default. Inserts the signature from the user card when composing. |
 | Request read receipts by default | Ticks "Request a read receipt" on the compose page. Users can untick it per message. |
 | Open tracking | Off by default. Adds an invisible image to sent messages and logs opens. See [Read receipts and open tracking](#read-receipts-and-open-tracking) before enabling. |
-| Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. |
+| Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. While it is on, each user's exchanges with their mail server are also recorded (passwords masked, but message text included), and `ajax/debug.php?mode=imaptrace` shows your last 8 requests. Turn it off when done. |
 
 Each user then adds an account: **user card → Mail accounts → Add a mail account**. With Gmail, use an app password. The Gmail and Microsoft 365 presets tick **Server saves sent mail itself**, because those servers keep their own copy of what you send; for other servers leave it unticked so Convomail stores the copy.
 

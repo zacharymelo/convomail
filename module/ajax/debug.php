@@ -21,6 +21,7 @@
  *   sql       — Read-only diagnostic query (?mode=sql&q=SELECT...)
  *   hooks     — Registered hook contexts
  *   imap      — How a folder of your default mail account is ordered (?mode=imap&folder=INBOX)
+ *   imaptrace — Your last IMAP exchanges with the mail server (recorded while Debug mode is on)
  *   all       — Every diagnostic except sql
  */
 
@@ -67,7 +68,7 @@ print "Timestamp: ".date('Y-m-d H:i:s T')."\n";
 print "Dolibarr: ".(defined('DOL_VERSION') ? DOL_VERSION : 'unknown')."\n";
 print "PHP: ".PHP_VERSION."\n";
 print "Mode: $mode\n";
-print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|imap|all\n";
+print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|imap|imaptrace|all\n";
 print str_repeat('=', 60)."\n\n";
 
 if ($mode === 'overview' || $run_all) {
@@ -212,6 +213,24 @@ if ($mode === 'imap') {
 		$client->close();
 	}
 	print "\n";
+}
+
+if ($mode === 'imaptrace') {
+	print "--- IMAP TRACE: your last 8 requests, newest first (passwords are masked by the IMAP library; long server lines are cut) ---\n";
+	dol_include_once('/convomail/class/hordemailboxclient.class.php');
+	$file = ConvomailHordeMailboxClient::traceFile(true);
+	$text = is_readable($file) ? (string) file_get_contents($file) : '';
+	$requests = preg_split('/\n(?====)/', trim($text));
+	$requests = array_reverse(array_slice(array_filter($requests), -8));
+	if (empty($requests)) {
+		print "Nothing recorded yet. Repeat the action in the mailbox, then reload this page.\n";
+	}
+	foreach ($requests as $request) {
+		foreach (explode("\n", $request) as $line) {
+			print (strlen($line) > 300 ? substr($line, 0, 300).' [...]' : $line)."\n";
+		}
+		print "\n";
+	}
 }
 
 if ($mode === 'hooks' || $run_all) {

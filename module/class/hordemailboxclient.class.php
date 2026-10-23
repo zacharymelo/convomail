@@ -80,17 +80,56 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				break;
 		}
 
-		$this->imap = new Horde_Imap_Client_Socket(array(
+		$params = array(
 			'username' => $this->account->login,
 			'password' => $this->account->getPassword(),
 			'hostspec' => $this->account->imap_host,
 			'port'     => (int) $this->account->imap_port,
 			'secure'   => $secure,
 			'timeout'  => 15,
-		));
+		);
+		$trace = self::traceFile();
+		if ($trace !== '') {
+			$params['debug'] = $trace;
+		}
+		$this->imap = new Horde_Imap_Client_Socket($params);
 		$this->imap->login();
 
 		return $this->imap;
+	}
+
+	/**
+	 * IMAP protocol trace of the current user, written while Debug mode is on, for ajax/debug.php?mode=imaptrace.
+	 * Horde masks the password and login exchange, but fetched message text is in it, so it is admin-only and
+	 * limited to the last few requests.
+	 *
+	 * @param  bool   $forRead Only return the path, without starting a request header
+	 * @return string          File path, '' when Debug mode is off
+	 */
+	public static function traceFile($forRead = false)
+	{
+		global $conf, $user;
+
+		if (!getDolGlobalInt('CONVOMAIL_DEBUG_MODE') || empty($conf->convomail->dir_output)) {
+			return '';
+		}
+		$userid = is_object($user) ? (int) $user->id : 0;
+		$dir = $conf->convomail->dir_output.'/temp';
+		dol_mkdir($dir);
+		$file = $dir.'/imap-trace-'.((int) $userid).'.log';
+
+		static $started = array();
+		if (!$forRead && empty($started[$file])) {
+			// One header per request; start over once the file is large
+			$started[$file] = true;
+			$mode = (@filesize($file) > 512 * 1024) ? 'w' : 'a';
+			if ($fh = @fopen($file, $mode)) {
+				fwrite($fh, "\n=== ".dol_print_date(dol_now(), 'standard', 'gmt')." UTC ".preg_replace('/^.*\/convomail\//', '', (string) ($_SERVER['SCRIPT_NAME'] ?? 'cli'))
+					.(empty($_POST['action']) ? '' : ' action='.preg_replace('/[^a-z]/', '', (string) $_POST['action']))." ===\n");
+				fclose($fh);
+			}
+		}
+		return $file;
 	}
 
 	/**
