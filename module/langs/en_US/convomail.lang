@@ -204,3 +204,6 @@ ConvomailAddAsContact = Add as a contact
 ConvomailLogThisEmailOn = Log this email on %s
 ConvomailContactAdded = %s added as a contact.
 
+# Web form mail (sender in Reply-To)
+ConvomailReplyTo = Reply to
+ConvomailVia = via %s

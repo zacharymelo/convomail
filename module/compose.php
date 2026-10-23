@@ -174,7 +174,8 @@ if ($action == '') {
 				return !in_array($a['email'], $myemails, true);
 			}));
 		};
-		$fromme = $srcmessage['from'] && in_array($srcmessage['from'][0]['email'], $myemails, true);
+		// Sent by the user, unless a web form sent it as the user on behalf of someone in Reply-To
+		$fromme = $srcmessage['from'] && in_array($srcmessage['from'][0]['email'], $myemails, true) && empty(ConvomailMatcher::replyToOthers($srcmessage));
 
 		if ($mode === 'reply') {
 			// Our own message: follow up to its recipients. Theirs: Reply-To, else From.

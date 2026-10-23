@@ -174,6 +174,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 - **Messages without a Message-ID** get a stable stand-in, `convomail-<account id>-<md5(folder|uid|date)>@local` (`ConvomailView::msgid()`).
 - **IMAP identity of a message** is account + folder + UID. UIDs are only stable within a folder; moving a message changes them.
 - **List order** is UID descending, which is arrival order in that folder on every server. A message moved or copied into a folder (for example back from Archive) counts as newly arrived.
+- **Effective sender:** `ConvomailMatcher::senders()` = the Reply-To people when they differ from From (`replyToOthers()`; servers copy From into an absent Reply-To), else From. Used for the list row ("X via Y"), `correspondent()`, the resolver's suggestion, and to decide that mail From the user but answering someone else is received (logging, Reply). `otherAddresses()` includes Reply-To, so filing links the visitor's contact and third party.
 - **Folder roles:** `inbox`, `sent`, `drafts`, `junk`, `trash`, `archive`, or `''`. They come from SPECIAL-USE attributes, then common names (`ConvomailHordeMailboxClient::folderRole()`). Archive and Trash are created when missing.
 - **Project match strengths** (`ConvomailProjectResolver`): `logged` > `thread` > `code` > `suggested`. Only `thread` and `code` are filed automatically.
 

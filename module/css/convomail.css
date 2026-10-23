@@ -62,6 +62,7 @@
 .cm-row-main:hover { text-decoration: none; }
 .cm-row-top { display: flex; justify-content: space-between; gap: 8px; }
 .cm-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-via { font-weight: normal; font-size: .85em; color: var(--cm-muted); }
 .cm-date { color: var(--cm-muted); font-size: .85em; white-space: nowrap; }
 .cm-row-subject { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95em; }
 .cm-snippet { color: var(--cm-muted); }

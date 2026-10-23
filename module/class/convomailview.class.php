@@ -79,7 +79,7 @@ class ConvomailView
 	public static function otherAddresses(array $message, array $myemails)
 	{
 		$out = array();
-		foreach (array('from', 'to', 'cc') as $k) {
+		foreach (array('reply_to', 'from', 'to', 'cc') as $k) {
 			foreach ($message[$k] ?? array() as $a) {
 				if (!in_array($a['email'], $myemails, true)) {
 					$out[] = $a['email'];
@@ -98,7 +98,8 @@ class ConvomailView
 	 */
 	public static function correspondent(array $message, array $myemails)
 	{
-		$from = $message['from'][0] ?? null;
+		// A form or no-reply sender with the visitor in Reply-To: the person is the visitor
+		$from = ConvomailMatcher::senders($message)[0] ?? null;
 		if ($from && !in_array(strtolower($from['email']), $myemails, true)) {
 			return $from;
 		}
@@ -184,6 +185,8 @@ class ConvomailView
 
 		$myemails = self::myEmails($db, $user, $account);
 		$fromemail = $message['from'] ? $message['from'][0]['email'] : '';
+		// From one of the user's addresses but answering to someone else (a web form sending as the user): received
+		$outgoing = in_array($fromemail, $myemails, true) && empty(ConvomailMatcher::replyToOthers($message));
 
 		$logger = new ConvomailLogger($db);
 		$eventid = $logger->logReceived($user, $account, array(
@@ -195,7 +198,7 @@ class ConvomailView
 			'to'          => convomail_format_addresses($message['to'], true),
 			'cc'          => convomail_format_addresses($message['cc'], true),
 			'date'        => $message['date'],
-			'outgoing'    => in_array($fromemail, $myemails, true),
+			'outgoing'    => $outgoing,
 			'socid'       => (int) $socid,
 			'contactids'  => $contactids,
 			'projectid'   => (int) $projectid,
@@ -348,6 +351,10 @@ class ConvomailView
 		$h .= '<div class="cm-meta">';
 		$h .= '<div class="cm-meta-from"><span class="cm-meta-label">'.$langs->trans('MailFrom').'</span> '.self::addressesHtml($db, $message['from'], $matched);
 		$h .= '<span class="cm-meta-date">'.($message['date'] ? dol_print_date($message['date'], 'dayhour', 'tzuserrel') : '').'</span></div>';
+		$replyto = ConvomailMatcher::replyToOthers($message);
+		if (!empty($replyto)) {
+			$h .= '<div class="cm-meta-replyto"><span class="cm-meta-label">'.$langs->trans('ConvomailReplyTo').'</span> '.self::addressesHtml($db, $replyto, $matched).'</div>';
+		}
 		$h .= '<div><span class="cm-meta-label">'.$langs->trans('MailTo').'</span> '.self::addressesHtml($db, $message['to'], $matched).'</div>';
 		if (!empty($message['cc'])) {
 			$h .= '<div><span class="cm-meta-label">'.$langs->trans('MailCC').'</span> '.self::addressesHtml($db, $message['cc'], $matched).'</div>';

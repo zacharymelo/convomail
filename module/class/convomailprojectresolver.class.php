@@ -18,6 +18,7 @@
  *  code      its In-Reply-To / References carry a Dolibarr Message-ID with "-proj<id>@"
  *  suggested the correspondent's third party has exactly one open project (never filed automatically)
  */
+dol_include_once('/convomail/class/convomailmatcher.class.php');
 
 /**
  * Class ConvomailProjectResolver
@@ -113,8 +114,8 @@ class ConvomailProjectResolver
 				}
 			}
 
-			// Suggestion from the first correspondent who is not the user
-			foreach (array_merge($m['from'] ?? array(), $m['to'] ?? array()) as $a) {
+			// Suggestion from the first correspondent who is not the user (the Reply-To person for web form mail)
+			foreach (array_merge(ConvomailMatcher::senders($m), $m['to'] ?? array()) as $a) {
 				if (in_array($a['email'], $myemails, true)) {
 					continue;
 				}

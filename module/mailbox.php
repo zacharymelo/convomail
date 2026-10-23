@@ -134,7 +134,7 @@ $showto = in_array($currentrole, array('sent', 'drafts'), true);
 $myemails = ConvomailView::myEmails($db, $user, $account);
 $emails = array();
 foreach ($messages as $m) {
-	foreach (array_merge($m['from'], $m['to']) as $a) {
+	foreach (array_merge($m['from'], $m['reply_to'] ?? array(), $m['to']) as $a) {
 		$emails[] = $a['email'];
 	}
 }
@@ -309,7 +309,9 @@ if ($listerror !== '') {
 }
 $todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
 foreach ($messages as $m) {
-	$people = $showto ? $m['to'] : $m['from'];
+	// Web form mail: show the visitor (Reply-To), with the form's address after "via"
+	$via = $showto ? array() : (ConvomailMatcher::replyToOthers($m) ? $m['from'] : array());
+	$people = $showto ? $m['to'] : ConvomailMatcher::senders($m);
 	$r = $resolved[$m['uid']] ?? null;
 	$classes = 'cm-row'.($m['seen'] ? '' : ' unread').($m['uid'] === $openuid ? ' selected' : '').($m['flagged'] ? ' flagged' : '');
 	$href = $selfbase.$listparam.'&uid='.((int) $m['uid']);
@@ -317,7 +319,11 @@ foreach ($messages as $m) {
 	print '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
 	print '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
 	print '<a class="cm-row-main" href="'.dol_escape_htmltag($href).'">';
-	print '<span class="cm-row-top"><span class="cm-from">'.dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender')).'</span>';
+	print '<span class="cm-row-top"><span class="cm-from">'.dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
+	if (!empty($via)) {
+		print ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
+	}
+	print '</span>';
 	$isToday = $m['date'] && dol_print_date($m['date'], '%Y%m%d', 'tzuserrel') === $todaykey;
 	print '<span class="cm-date">'.($m['date'] ? dol_print_date($m['date'], $isToday ? '%H:%M' : 'day', 'tzuserrel') : '').'</span></span>';
 	print '<span class="cm-row-subject"><span class="cm-subj">'.dol_escape_htmltag($m['subject'] !== '' ? $m['subject'] : $langs->trans('ConvomailNoSubject')).'</span>';

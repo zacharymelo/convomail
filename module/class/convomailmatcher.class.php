@@ -175,6 +175,41 @@ class ConvomailMatcher
 		return $result;
 	}
 
+	/**
+	 * Reply-To addresses naming someone other than the sender. Mail sent by a website form or a no-reply address
+	 * comes From that address with the visitor in Reply-To. IMAP servers fill an absent Reply-To with the From
+	 * address, which this leaves out.
+	 *
+	 * @param  array<string,mixed> $message Message (from, reply_to)
+	 * @return array<int,array{name:string,email:string}>
+	 */
+	public static function replyToOthers(array $message)
+	{
+		$from = array();
+		foreach ($message['from'] ?? array() as $a) {
+			$from[] = strtolower($a['email']);
+		}
+		$out = array();
+		foreach ($message['reply_to'] ?? array() as $a) {
+			if ($a['email'] !== '' && !in_array(strtolower($a['email']), $from, true)) {
+				$out[] = $a;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Who a message is really from: the Reply-To people when they differ from the sender, else the sender
+	 *
+	 * @param  array<string,mixed> $message Message (from, reply_to)
+	 * @return array<int,array{name:string,email:string}>
+	 */
+	public static function senders(array $message)
+	{
+		$replyto = self::replyToOthers($message);
+		return !empty($replyto) ? $replyto : ($message['from'] ?? array());
+	}
+
 	/** Domains of public mail services: their users are people, not companies */
 	const FREE_MAIL_DOMAINS = array(
 		'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com',
