@@ -649,6 +649,18 @@ class ConvomailAccount extends CommonObject
 	}
 
 	/**
+	 * Host patterns of the "Allowed mail servers" setting. Separated by line breaks, commas or spaces; also by a
+	 * literal "\n": up to 0.8.1 the setup page showed line breaks that way, and saving it again stored them so.
+	 *
+	 * @param  string   $value Setting value
+	 * @return string[]        Lowercase patterns
+	 */
+	public static function allowedHostPatterns($value)
+	{
+		return array_values(array_unique(preg_split('/(?:\\\\[rn]|[\s,;])+/', strtolower(trim((string) $value)), -1, PREG_SPLIT_NO_EMPTY)));
+	}
+
+	/**
 	 * @param  string $host Host name or IP
 	 * @return bool
 	 */
@@ -658,8 +670,7 @@ class ConvomailAccount extends CommonObject
 			return false;
 		}
 
-		$patterns = preg_split('/[\r\n,]+/', getDolGlobalString('CONVOMAIL_ALLOWED_HOSTS'), -1, PREG_SPLIT_NO_EMPTY);
-		$patterns = array_filter(array_map('trim', $patterns));
+		$patterns = self::allowedHostPatterns(getDolGlobalString('CONVOMAIL_ALLOWED_HOSTS'));
 		if (!empty($patterns)) {
 			foreach ($patterns as $pattern) {
 				$regex = '/^'.str_replace('\*', '.*', preg_quote(strtolower($pattern), '/')).'$/';

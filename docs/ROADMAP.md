@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.8.1)
+## Where it stands (0.8.2)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -32,6 +32,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Conversations | Under each message, the rest of its conversation (earlier messages and replies, including those sent and archived) from Inbox, Sent and Archive; per-user **Show conversation** switch | 0.7.0 |
 | AI writing tools | Compose: write from a prompt (replies use the message answered), rephrase, shorten or translate the typed text with core's AI module; signature and quote untouched, Undo | 0.8.0 |
 | Fixes | Replies keep the quote's indent and grey bar, and quoted plain-text mail keeps its line breaks (the editor's content filter dropped them) | 0.8.1 |
+| Fixes | Setup: Allowed mail servers shows one host per line again, and a list broken by an earlier save (literal `\n`) works and is repaired on the next save | 0.8.2 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

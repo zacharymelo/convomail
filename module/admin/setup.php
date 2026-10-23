@@ -42,8 +42,7 @@ if (!$user->admin) {
 $action = GETPOST('action', 'aZ09');
 
 if ($action == 'update') {
-	$hosts = GETPOST('CONVOMAIL_ALLOWED_HOSTS', 'restricthtml');
-	$hosts = implode("\n", array_filter(array_map('trim', preg_split('/[\r\n,]+/', (string) $hosts))));
+	$hosts = implode("\n", ConvomailAccount::allowedHostPatterns(GETPOST('CONVOMAIL_ALLOWED_HOSTS', 'restricthtml')));
 	if (dolibarr_set_const($db, 'CONVOMAIL_ALLOWED_HOSTS', $hosts, 'chaine', 0, '', $conf->entity) > 0) {
 		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
 	} else {
@@ -120,7 +119,7 @@ print '<tr class="oddeven"><td class="titlefield tdtop">'.$langs->trans('Convoma
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="update">';
-print '<textarea name="CONVOMAIL_ALLOWED_HOSTS" rows="5" class="minwidth300">'.dol_escape_htmltag(getDolGlobalString('CONVOMAIL_ALLOWED_HOSTS')).'</textarea><br>';
+print '<textarea name="CONVOMAIL_ALLOWED_HOSTS" rows="5" class="minwidth300">'.dol_escape_htmltag(implode("\n", ConvomailAccount::allowedHostPatterns(getDolGlobalString('CONVOMAIL_ALLOWED_HOSTS'))), 0, 1).'</textarea><br>';
 print '<input type="submit" class="button smallpaddingimp" value="'.$langs->trans('Save').'">';
 print '</form>';
 print '</td><td class="opacitymedium">'.$langs->trans('ConvomailAllowedHostsDesc').'</td></tr>';
