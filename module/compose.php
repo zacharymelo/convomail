@@ -673,7 +673,7 @@ if (isModEnabled('ai') && $editorishtml) {
 	print '<a href="#" id="cm-ai-toggle" class="cm-ai-toggle classfortooltip" title="'.dol_escape_htmltag($langs->trans('ConvomailAiHelp')).'">'.img_picto('', 'ai', 'class="pictofixedwidth"').$langs->trans('ConvomailAiTools').'</a>';
 	print '<div id="cm-ai-panel" class="cm-ai-panel hideobject"';
 	foreach ($aiattrs as $k => $v) {
-		print ' data-'.$k.'="'.dol_escape_htmltag($v).'"';
+		print ' data-'.$k.'="'.dol_escape_htmltag($v, 0, 1).'"';	// keep line breaks (else they become a literal \n)
 	}
 	print '>';
 	print '<div class="cm-ai-write"><textarea id="cm-ai-prompt" rows="2" class="centpercent" placeholder="'.dol_escape_htmltag($langs->trans($aiattrs['mode'] === 'new' ? 'ConvomailAiPromptNew' : 'ConvomailAiPromptReply')).'"></textarea>';

@@ -119,5 +119,6 @@ Only when asked:
 - Every endpoint that touches a mailbox goes through `convomail_get_usable_account()`.
 - Writes are POST with a CSRF token; JSON endpoints return `{ok, message, ...}`.
 - Production runs `MAIN_SECURITY_CSRF_WITH_TOKEN=3`: every GET with an `action` (except create, edit, presend… see main.inc.php) needs `&token=`. Links we print carry `newToken()`; URLs core redirects to (`backtopage`) cannot, so they use a flag parameter instead of `action` (e.g. `newthirdparty=1`). Test such flows with level 3 on.
+- `dol_escape_htmltag($s)` turns line breaks into a literal `\n`: pass `keepn` (`dol_escape_htmltag($s, 0, 1)`) for textareas and multi-line `data-*` attributes, or saving the form back stores the `\n` text.
 - Strings go in `langs/en_US/convomail.lang`. CSS uses Dolibarr theme variables, so dark themes work.
 - Comments explain why, not what. Match the surrounding density.
