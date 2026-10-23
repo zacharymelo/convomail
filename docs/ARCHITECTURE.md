@@ -327,6 +327,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 
 ## 8. Registration: rights, menus, tabs, hooks, settings
 
+- **Schema version:** `CONVOMAIL_DB_VERSION` (entity 0) records the version the tables are at. `modConvomail::upgradeSchema()` runs `sql/` (create missing tables and keys, then `update_*.sql`; changes already applied are skipped) on activation. `ConvomailAccount::checkSchema()`, run once per request from the account constructor, calls it when the files are newer, so deploying files without disable/enable is safe.
 - **Module:** ID `194282` (reserved range 194281–194309), family crm. Depends on `modSociete`, `modAgenda`, `modFckeditor`. PHP ≥ 8.1, Dolibarr ≥ 20 (tested on 23.0).
 - **Rights:**
 

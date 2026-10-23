@@ -45,7 +45,7 @@ docker compose up -d
 
 Only when asked:
 1. `python3 bin/build.py X.Y.Z` sets the version in the descriptor and the trigger, runs composer and writes `bin/module_convomail-X.Y.Z.zip` with `convomail/` as the top folder. Zips are git-ignored.
-2. Add an `update_X.Y.Z.sql` for any schema change. Fresh installs read the `llx_*.sql` files; upgrades read the `update_*.sql` files. Both must work: test enabling on a scratch database.
+2. Add an `update_X.Y.Z.sql` for any schema change. Fresh installs read the `llx_*.sql` files; upgrades read the `update_*.sql` files. Both must work: test enabling on a scratch database. The schema upgrades itself on the first request after files change (`ConvomailAccount::checkSchema()` compares `CONVOMAIL_DB_VERSION` with the module version), so every statement must be safe to run again.
 3. Update README (features, Upgrading, Roadmap), docs/ROADMAP.md and, if structure changed, docs/ARCHITECTURE.md.
 4. Commit as `vX.Y.Z: <summary>`, push, then `gh release create vX.Y.Z bin/module_convomail-X.Y.Z.zip`.
 

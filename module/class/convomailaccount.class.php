@@ -97,6 +97,29 @@ class ConvomailAccount extends CommonObject
 	public function __construct(DoliDB $db)
 	{
 		$this->db = $db;
+		self::checkSchema($db);
+	}
+
+	/**
+	 * Upgrade the tables once if the files are newer than the database (see modConvomail::upgradeSchema())
+	 *
+	 * @param  DoliDB $db Database handler
+	 * @return void
+	 */
+	public static function checkSchema($db)
+	{
+		static $checked = false;
+
+		if ($checked || !isModEnabled('convomail')) {
+			return;
+		}
+		$checked = true;
+		dol_include_once('/convomail/core/modules/modConvomail.class.php');
+		$module = new modConvomail($db);
+		if (getDolGlobalString('CONVOMAIL_DB_VERSION') !== $module->version) {
+			dol_syslog(__METHOD__.' tables at '.getDolGlobalString('CONVOMAIL_DB_VERSION', 'unknown').', files at '.$module->version.': upgrading', LOG_NOTICE);
+			$module->upgradeSchema();
+		}
 	}
 
 	/**
@@ -316,9 +339,12 @@ class ConvomailAccount extends CommonObject
 		$list = array();
 		while ($obj = $this->db->fetch_object($resql)) {
 			$acc = new ConvomailAccount($this->db);
-			if ($acc->fetch((int) $obj->rowid) > 0) {
-				$list[] = $acc;
+			if ($acc->fetch((int) $obj->rowid) < 0) {
+				// Never show an account that failed to load as missing
+				$this->error = $acc->error ?: $this->db->lasterror();
+				return -1;
 			}
+			$list[] = $acc;
 		}
 		return $list;
 	}

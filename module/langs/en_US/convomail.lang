@@ -193,3 +193,4 @@ ConvomailOAuthScopesMicrosoft = Microsoft app: type "Microsoft Exchange Online [
 ConvomailOAuthRedirectUri = Redirect URL
 ConvomailOAuthRedirectUriDesc = Add this exact URL to the app's redirect URIs at Google (Credentials) or Microsoft (App registration - Authentication, platform Web).
 ConvomailRecentAddress = Recent correspondent
+ConvomailAccountsLoadError = Your mail accounts could not be loaded (%s). An administrator can disable and enable the Convomail module to repair its tables.

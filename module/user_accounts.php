@@ -360,8 +360,9 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	</script>';
 } else {
 	$list = $account->fetchAllForUser($object->id);
+	$listerror = '';
 	if (!is_array($list)) {
-		dol_print_error($db, $account->error);
+		$listerror = $account->error;
 		$list = array();
 	}
 
@@ -381,7 +382,9 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print '<td></td>';
 	print '</tr>';
 
-	if (empty($list)) {
+	if ($listerror !== '') {
+		print '<tr class="oddeven"><td colspan="8"><div class="error">'.$langs->trans('ConvomailAccountsLoadError', dol_escape_htmltag($listerror)).'</div></td></tr>';
+	} elseif (empty($list)) {
 		print '<tr class="oddeven"><td colspan="8"><span class="opacitymedium">'.$langs->trans('ConvomailNoAccount').'</span></td></tr>';
 	}
 	$oauth = new ConvomailOAuth($db);

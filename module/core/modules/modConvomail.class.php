@@ -219,8 +219,7 @@ class modConvomail extends DolibarrModules
 	 */
 	public function init($options = '')
 	{
-		$result = $this->_load_tables('/convomail/sql/');
-		if ($result < 0) {
+		if ($this->upgradeSchema() < 0) {
 			return -1;
 		}
 
@@ -232,6 +231,26 @@ class modConvomail extends DolibarrModules
 		$this->delete_menus();
 
 		return $this->_init($sql, $options);
+	}
+
+	/**
+	 * Bring the database to the version of the files: create missing tables and indexes, run the update_*.sql
+	 * files (each change already applied is skipped). Called on activation, and by ConvomailAccount when new
+	 * files were deployed without disabling and enabling the module, which would otherwise leave the tables
+	 * behind the code (accounts then fail to load and look lost).
+	 *
+	 * @return int 1 if OK, -1 if KO
+	 */
+	public function upgradeSchema()
+	{
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+		if ($this->_load_tables('/convomail/sql/') <= 0) {
+			return -1;
+		}
+		// Schema is shared by all entities
+		dolibarr_set_const($this->db, 'CONVOMAIL_DB_VERSION', $this->version, 'chaine', 0, 'Convomail tables are at this version', 0);
+		return 1;
 	}
 
 	/**

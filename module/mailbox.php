@@ -67,6 +67,14 @@ if ($accountid > 0 && !$account) {
 
 llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convomail/js/convomail.js')), $langs->trans('Mailbox'), '', '', 0, 0, '', '', '', 'mod-convomail page-mailbox');
 
+if (!$account && (new ConvomailAccount($db))->countForUser($user->id) > 0) {
+	// The user has accounts, but none could be loaded: say so instead of "no account yet"
+	print load_fiche_titre($langs->trans('Mailbox'), '', 'email');
+	print '<div class="error">'.$langs->trans('ConvomailAccountsLoadError', dol_escape_htmltag($db->lasterror())).'</div>';
+	llxFooter();
+	$db->close();
+	exit;
+}
 if (!$account) {
 	print load_fiche_titre($langs->trans('Mailbox'), '', 'email');
 	print '<div class="warning">'.$langs->trans('ConvomailNoAccountYet').' ';
