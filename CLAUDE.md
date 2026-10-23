@@ -84,6 +84,7 @@ Only when asked:
 - Call `convomail_release_session()` before slow mail-server work in any new page: PHP serialises a user's requests on the session lock.
 
 **Other**
+- Core's WAF (`waf.inc.php`) refuses a whole POST when a value contains `<style`, `<script`, `<iframe`, `on…=` handlers or `=data:`. Anything Convomail puts into the compose editor (quotes, templates) must go through `ConvomailRenderer::purify()` first. The refusal page hides `paramkey` / `paramvalue` in an HTML comment: view the page source to see which field.
 - Core's `ajax_autocompleter()` fills one hidden id field; for address lists use jQuery UI `autocomplete()` directly in multi-value mode (`js/convomail-compose.js`), and trim trailing separators server-side.
 - Module CSS/JS passed to `llxHeader()` is linked without a version, so browsers keep the old file after an upgrade. Pages pass `convomail_assets(...)` as the `$head` argument instead (version = file time).
 - A fixed-height CSS grid or flex column needs `minmax(0, 1fr)` rows / `min-height: 0` children, or panes grow with their content and can't scroll.

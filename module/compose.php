@@ -231,12 +231,15 @@ if ($action == '') {
 		$basesubject = $replyevent->email_subject ? $replyevent->email_subject : $replyevent->label;
 		$subject = preg_match('/^(re|aw|sv):/i', $basesubject) ? $basesubject : 'Re: '.$basesubject;
 		$intro = $langs->trans('ConvomailOnDateWrote', dol_print_date($replyevent->datep, 'dayhour'), $replyevent->email_from);
+		// Events logged by other tools (Email Collector, core's send form) keep the original HTML, with <style> and
+		// event handlers: clean it like a mailbox quote, or core's injection filter refuses the whole form on send
+		$quotedevent = ConvomailRenderer::purify((string) $replyevent->note_private);
 		if ($editorishtml) {
 			$message = '<br><br><div class="convomail-quote">'.dol_escape_htmltag($intro).'</div>';
-			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$replyevent->note_private.'</blockquote>';
+			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$quotedevent.'</blockquote>';
 		} else {
 			// Plain textarea: quote as text, so the reply is sent as text with its line breaks
-			$quoted = dol_string_nohtmltag($replyevent->note_private, 2);
+			$quoted = dol_string_nohtmltag($quotedevent, 2);
 			$message = "\n\n".$intro."\n> ".str_replace("\n", "\n> ", trim($quoted));
 		}
 		$socid = $socid ?: (int) $replyevent->socid;

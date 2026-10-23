@@ -48,6 +48,7 @@ require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
 dol_include_once('/convomail/lib/convomail.lib.php');
+dol_include_once('/convomail/class/convomailrenderer.class.php');
 
 top_httphead('application/json');
 
@@ -104,6 +105,8 @@ if (!dol_textishtml($body)) {
 	$body = dol_nl2br(dol_escape_htmltag($body, 0, 1));
 }
 $body = make_substitutions($body, $substitutions, $langs);
+// A template with <style> or scripts would make core's injection filter refuse the compose form on send
+$body = ConvomailRenderer::purify($body, true);
 
 print json_encode(array('ok' => true, 'subject' => $subject, 'body' => $body));
 $db->close();

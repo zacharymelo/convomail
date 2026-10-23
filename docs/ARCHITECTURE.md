@@ -377,7 +377,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   2. the result is shown in `<iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox">`, with no `allow-scripts`;
   3. a CSP inside the frame allows only inline styles and images from `data:` and this Dolibarr (plus https/http when images are allowed).
 - **Attachments:** always `Content-Disposition: attachment`, except raster images requested inline; `X-Content-Type-Options: nosniff`; `Content-Security-Policy: default-src 'none'; sandbox`. Part ids are validated (`^[0-9]+(\.[0-9]+)*$`).
-- **Outgoing HTML:** rich editor → `restricthtml`; plain textarea → `htmlspecialchars`.
+- **Outgoing HTML:** rich editor → `restricthtml`; plain textarea → `htmlspecialchars`. HTML prefilled into the editor (quoted mailbox messages, quoted agenda events, templates) is purified first; otherwise core's injection filter refuses the send.
 - **SSRF:** `checkHostAllowed()` on save and before every send, so a user can't point the server at internal hosts.
 - **Secrets:** passwords are encrypted with `dolEncrypt()`, OAuth tokens by `DoliStorage` (also `dolEncrypt()`). SMTP settings live in memory only for one send. `ajax/debug.php` refuses SQL that mentions `pass_crypted`, prints only a token's expiry, and the IMAP trace passes through `ConvomailTraceMaskFilter`, which replaces XOAUTH2 credentials with `[TOKEN]` (Horde masks only passwords).
 - **OAuth:** the consent state is a random nonce in the session, single use, checked with `hash_equals()`, and tied to an account the signed-in user owns. Only the owner can connect an account.
