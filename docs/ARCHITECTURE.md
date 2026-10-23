@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.7.0**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.8.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -211,6 +211,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    - `accountid` + `folder` + `uid` + `mode=reply|replyall|forward` (a mailbox message).
 
    Signature (`$user->signature`) when `CONVOMAIL_ADD_SIGNATURE`. Templates via `ajax/template.php`, project chips via `ajax/projectcontacts.php`, address suggestions in To / Cc / Bcc via `ajax/addresses.php` (jQuery UI autocomplete, multi-address).
+
+   **AI writing tools** (core AI module enabled, rich editor): a panel posting to core's `ai/ajax/generate_content.php` (JSON `format=html`, `function` = `textgenerationemail` | `textrephraser` | `textsummarize` | `texttranslation`; core's prompts, service and model). `js/convomail-compose.js` `splitBody()` cuts the editor content at the first top-level block that is the signature (`-- `), a blockquote, or the quote intro (`data-intro`); only the part above is sent and replaced. Write adds that draft, and for replies/forwards the quoted message as text (`data-quote`, 8,000 characters at most). `cleanAiHtml()` drops code fences, a whole-body `<section>`, scripts, styles, event handlers and `style` attributes, so core's injection filter accepts the send. Core answers 200 with an error text when the provider is unreachable (UPSTREAM item 15): answers starting with core's error texts are shown as errors. **Undo** restores the editor content from before the change (CKEditor's own undo can't step over `setData()`).
 2. POST `action=send`:
    - the account must be the user's own and enabled;
    - the body is read with `restricthtml` (rich editor) or raw and escaped (plain textarea);

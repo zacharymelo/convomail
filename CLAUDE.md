@@ -53,7 +53,8 @@ Only when asked:
 
 **Optional modules**
 - Document Browser (`docbrowser`, repo `../doli-docbrowser`, mounted in the dev stack) is used only when `isModEnabled('docbrowser')` and its class loads. Never make Convomail depend on it. Its keys are re-checked on send with `DocBrowserService::resolve()`; never accept a path from the form.
-- CKEditor drops the `convomail-signature` class from the signature div, so code that looks for the signature also matches the "-- " line (`convomail_insert_before_signature()`).
+- CKEditor drops the `convomail-signature` / `convomail-quote` classes and even the reply's `<blockquote>`, so code that looks for the signature or quote matches the "-- " line and the quote intro text (`convomail_insert_before_signature()`, `splitBody()` in `js/convomail-compose.js`). `$intro` is plain text (`transnoentitiesnoconv`), escaped once where it goes into HTML.
+- Core's AI endpoint answers HTTP 200 with "Error returned by API call: …" when the provider is unreachable. Test the AI tools with a fake OpenAI-compatible server and `AI_API_SERVICE=custom` (`AI_API_CUSTOM_URL`, `AI_API_CUSTOM_KEY`).
 
 **Module descriptor**
 - Tab label syntax: `Label,ClassName,/path/file.class.php,method`. The second item is the class, not an icon.

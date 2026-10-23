@@ -175,6 +175,18 @@ if ($action == '') {
 	$trackopens = ($trackingavailable && GETPOSTINT('track_opens')) ? 1 : 0;
 }
 
+// The line introducing a quoted message, plain text (escaped where it goes into HTML)
+$intro = '';
+if ($srcmessage) {
+	$fromtext = convomail_format_addresses($srcmessage['from'], true);
+	$intro = ($mode === 'forward')
+		? $langs->transnoentitiesnoconv('ConvomailForwardedHeader', $fromtext, dol_print_date($srcmessage['date'], 'dayhour'), $srcmessage['subject'])
+		: $langs->transnoentitiesnoconv('ConvomailOnDateWrote', dol_print_date($srcmessage['date'], 'dayhour'), $fromtext);
+} elseif ($replyevent) {
+	$intro = $langs->transnoentitiesnoconv('ConvomailOnDateWrote', dol_print_date($replyevent->datep, 'dayhour'), $replyevent->email_from);
+}
+$quotedhtml = '';
+
 if ($action == '') {
 	if ($srcmessage) {
 		$myemails = array();
@@ -204,10 +216,6 @@ if ($action == '') {
 			$subject = preg_match('/^(re|aw|sv):/i', $basesubject) ? $basesubject : 'Re: '.$basesubject;
 		}
 
-		$fromtext = convomail_format_addresses($srcmessage['from'], true);
-		$intro = ($mode === 'forward')
-			? $langs->trans('ConvomailForwardedHeader', $fromtext, dol_print_date($srcmessage['date'], 'dayhour'), $srcmessage['subject'])
-			: $langs->trans('ConvomailOnDateWrote', dol_print_date($srcmessage['date'], 'dayhour'), $fromtext);
 		$quotedhtml = $srcrenderer->cleanBody(false, true);
 		if ($editorishtml) {
 			$message = '<br><br><div class="convomail-quote">'.dol_escape_htmltag($intro).'</div>';
@@ -243,16 +251,15 @@ if ($action == '') {
 		$sendtocc = $sentbyme ? $replyevent->email_tocc : '';
 		$basesubject = $replyevent->email_subject ? $replyevent->email_subject : $replyevent->label;
 		$subject = preg_match('/^(re|aw|sv):/i', $basesubject) ? $basesubject : 'Re: '.$basesubject;
-		$intro = $langs->trans('ConvomailOnDateWrote', dol_print_date($replyevent->datep, 'dayhour'), $replyevent->email_from);
 		// Events logged by other tools (Email Collector, core's send form) keep the original HTML, with <style> and
 		// event handlers: clean it like a mailbox quote, or core's injection filter refuses the whole form on send
-		$quotedevent = ConvomailRenderer::purify((string) $replyevent->note_private);
+		$quotedhtml = ConvomailRenderer::purify((string) $replyevent->note_private);
 		if ($editorishtml) {
 			$message = '<br><br><div class="convomail-quote">'.dol_escape_htmltag($intro).'</div>';
-			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$quotedevent.'</blockquote>';
+			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$quotedhtml.'</blockquote>';
 		} else {
 			// Plain textarea: quote as text, so the reply is sent as text with its line breaks
-			$quoted = dol_string_nohtmltag($quotedevent, 2);
+			$quoted = dol_string_nohtmltag($quotedhtml, 2);
 			$message = "\n\n".$intro."\n> ".str_replace("\n", "\n> ", trim($quoted));
 		}
 		$socid = $socid ?: (int) $replyevent->socid;
@@ -642,6 +649,52 @@ if ($trackingavailable) {
 	print $form->textwithpicto('', $langs->trans('ConvomailTrackOpensHelp'));
 }
 print '</td></tr>';
+
+// AI writing tools of core's AI module (provider and prompts from its setup), on the text above the signature and quote
+if (isModEnabled('ai') && $editorishtml) {
+	require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
+	require_once DOL_DOCUMENT_ROOT.'/core/class/html.formadmin.class.php';
+	$langs->load('other');
+	if ($quotedhtml === '' && ($srcmessage || $replyevent)) {
+		$quotedhtml = $srcmessage ? $srcrenderer->cleanBody(false, true) : ConvomailRenderer::purify((string) $replyevent->note_private);
+	}
+	$aiquote = dol_trunc(trim(dol_string_nohtmltag($quotedhtml, 2)), 8000, 'right', 'UTF-8', 1);
+	$aiattrs = array(
+		'url' => DOL_URL_ROOT.'/ai/ajax/generate_content.php?token='.currentToken(),
+		'mode' => ($srcmessage || $replyevent) ? ($mode === 'forward' ? 'forward' : 'reply') : 'new',
+		'intro' => $intro,
+		'quote' => $aiquote,
+		'wait' => $langs->transnoentitiesnoconv('ConvomailAiWorking'),
+		'empty' => $langs->transnoentitiesnoconv('ConvomailAiNothingToChange'),
+		'done' => $langs->transnoentitiesnoconv('ConvomailAiDone'),
+		'undo' => $langs->transnoentitiesnoconv('ConvomailAiUndo'),
+	);
+	print '<tr><td colspan="2" class="cm-ai">';
+	print '<a href="#" id="cm-ai-toggle" class="cm-ai-toggle classfortooltip" title="'.dol_escape_htmltag($langs->trans('ConvomailAiHelp')).'">'.img_picto('', 'ai', 'class="pictofixedwidth"').$langs->trans('ConvomailAiTools').'</a>';
+	print '<div id="cm-ai-panel" class="cm-ai-panel hideobject"';
+	foreach ($aiattrs as $k => $v) {
+		print ' data-'.$k.'="'.dol_escape_htmltag($v).'"';
+	}
+	print '>';
+	print '<div class="cm-ai-write"><textarea id="cm-ai-prompt" rows="2" class="centpercent" placeholder="'.dol_escape_htmltag($langs->trans($aiattrs['mode'] === 'new' ? 'ConvomailAiPromptNew' : 'ConvomailAiPromptReply')).'"></textarea>';
+	print '<button type="button" id="cm-ai-write" class="button smallpaddingimp" disabled>'.$langs->trans('ConvomailAiWrite').'</button></div>';
+	print '<div class="cm-ai-change"><span class="opacitymedium">'.$langs->trans('ConvomailAiChangeText').'</span> ';
+	$styles = array();
+	foreach (getListForAIRephraseStyle() as $k => $label) {
+		$styles[$k] = $langs->trans($label);
+	}
+	$lengths = array();
+	foreach (getListForAISummarize() as $k => $label) {
+		$lengths[$k] = $langs->trans($label);
+	}
+	print $form->selectarray('cm_ai_rephrase', $styles, '', $langs->trans('RephraserByAI').'...', 0, 0, '', 0, 0, 0, '', 'minwidth200 cm-ai-select', 1);
+	print ' '.$form->selectarray('cm_ai_summarize', $lengths, '', $langs->trans('SummarizeByAI').'...', 0, 0, '', 0, 0, 0, '', 'minwidth200 cm-ai-select', 1);
+	print ' '.(new FormAdmin($db))->select_language('', 'cm_ai_translate', 0, array(), $langs->trans('TranslateByAI').'...', 0, 0, 'minwidth200 cm-ai-select');
+	print '</div>';
+	print '<div id="cm-ai-status" class="cm-ai-status hideobject"></div>';
+	print '</div>';
+	print '</td></tr>';
+}
 
 print '<tr><td colspan="2">';
 $editor = new DolEditor('message', $message, '', 360, 'dolibarr_mailings', 'In', true, true, $editorishtml, 20, '90%');

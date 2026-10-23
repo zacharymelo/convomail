@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** version 0.7.0: send and log, read receipts, a three-pane mailbox with conversations, email on projects (Emails tab, suggestions, replies logged automatically through Dolibarr's Email Collector), rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), and shared mailboxes. Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.8.0: send and log, read receipts, a three-pane mailbox with conversations, AI writing tools, email on projects (Emails tab, suggestions, replies logged automatically through Dolibarr's Email Collector), rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), and shared mailboxes. Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
 
 ![Convomail mailbox](docs/mailbox.jpg)
 
@@ -216,6 +216,11 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 - **Rich text** is always on (Convomail enables Dolibarr's FCKeditor module), whatever the global "WYSIWYG for emails" setting says.
 - **Signature:** the signature from your user card is inserted below the message and above any quoted text.
 - **Email templates:** pick one of Dolibarr's email templates (Setup → Emails → Email templates; types "all", third party, contact or project). Its subject and body are filled in with the third party, contact or project substituted, above your signature.
+- **AI writing tools:** when Dolibarr's AI module is enabled and set up (Home → Setup → Modules → AI), **AI writing tools** above the message opens a panel:
+  - **Write:** describe the email ("Accept, and ask for the delivery address") and the AI writes it. In a reply or forward, it also reads the message you are answering. Text you already typed is used as a draft.
+  - **Change your text:** rephrase, shorten or translate what you typed.
+
+  Only the text above your signature changes: the signature and the quoted message stay as they are. **Undo** puts back what was there. The AI service, model and prompts are those of the AI module, so nothing is configured in Convomail. Check the text before sending: it is written by the AI service you chose, and the message you answer is sent to it.
 - **Pasted or dropped images** are sent as inline images, which mail apps display. The copy logged on the agenda shows `[image]` instead, to keep the agenda light.
 - **Project contacts:** when a project is chosen, its contacts (and its third party's contacts) appear under **To**. Click a name to add it to To, or **Cc** to add it to Cc.
 - **Files stored in Dolibarr:** with the separate [Document Browser](https://github.com/zacharymelo/docbrowser) module enabled, **Add from Dolibarr…** next to the file field opens a picker:
