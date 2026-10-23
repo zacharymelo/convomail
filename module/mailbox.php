@@ -12,7 +12,7 @@
  * \ingroup convomail
  * \brief   Three-pane mailbox: folders | message list | reading pane
  *
- * GET parameters: accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, page, refresh, uid (open message), showimages
+ * GET parameters: accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, page, limit (page size, remembered), refresh, uid (open message), showimages
  * Listing a folder also files replies to project threads on their project (CONVOMAIL_AUTOFILE_REPLIES, on by default).
  */
 
@@ -43,10 +43,19 @@ $page       = max(0, GETPOSTINT('page'));
 $refresh    = GETPOSTINT('refresh');
 $openuid    = GETPOSTINT('uid');
 $showimages = GETPOSTINT('showimages');
-$limit      = 25;
+$limit      = GETPOSTINT('limit');
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read')) {
 	accessforbidden();
+}
+
+// Page size: a choice from the list toolbar is remembered for the user
+if (in_array($limit, convomail_page_sizes(), true)) {
+	if ($limit !== getDolUserInt('CONVOMAIL_PAGE_SIZE')) {
+		dol_set_user_param($db, $conf, $user, array('CONVOMAIL_PAGE_SIZE' => $limit));
+	}
+} else {
+	$limit = convomail_page_size();
 }
 
 $account = convomail_get_usable_account($db, $user, $accountid);
@@ -54,7 +63,7 @@ if ($accountid > 0 && !$account) {
 	accessforbidden();
 }
 
-llxHeader('', $langs->trans('Mailbox'), '', '', 0, 0, array('/convomail/js/convomail.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-mailbox');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convomail/js/convomail.js')), $langs->trans('Mailbox'), '', '', 0, 0, '', '', '', 'mod-convomail page-mailbox');
 
 if (!$account) {
 	print load_fiche_titre($langs->trans('Mailbox'), '', 'email');
@@ -243,6 +252,17 @@ print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><i
 print '<input type="search" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'">';
 print '</form>';
 print '<span class="cm-paging">';
+print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-pagesize">';
+print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
+if ($search !== '') {
+	print '<input type="hidden" name="search" value="'.dol_escape_htmltag($search).'">';
+}
+print '<select name="limit" class="flat" title="'.dol_escape_htmltag($langs->trans('ConvomailPageSize')).'">';
+foreach (convomail_page_sizes() as $size) {
+	print '<option value="'.$size.'"'.($size === $limit ? ' selected' : '').'>'.$size.'</option>';
+}
+print '</select>';
+print '</form>';
 print $total ? $first.'–'.$last.' / '.$total : '0';
 if ($page > 0) {
 	print ' <a class="cm-btn cm-iconbtn" href="'.dol_escape_htmltag($selfbase.($search !== '' ? '&search='.urlencode($search) : '').'&page='.($page - 1)).'">'.img_picto('', 'fa-chevron-left').'</a>';

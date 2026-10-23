@@ -10,6 +10,7 @@
 	--cm-accent: var(--colortextlink, #263c5c);
 	display: grid;
 	grid-template-columns: 200px minmax(300px, 400px) minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);	/* panes take the mailbox height and scroll, instead of growing with their content */
 	height: calc(100vh - 110px);
 	min-height: 480px;
 	border: 1px solid var(--cm-border);
@@ -41,11 +42,13 @@
 .cm-toolbar select.cm-move { max-width: 130px; }
 .cm-search { flex: 1 1 120px; min-width: 100px; }
 .cm-search input { width: 100%; box-sizing: border-box; padding: 4px 8px; border-radius: 14px; border: 1px solid var(--cm-border); }
-.cm-paging { margin-left: auto; color: var(--cm-muted); font-size: .9em; white-space: nowrap; }
+.cm-paging { margin-left: auto; color: var(--cm-muted); font-size: .9em; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.cm-pagesize { display: inline; margin: 0; }
+.cm-pagesize select { font-size: inherit; padding: 1px 2px; }
 
 /* Middle: list */
-.cm-list { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--cm-border); }
-.cm-rows { overflow-y: auto; flex: 1 1 auto; }
+.cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--cm-border); }
+.cm-rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .cm-row { display: grid; grid-template-columns: 22px 22px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 6px 8px 6px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
 .cm-row:hover { background: var(--cm-hover); }
 .cm-row.selected { background: var(--cm-selected); border-left-color: var(--cm-accent); }

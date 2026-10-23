@@ -51,6 +51,16 @@ if ($action == 'update') {
 	header('Location: '.$_SERVER['PHP_SELF']);
 	exit;
 }
+if ($action == 'update_pagesize') {
+	$size = GETPOSTINT('CONVOMAIL_PAGE_SIZE');
+	if (in_array($size, convomail_page_sizes(), true) && dolibarr_set_const($db, 'CONVOMAIL_PAGE_SIZE', $size, 'chaine', 0, '', $conf->entity) > 0) {
+		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+	} else {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	}
+	header('Location: '.$_SERVER['PHP_SELF']);
+	exit;
+}
 
 
 /*
@@ -104,6 +114,19 @@ print '<td class="opacitymedium">'.$langs->trans('ConvomailAllowSelfSignedDesc')
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAutofileReplies').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_AUTOFILE_REPLIES').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailAutofileRepliesDesc').'</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailPageSizeDefault').'</td><td>';
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="update_pagesize">';
+$defaultsize = in_array(getDolGlobalInt('CONVOMAIL_PAGE_SIZE'), convomail_page_sizes(), true) ? getDolGlobalInt('CONVOMAIL_PAGE_SIZE') : 25;
+print '<select name="CONVOMAIL_PAGE_SIZE" class="flat">';
+foreach (convomail_page_sizes() as $size) {
+	print '<option value="'.$size.'"'.($size === $defaultsize ? ' selected' : '').'>'.$size.'</option>';
+}
+print '</select> <input type="submit" class="button smallpaddingimp" value="'.$langs->trans('Save').'">';
+print '</form>';
+print '</td><td class="opacitymedium">'.$langs->trans('ConvomailPageSizeDefaultDesc').'</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAddSignature').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_ADD_SIGNATURE').'</td>';

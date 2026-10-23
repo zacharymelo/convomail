@@ -89,7 +89,7 @@ if ($action == 'confirm_log') {
 $form = new Form($db);
 $formproject = new FormProjets($db);
 
-llxHeader('', $langs->trans('Mailbox'), '', '', 0, 0, array('/convomail/js/convomail.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-message');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convomail/js/convomail.js')), $langs->trans('Mailbox'), '', '', 0, 0, '', '', '', 'mod-convomail page-message');
 
 print '<div class="cm-page">';
 print '<a class="cm-back" href="'.dol_escape_htmltag($listurl).'">'.img_picto('', 'fa-arrow-left', 'class="pictofixedwidth"').$langs->trans('BackToList').'</a>';

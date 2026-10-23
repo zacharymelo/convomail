@@ -72,6 +72,8 @@ Only when asked:
 - CMailFile embeds a pasted image twice and attaches it again. `ConvomailTransport::dedupePastedImages()` fixes this (UPSTREAM item 10).
 
 **Other**
+- Module CSS/JS passed to `llxHeader()` is linked without a version, so browsers keep the old file after an upgrade. Pages pass `convomail_assets(...)` as the `$head` argument instead (version = file time).
+- A fixed-height CSS grid or flex column needs `minmax(0, 1fr)` rows / `min-height: 0` children, or panes grow with their content and can't scroll.
 - Don't use server-side IMAP SORT for list order. Servers differ, and the bundled Horde stores range results (`ESEARCH ALL 40:31`) in ascending order. The list sorts UIDs itself (`newestFirst()`); `ajax/debug.php?mode=imap` shows a server's order.
 - Horde has no getter for a part's transfer encoding; base64 is detected heuristically.
 - With curl, a `-F` value starting with `<` reads a file. Use `--form-string` for message bodies.

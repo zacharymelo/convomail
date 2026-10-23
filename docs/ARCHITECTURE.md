@@ -219,7 +219,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    1. `convomail_get_usable_account()` picks the account: requested, else last used, else default;
    2. `convomail_folders()` lists folders (session cache, 5 minutes);
    3. the folder is chosen: explicit, else role, else last used, else INBOX;
-   4. `listMessages()` loads 25 per page, newest arrival first (UIDs descending, sorted by the module, not by server SORT), with References and previews.
+   4. `listMessages()` loads one page (`convomail_page_size()`: the user's `CONVOMAIL_PAGE_SIZE`, else the setup default, else 25; 10/25/50/100), newest arrival first (UIDs descending, sorted by the module, not by server SORT), with References and previews.
 2. `mapEmails()` and `resolvePage()` give each row its known contact or third party and its project chip.
 3. **Automatic filing** (6.4) runs, then the page renders the three panes. `data-*` attributes on `.cm-app` carry the account, folder, CSRF token and endpoint URLs for `js/convomail.js`.
 4. A row click fetches `ajax/message.php`. `ConvomailView::render()` then:
@@ -272,7 +272,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 
 | Path | Method | Parameters | Access | Output |
 |---|---|---|---|---|
-| `mailbox.php` | GET | `accountid, folder, role, search, page, refresh, uid, showimages` | `account->read`; account usable by user | Page |
+| `mailbox.php` | GET | `accountid, folder, role, search, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
 | `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log, socid, projectid, contactids[], copyfiles` | same | Page |
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
@@ -312,13 +312,14 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_ALLOWED_HOSTS` | empty | Host allowlist (lines, `*` wildcard). Empty = any public host, private/loopback/reserved refused |
   | `CONVOMAIL_ALLOW_SELF_SIGNED` | 0 | Accept self-signed SMTP certificates |
   | `CONVOMAIL_AUTOFILE_REPLIES` | 1 (created on activation) | Automatic filing (6.4) |
+  | `CONVOMAIL_PAGE_SIZE` | 25 (unset) | Default messages per mailbox page (10, 25, 50, 100) |
   | `CONVOMAIL_ADD_SIGNATURE` | 1 (created on activation) | Insert signature in compose |
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
   | `CONVOMAIL_OPEN_TRACKING` | 0 | Open tracking available |
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php` |
 
 - **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. They are never written to `llx_const`.
-- **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`.
+- **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default).
 - **Session:** `convomail_folders_<accountid>` (folder list, 5 minutes), cleared on account changes and when Archive / Trash are created.
 
 ## 9. Security model

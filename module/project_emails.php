@@ -59,7 +59,7 @@ $canreadevents = $user->hasRight('agenda', 'allactions', 'read') || $user->hasRi
 
 $threads = $canreadevents ? ConvomailView::projectThreads($db, $object->id) : array();
 
-llxHeader('', $object->ref.' - '.$langs->trans('ProjectEmails'), '', '', 0, 0, array(), array('/convomail/css/convomail.css'), '', 'mod-convomail page-projectemails');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css')), $object->ref.' - '.$langs->trans('ProjectEmails'), '', '', 0, 0, '', '', '', 'mod-convomail page-projectemails');
 
 $head = project_prepare_head($object);
 print dol_get_fiche_head($head, 'convomail_emails', $langs->trans('Project'), -1, ($object->public ? 'projectpub' : 'project'));

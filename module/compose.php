@@ -456,7 +456,7 @@ if ($action == 'send') {
 $form = new Form($db);
 $formproject = new FormProjets($db);
 
-llxHeader('', $langs->trans('ComposeEmail'), '', '', 0, 0, array('/convomail/js/convomail-compose.js'), array('/convomail/css/convomail.css'), '', 'mod-convomail page-compose');
+llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convomail/js/convomail-compose.js')), $langs->trans('ComposeEmail'), '', '', 0, 0, '', '', '', 'mod-convomail page-compose');
 
 print load_fiche_titre($replyevent ? $langs->trans('ConvomailReply') : $langs->trans('ComposeEmail'), '', 'email');
 

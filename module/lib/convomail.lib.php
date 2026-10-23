@@ -129,6 +129,51 @@ function convomail_get_usable_account($db, $user, $accountid = 0)
 }
 
 /**
+ * Page sizes offered for the mailbox list
+ *
+ * @return int[]
+ */
+function convomail_page_sizes()
+{
+	return array(10, 25, 50, 100);
+}
+
+/**
+ * Number of messages per mailbox page: the user's choice, else the setup default, else 25
+ *
+ * @return int
+ */
+function convomail_page_size()
+{
+	foreach (array(getDolUserInt('CONVOMAIL_PAGE_SIZE'), getDolGlobalInt('CONVOMAIL_PAGE_SIZE')) as $size) {
+		if (in_array($size, convomail_page_sizes(), true)) {
+			return $size;
+		}
+	}
+	return 25;
+}
+
+/**
+ * Head HTML linking module CSS and JS files with their modification time as version. Core links
+ * llxHeader() files without one, so browsers keep the previous copy after an upgrade.
+ *
+ * @param  string[] $css CSS paths relative to the module root, e.g. '/convomail/css/convomail.css'
+ * @param  string[] $js  JS paths, same form
+ * @return string        HTML for the $head parameter of llxHeader()
+ */
+function convomail_assets(array $css, array $js = array())
+{
+	$out = '';
+	foreach ($css as $path) {
+		$out .= '<link rel="stylesheet" type="text/css" href="'.dol_escape_htmltag(dol_buildpath($path, 1).'?v='.((int) @filemtime(dol_buildpath($path, 0)))).'">'."\n";
+	}
+	foreach ($js as $path) {
+		$out .= '<script nonce="'.getNonce().'" src="'.dol_escape_htmltag(dol_buildpath($path, 1).'?v='.((int) @filemtime(dol_buildpath($path, 0)))).'"></script>'."\n";
+	}
+	return $out;
+}
+
+/**
  * Forget the cached folder lists, after an account change
  *
  * @return void

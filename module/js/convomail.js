@@ -55,6 +55,10 @@
 		if (switcher) {
 			switcher.addEventListener('change', function () { switcher.form.submit(); });
 		}
+		var pagesize = qs('form.cm-pagesize select');
+		if (pagesize) {
+			pagesize.addEventListener('change', function () { pagesize.form.submit(); });
+		}
 
 		var app = qs('.cm-app');
 		if (!app) {

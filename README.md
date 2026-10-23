@@ -121,7 +121,7 @@ Each user then adds an account: **user card → Mail accounts → Add a mail acc
 **Mailbox** in the top menu (next to Agenda) opens a three-pane mailbox. The tab shows to every user with the *Use and manage own mail accounts* permission; a user who has no account yet is offered a link to add one.
 
 - **Left:** account switcher, **Compose email**, and folders (Inbox, Drafts, Sent, Archive, Junk, Trash first, then your own folders) with unread counts. The folder list is cached for 5 minutes; **Refresh** reloads it.
-- **Middle:** the messages of the folder, most recently received first, 25 per page, with search (headers and body). Each row shows the sender (the recipient in Sent), the subject with a preview of the text, the date, a paperclip for attachments, and the project chip. Unread messages are bold, flagged ones have a gold star.
+- **Middle:** the messages of the folder, most recently received first, 25 per page (each user can pick 10, 25, 50 or 100 next to the page arrows; the default is in the setup), with search (headers and body). Each row shows the sender (the recipient in Sent), the subject with a preview of the text, the date, a paperclip for attachments, and the project chip. Unread messages are bold, flagged ones have a gold star.
 - **Right:** the message you click opens in the reading pane without leaving the list. The address bar follows, so reloading or sharing the link opens the same message. On a phone the list opens messages on their own page instead.
 
 **Actions**, on the selected rows (tick several) or the open message:
