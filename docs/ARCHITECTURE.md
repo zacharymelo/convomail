@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.8.2**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.9.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -247,6 +247,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    2. resolves its project;
    3. `ConvomailRenderer::iframeDocument()` purifies the body, blocks remote images unless `showimages`, and rewrites `cid:` to `attachment.php`;
    4. returns the pane: toolbar, people, project line, attachments, sandboxed `<iframe srcdoc>`, and an empty `.cm-thread-slot` when the message has a Message-ID.
+
+   In the pane, `.cm-view` is a column: `.cm-view-main` (toolbar to body, scrolls) / `.cm-resize-row` / `.cm-conv-slot` (scrolls; shown once the conversation has content: `cm-has-conv`). The full-page view keeps one flow. Mailbox columns are `var(--cm-col1) 5px var(--cm-col2) 5px 1fr` with `.cm-resize-col` handles; `bindLayout()` drags them (pointer capture, iframes made inert while dragging), keys ±16px (Shift ±64), double-click resets, sizes in `localStorage` `convomail.layout` (`col1`, `col2` px, `conv` fraction of the pane).
 
    The JS then fills the slot from `ajax/thread.php` (6.11). Message frames carry `data-compose` (compose URL with the account): `bindFrames()` listens for clicks inside the same-origin frame and sends `mailto:` links (to, cc, bcc, subject, body) to compose (`composeFromMailto()`), unless a modifier key is held (Shift: the system mail app). Compose puts a prefilled `message` above the signature.
 

@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.8.2)
+## Where it stands (0.9.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -33,8 +33,10 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | AI writing tools | Compose: write from a prompt (replies use the message answered), rephrase, shorten or translate the typed text with core's AI module; signature and quote untouched, Undo | 0.8.0 |
 | Fixes | Replies keep the quote's indent and grey bar, and quoted plain-text mail keeps its line breaks (the editor's content filter dropped them) | 0.8.1 |
 | Fixes | Setup: Allowed mail servers shows one host per line again, and a list broken by an earlier save (literal `\n`) works and is repaired on the next save | 0.8.2 |
-| Changes | No more **Email from my mailbox** button on third party, contact and project cards, which already have core's **Send email** | next release |
-| Email links | `mailto:` links in messages open Convomail compose with recipients, Cc, subject and text; Shift-click opens the system mail app | next release |
+| Changes | No more **Email from my mailbox** button on third party, contact and project cards, which already have core's **Send email** | 0.9.0 |
+| Email links | `mailto:` links in messages open Convomail compose with recipients, Cc, subject and text; Shift-click opens the system mail app | 0.9.0 |
+| Layout | Resizable mailbox columns; the conversation stays at the bottom of the reading pane under the scrolling message, with a resizable split | 0.9.0 |
+| Fixes | The project Emails tab showed its threads without their messages since 0.7.0 (a conversation style shared the class name; now `cm-conv-*`) | 0.9.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

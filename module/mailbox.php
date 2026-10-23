@@ -266,6 +266,7 @@ print ($page > 0 ? '<input type="hidden" name="page" value="'.((int) $page).'">'
 print '<label class="classfortooltip" title="'.dol_escape_htmltag($langs->trans('ConvomailShowConversationHelp')).'"><input type="checkbox" name="showconversation" value="1"'.(convomail_show_conversation() ? ' checked' : '').'> '.$langs->trans('ConvomailShowConversation').'</label>';
 print '</form>';
 print '</aside>';
+print '<div class="cm-resize cm-resize-col" data-col="1" role="separator" aria-orientation="vertical" tabindex="0" title="'.dol_escape_htmltag($langs->trans('ConvomailResizeHelp')).'"></div>';
 
 // Middle: toolbar + list
 print '<section class="cm-list">';
@@ -364,6 +365,7 @@ foreach ($messages as $m) {
 }
 print '</div>';
 print '</section>';
+print '<div class="cm-resize cm-resize-col" data-col="2" role="separator" aria-orientation="vertical" tabindex="0" title="'.dol_escape_htmltag($langs->trans('ConvomailResizeHelp')).'"></div>';
 
 // Right: reading pane
 print '<section class="cm-pane" id="cm-pane" aria-live="polite">';

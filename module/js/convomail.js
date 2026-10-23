@@ -109,7 +109,7 @@
 	 * Conversation under a message (ajax/thread.php): loaded after the message, later messages opened
 	 */
 	function loadThread(root) {
-		var slot = qs('.cm-thread-slot', root);
+		var slot = qs('.cm-conv-slot', root);
 		if (!slot) {
 			return;
 		}
@@ -120,13 +120,14 @@
 					return;	// another message was opened meanwhile
 				}
 				slot.innerHTML = html;
-				qsa('.cm-thread-item.cm-autoopen', slot).forEach(function (item) { openThreadItem(item, false); });
+				slot.parentNode.classList.toggle('cm-has-conv', html.trim() !== '');
+				qsa('.cm-conv-item.cm-autoopen', slot).forEach(function (item) { openThreadItem(item, false); });
 			})
 			.catch(function () { /* the conversation is optional */ });
 	}
 
 	function openThreadItem(item, showimages) {
-		var body = qs('.cm-thread-body', item);
+		var body = qs('.cm-conv-body', item);
 		if (!body) {
 			return;
 		}
@@ -150,13 +151,13 @@
 	}
 
 	document.addEventListener('click', function (ev) {
-		var images = ev.target.closest('[data-cm-thread-images]');
+		var images = ev.target.closest('[data-cm-conv-images]');
 		if (images) {
 			ev.preventDefault();
-			openThreadItem(images.closest('.cm-thread-item'), true);
+			openThreadItem(images.closest('.cm-conv-item'), true);
 			return;
 		}
-		var head = ev.target.closest('.cm-thread-item[data-body] .cm-thread-head');
+		var head = ev.target.closest('.cm-conv-item[data-body] .cm-conv-head');
 		if (head && !ev.target.closest('a')) {
 			openThreadItem(head.parentNode, false);
 		}
@@ -209,6 +210,7 @@
 		}
 
 		var pane = qs('#cm-pane', app);
+		bindLayout(app);
 		var rowsBox = qs('.cm-rows', app);
 
 		function rows() { return qsa('.cm-row', rowsBox); }
@@ -451,7 +453,7 @@
 		// Keyboard shortcuts
 		document.addEventListener('keydown', function (ev) {
 			var t = ev.target;
-			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable]')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
+			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
 				return;
 			}
 			var list = rows();
@@ -501,6 +503,121 @@
 			selected.scrollIntoView({ block: 'nearest' });
 		}
 	});
+
+	/**
+	 * Resizable mailbox: the folder and list columns (handles between the columns) and the height of the
+	 * conversation under the open message (handle above it). Sizes are kept in this browser (localStorage).
+	 */
+	function bindLayout(app) {
+		var KEY = 'convomail.layout';
+		var layout = {};
+		try {
+			layout = JSON.parse(window.localStorage.getItem(KEY)) || {};
+		} catch (e) {
+			layout = {};
+		}
+		function save() {
+			try {
+				window.localStorage.setItem(KEY, JSON.stringify(layout));
+			} catch (e) { /* private window: sizes last for this page only */ }
+		}
+		function apply() {
+			[['col1', '--cm-col1', 'px'], ['col2', '--cm-col2', 'px'], ['conv', '--cm-conv-h', '%']].forEach(function (v) {
+				if (layout[v[0]]) {
+					app.style.setProperty(v[1], (v[2] === '%' ? layout[v[0]] * 100 : layout[v[0]]) + v[2]);
+				} else {
+					app.style.removeProperty(v[1]);
+				}
+			});
+		}
+		function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+		// Current size of what a handle controls, and how to set it
+		function target(handle) {
+			if (handle.classList.contains('cm-resize-row')) {
+				var view = handle.parentNode;
+				var slot = handle.nextElementSibling;
+				return {
+					kind: 'row',
+					size: slot ? slot.getBoundingClientRect().height : 0,
+					set: function (h) {
+						var total = view.clientHeight;
+						if (total > 0) {
+							layout.conv = clamp(h, 60, Math.max(60, total - 120)) / total;
+						}
+					},
+					reset: function () { delete layout.conv; },
+					sign: -1	// dragging up makes the conversation taller
+				};
+			}
+			var col = handle.getAttribute('data-col');
+			var el = qs(col === '1' ? '.cm-folders' : '.cm-list', app);
+			var other = qs(col === '1' ? '.cm-list' : '.cm-folders', app);
+			return {
+				kind: 'col',
+				size: el.getBoundingClientRect().width,
+				set: function (w) {
+					var max = app.clientWidth - other.getBoundingClientRect().width - 10 - 320;	// keep 320px for the message
+					layout['col' + col] = Math.round(clamp(w, col === '1' ? 140 : 220, Math.max(col === '1' ? 140 : 220, Math.min(col === '1' ? 420 : 900, max))));
+				},
+				reset: function () { delete layout['col' + col]; },
+				sign: 1
+			};
+		}
+
+		apply();
+
+		app.addEventListener('pointerdown', function (ev) {
+			var handle = ev.target.closest('.cm-resize');
+			if (!handle || ev.button !== 0) {
+				return;
+			}
+			ev.preventDefault();
+			var t = target(handle);
+			var start = t.kind === 'row' ? ev.clientY : ev.clientX;
+			handle.setPointerCapture(ev.pointerId);
+			handle.classList.add('active');
+			app.classList.add('cm-resizing', 'cm-resizing-' + t.kind);
+			var move = function (e) {
+				t.set(t.size + t.sign * ((t.kind === 'row' ? e.clientY : e.clientX) - start));
+				apply();
+			};
+			var end = function () {
+				handle.removeEventListener('pointermove', move);
+				handle.removeEventListener('pointerup', end);
+				handle.removeEventListener('pointercancel', end);
+				handle.classList.remove('active');
+				app.classList.remove('cm-resizing', 'cm-resizing-' + t.kind);
+				qsa('iframe.convomail-body', app).forEach(fit);
+				save();
+			};
+			handle.addEventListener('pointermove', move);
+			handle.addEventListener('pointerup', end);
+			handle.addEventListener('pointercancel', end);
+		});
+		app.addEventListener('dblclick', function (ev) {
+			var handle = ev.target.closest('.cm-resize');
+			if (handle) {
+				target(handle).reset();
+				apply();
+				save();
+			}
+		});
+		app.addEventListener('keydown', function (ev) {
+			var handle = ev.target.closest && ev.target.closest('.cm-resize');
+			if (!handle) {
+				return;
+			}
+			var t = target(handle);
+			var keys = t.kind === 'row' ? { ArrowUp: 1, ArrowDown: -1 } : { ArrowRight: 1, ArrowLeft: -1 };
+			if (keys[ev.key]) {
+				ev.preventDefault();
+				t.set(t.size + keys[ev.key] * (ev.shiftKey ? 64 : 16));
+				apply();
+				save();
+			}
+		});
+	}
 
 	/**
 	 * Full-page message view (phones, direct links): same toolbar, then back to the list
