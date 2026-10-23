@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.9.0)
+## Where it stands (0.9.1)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -37,6 +37,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Email links | `mailto:` links in messages open Convomail compose with recipients, Cc, subject and text; Shift-click opens the system mail app | 0.9.0 |
 | Layout | Resizable mailbox columns; the conversation stays at the bottom of the reading pane under the scrolling message, with a resizable split | 0.9.0 |
 | Fixes | The project Emails tab showed its threads without their messages since 0.7.0 (a conversation style shared the class name; now `cm-conv-*`) | 0.9.0 |
+| Conversations | Reply, Reply all and Forward on each opened message of the conversation panel | 0.9.1 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

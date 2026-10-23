@@ -219,7 +219,7 @@ class ConvomailThread
 	 */
 	public static function bodyHtml(ConvomailAccount $account, $client, $folder, $uid, $showimages)
 	{
-		global $langs;
+		global $langs, $user;
 
 		$message = $client->fetchMessage($folder, $uid, false);
 		if ($message === false) {
@@ -229,7 +229,18 @@ class ConvomailThread
 		$renderer = new ConvomailRenderer($client, $folder, $uid, $message, dol_buildpath('/convomail/attachment.php', 2).$base);
 		$document = $renderer->iframeDocument($showimages);
 
-		$h = '<div class="cm-meta">';
+		// Reply from the conversation, from the folder the message is in (often Sent), like the reading pane's toolbar
+		$compose = dol_buildpath('/convomail/compose.php', 1).$base;
+		$h = '<div class="cm-conv-actions">';
+		if ($user->hasRight('convomail', 'message', 'send')) {
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').$langs->trans('ConvomailReply').'</a>';
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').$langs->trans('ConvomailReplyAll').'</a>';
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').$langs->trans('ConvomailForward').'</a>';
+		}
+		$h .= '<a class="cm-btn cm-right" href="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1).$base).'">'.img_picto('', 'fa-external-link-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailOpenFullPage').'</a>';
+		$h .= '</div>';
+
+		$h .= '<div class="cm-meta">';
 		$h .= '<div><span class="cm-meta-label">'.$langs->trans('MailTo').'</span> '.dol_escape_htmltag(convomail_format_addresses($message['to'], true)).'</div>';
 		if (!empty($message['cc'])) {
 			$h .= '<div><span class="cm-meta-label">'.$langs->trans('MailCC').'</span> '.dol_escape_htmltag(convomail_format_addresses($message['cc'], true)).'</div>';
@@ -248,7 +259,6 @@ class ConvomailThread
 			$h .= '<div class="cm-imagesblocked">'.$langs->trans('ConvomailImagesBlocked').' <a href="#" data-cm-conv-images="1">'.$langs->trans('ConvomailShowImages').'</a></div>';
 		}
 		$h .= '<iframe class="convomail-body" data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id)).'" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" srcdoc="'.htmlspecialchars($document, ENT_QUOTES | ENT_HTML5, 'UTF-8').'"></iframe>';
-		$h .= '<div class="cm-conv-open"><a href="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1).$base).'">'.img_picto('', 'fa-external-link-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailOpenFullPage').'</a></div>';
 		return $h;
 	}
 }

@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.9.0**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.9.1**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -335,7 +335,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 1. `ajax/thread.php` (after the message is shown, session released) calls `ConvomailThread::find()` over `ConvomailThread::folders()`: the current folder, Inbox, the account's Sent folder and Archive.
 2. Rounds (at most 4, 40 messages): for the messages found last round (first: the open one), `findRelated()` searches each folder for their parents by `Message-ID` (sent before them) and their replies by `In-Reply-To` / `References` (sent after them), with a day of margin on the header dates. Several rounds are needed because Convomail's replies carry only the parent in References. Header text search matches substrings, so only exact links are kept (`answersOneOf()`).
 3. `findRelated()` runs one plain `UID SEARCH HEADER … SENTSINCE/SENTBEFORE` per id and header, never an `OR (…)` group: GreenMail stalls on `(HEADER X <id>)` (it reads `id>)` as one word), and Horde ORs a date into an `orSearch()` group instead of ANDing it.
-4. `ConvomailThread::html()` lists the messages oldest first (own ones marked, folder chip when not the current folder); the first 3 after the open one load open. A click fetches `ajax/thread.php?body=1` (`bodyHtml()`: recipients, attachments, sandboxed body, never marks read).
+4. `ConvomailThread::html()` lists the messages oldest first (own ones marked, folder chip when not the current folder); the first 3 after the open one load open. A click fetches `ajax/thread.php?body=1` (`bodyHtml()`: Reply / Reply all / Forward to `compose.php` with that message's folder and uid, Open on its own page, recipients, attachments, sandboxed body; never marks read).
 5. Cost on 20,000 messages (Dovecot, no full-text index): 0.02–0.05 s once the server has cached the headers; about 16 s the very first time while it indexes them.
 
 ## 7. Pages and endpoints
