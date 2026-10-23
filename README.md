@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** version 0.5.0: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, automatic filing of replies), rich-text compose with signature and templates, and sign-in with Google or Microsoft 365 (OAuth). Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.5.1: send and log, read receipts, a three-pane mailbox, email on projects (Emails tab, suggestions, automatic filing of replies), rich-text compose with signature and templates, and sign-in with Google or Microsoft 365 (OAuth). Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
 
 ![Convomail mailbox](docs/mailbox.jpg)
 
@@ -267,6 +267,8 @@ Received mail is logged when a user clicks **Log to…** in the Mailbox; automat
 Disabling the module removes menus and rights but keeps all data.
 
 ## Upgrading
+
+**From 0.5.0:** deploy the new zip. No database change, nothing to re-enable.
 
 **From 0.4.x:** deploy the new zip, then disable and re-enable Convomail. This adds the sign-in method columns (`sql/update_0.5.0.sql`). Existing accounts keep signing in with their password.
 
