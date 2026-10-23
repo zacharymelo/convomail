@@ -279,10 +279,15 @@ docker run --rm -v "$PWD/module":/app -w /app composer:2 install --no-dev
   - SMTP `greenmail:3025`, IMAP `greenmail:3143`, no encryption, any login and password.
   - Add `greenmail` to *Allowed mail servers* in the setup.
 - **Release zip:** `python3 bin/build.py <version>`. It sets the version, installs the libraries and builds `bin/module_convomail-<version>.zip`.
+- **Fixtures and checks:** [dev/README.md](dev/README.md).
+- **How it is built:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (data model, flows, endpoints, security), [docs/ROADMAP.md](docs/ROADMAP.md) (plan and open decisions), [CLAUDE.md](CLAUDE.md) (guide for contributors and agents).
 
 ## Repository layout
 
 ```
+CLAUDE.md, AGENTS.md      Contributor and agent guide
+docs/                     Architecture, roadmap, screenshots
+dev/                      Fixtures, seed scripts, end-to-end check
 docker-compose.yml        Dev stack: Dolibarr, MariaDB, GreenMail
 bin/build.py              Release build
 UPSTREAM.md               Core changes to propose
