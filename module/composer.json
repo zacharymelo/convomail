@@ -1,0 +1,17 @@
+{
+	"name": "dpg/convomail",
+	"description": "Dolibarr module: send email through each user's own mailbox and log it to the agenda",
+	"license": "GPL-3.0-or-later",
+	"type": "project",
+	"require": {
+		"php": ">=8.1",
+		"bytestream/horde-imap-client": "^2.34"
+	},
+	"config": {
+		"optimize-autoloader": true,
+		"sort-packages": true,
+		"platform": {
+			"php": "8.1.0"
+		}
+	}
+}

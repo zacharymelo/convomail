@@ -1,0 +1,72 @@
+# Copyright (C) 2026 DPG Supply
+
+# Module
+Module511400Name = Convomail
+Module511400Desc = Send email from Dolibarr through each user's own mailbox and log every message to the agenda
+
+# Permissions
+Permission511401 = Use and manage own mail accounts
+Permission511402 = Send email from Dolibarr
+Permission511403 = Manage the mail accounts of all users
+
+# Menus and titles
+MailAccounts = Mail accounts
+MailAccount = Mail account
+ComposeEmail = Compose email
+ConvomailSendEmail = Email from my mailbox
+ConvomailReply = Reply
+ConvomailSetup = Convomail setup
+
+# Account fields
+ConvomailProvider = Provider
+ConvomailDisplayName = Display name
+ConvomailIncomingImap = Incoming (IMAP) - used to save a copy in your Sent folder
+ConvomailOutgoingSmtp = Outgoing (SMTP)
+ConvomailImapHost = IMAP server
+ConvomailImapPort = IMAP port
+ConvomailImapEncryption = IMAP encryption
+ConvomailSmtpHost = SMTP server
+ConvomailSmtpPort = SMTP port
+ConvomailSmtpEncryption = SMTP encryption
+ConvomailSentFolder = Sent folder
+ConvomailSentFolderAuto = Detected automatically
+ConvomailPasswordKeep = Leave empty to keep the current password
+ConvomailEncryptionSsl = SSL/TLS (implicit)
+ConvomailEncryptionStarttls = STARTTLS
+ConvomailEncryptionNone = None
+
+# Account page
+ConvomailNewAccount = Add a mail account
+ConvomailEditAccount = Edit mail account
+ConvomailNoAccount = No mail account yet.
+ConvomailNoAccountYet = You have no mail account yet. Add one to send email from Dolibarr.
+ConvomailTestConnection = Test connection
+ConvomailDetectSentFolder = Detect Sent folder
+ConvomailDeleteAccount = Delete mail account
+ConvomailConfirmDeleteAccount = Delete the mail account %s? Emails already logged to the agenda are kept.
+ConvomailImapTestOk = IMAP connection to %s works.
+ConvomailImapTestKo = IMAP connection to %s failed: %s
+ConvomailSmtpTestOk = SMTP connection to %s works.
+ConvomailSmtpTestKo = SMTP connection to %s failed: %s
+ConvomailSentFolderFound = Sent folder found: %s
+
+# Compose
+ConvomailOnDateWrote = On %s, %s wrote:
+ConvomailSentAndLogged = Email sent to %s and logged to the agenda.
+ConvomailSentButNotLogged = The email was sent, but it could not be logged to the agenda: %s
+ConvomailErrorChooseAccount = Choose one of your enabled mail accounts.
+ConvomailErrorReplyTargetNotEmail = This event is not an email that can be replied to.
+ConvomailErrorAccountDisabled = This mail account is disabled.
+ConvomailErrorHostNotAllowed = The server %s is not allowed. An administrator can allow it in the Convomail setup.
+ConvomailWarningNoRawMessage = The email was sent, but no copy could be saved to your Sent folder.
+ConvomailWarningSentFolderNotFound = No Sent folder found on the IMAP server. %s
+ConvomailWarningSentCopyFailed = The email was sent, but saving a copy to your Sent folder failed: %s
+
+# Setup
+ConvomailLibraryMissing = The IMAP library is missing. Install the module from a release zip, or run "composer install" in the module folder.
+ConvomailAllowedHosts = Allowed mail servers
+ConvomailAllowedHostsDesc = One host per line, * as wildcard (for example *.gmail.com). When empty, any server is allowed except private, loopback and reserved addresses.
+ConvomailAllowSelfSigned = Accept self-signed certificates
+ConvomailAllowSelfSignedDesc = Only for internal mail servers you trust. Applies to SMTP.
+DebugMode = Debug Mode
+DebugModeDesc = When enabled, exposes a diagnostic endpoint at /custom/convomail/ajax/debug.php for troubleshooting module configuration.
