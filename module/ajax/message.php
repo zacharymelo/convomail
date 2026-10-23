@@ -59,6 +59,7 @@ top_httphead('text/html');
 
 $client = new ConvomailHordeMailboxClient($account);
 $folders = convomail_folders($account, $client);
+convomail_release_session();
 $html = ConvomailView::render($account, $client, $folder, $uid, array('showimages' => $showimages, 'context' => 'pane', 'folders' => $folders ?: array()));
 $client->close();
 

@@ -28,6 +28,12 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	/** @var string */
 	private $error = '';
 
+	/** @var int Seconds to wait for the server; set before the first call (see setTimeout()) */
+	private $timeout = 15;
+
+	/** Seconds a search result is reused while the folder has not changed */
+	const SEARCH_CACHE_TTL = 600;
+
 	/** Folder names tried when the server does not flag a \Sent folder */
 	const SENT_FALLBACK_NAMES = array('Sent', 'INBOX.Sent', 'Sent Items', 'Sent Messages', '[Gmail]/Sent Mail', 'INBOX/Sent');
 
@@ -38,6 +44,18 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	{
 		$this->account = $account;
 		self::loadLibrary();
+	}
+
+	/**
+	 * Wait longer for the server, for slow operations such as a search in message text.
+	 * Takes effect only before the connection is opened.
+	 *
+	 * @param  int  $seconds Seconds
+	 * @return void
+	 */
+	public function setTimeout($seconds)
+	{
+		$this->timeout = max(5, (int) $seconds);
 	}
 
 	/**
@@ -86,7 +104,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			'hostspec' => $this->account->imap_host,
 			'port'     => (int) $this->account->imap_port,
 			'secure'   => $secure,
-			'timeout'  => 15,
+			'timeout'  => $this->timeout,
 		);
 		if ($this->account->isOAuth()) {
 			dol_include_once('/convomail/class/convomailoauth.class.php');
@@ -202,6 +220,129 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$lines[] = 'ERROR: '.$e->getMessage();
 		}
 		return $lines;
+	}
+
+	/**
+	 * UIDs of the messages matching a search, newest first. Every word must match. By default only the sender,
+	 * recipients and subject are searched: servers answer that from their header cache, while a search in the
+	 * message text makes most of them read every message (seconds to minutes on large folders).
+	 * The result is kept for a few minutes while the folder is unchanged (same UIDVALIDITY, UIDNEXT and count),
+	 * so moving through the pages of results does not search again.
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap       Connection
+	 * @param  string                   $folder     Folder
+	 * @param  string                   $searchText Search text
+	 * @param  bool                     $searchBody Also search the message text
+	 * @return int[]
+	 */
+	private function searchUids($imap, $folder, $searchText, $searchBody)
+	{
+		$status = $imap->status($folder, Horde_Imap_Client::STATUS_UIDNEXT | Horde_Imap_Client::STATUS_UIDVALIDITY | Horde_Imap_Client::STATUS_MESSAGES);
+		$cachefile = self::searchCacheFile(array((int) $this->account->id, $folder, dol_strtolower($searchText), $searchBody ? 1 : 0,
+			$status['uidvalidity'] ?? '', $status['uidnext'] ?? '', $status['messages'] ?? ''));
+		if ($cachefile !== '' && is_readable($cachefile) && (dol_now() - (int) filemtime($cachefile)) < self::SEARCH_CACHE_TTL) {
+			$cached = json_decode((string) file_get_contents($cachefile), true);
+			if (is_array($cached)) {
+				return array_map('intval', $cached);
+			}
+		}
+
+		$words = array_slice(array_values(array_filter(preg_split('/\s+/u', $searchText))), 0, 6);
+		$query = new Horde_Imap_Client_Search_Query();
+		$perword = array();
+		foreach ($words as $word) {
+			$wordquery = new Horde_Imap_Client_Search_Query();
+			if ($searchBody) {
+				$wordquery->text($word, false);	// headers and body
+			} else {
+				$headers = array();
+				foreach (array('From', 'To', 'Cc', 'Subject') as $header) {
+					$h = new Horde_Imap_Client_Search_Query();
+					$h->headerText($header, $word);
+					$headers[] = $h;
+				}
+				$wordquery->orSearch($headers);
+			}
+			$perword[] = $wordquery;
+		}
+		if (count($perword) === 1) {
+			$query = $perword[0];
+		} else {
+			$query->andSearch($perword);
+		}
+
+		try {
+			$uids = self::newestFirst($imap->search($folder, $query)['match']);
+		} catch (Horde_Imap_Client_Exception $e) {
+			if ($searchBody || in_array($e->getCode(), array(Horde_Imap_Client_Exception::DISCONNECT, Horde_Imap_Client_Exception::SERVER_READERROR), true)) {
+				throw $e;
+			}
+			// Some servers (GreenMail, older ones) refuse grouped criteria: one simple search per header and word
+			$uids = $this->searchHeadersOneByOne($imap, $folder, $words);
+		}
+		if ($cachefile !== '') {
+			@file_put_contents($cachefile, json_encode($uids));
+		}
+		return $uids;
+	}
+
+	/**
+	 * Header search without grouped criteria: per word, the union of FROM, TO, CC and SUBJECT matches;
+	 * then the messages matching every word
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap   Connection
+	 * @param  string                   $folder Folder
+	 * @param  string[]                 $words  Words
+	 * @return int[]                            UIDs newest first
+	 */
+	private function searchHeadersOneByOne($imap, $folder, array $words)
+	{
+		$result = null;
+		foreach ($words as $word) {
+			$matches = array();
+			foreach (array('From', 'To', 'Cc', 'Subject') as $header) {
+				$q = new Horde_Imap_Client_Search_Query();
+				$q->headerText($header, $word);
+				foreach ($imap->search($folder, $q)['match']->ids as $uid) {
+					$matches[(int) $uid] = true;
+				}
+			}
+			$result = ($result === null) ? $matches : array_intersect_key($result, $matches);
+			if (empty($result)) {
+				break;
+			}
+		}
+		$uids = array_keys((array) $result);
+		rsort($uids, SORT_NUMERIC);
+		return $uids;
+	}
+
+	/**
+	 * File keeping one search result of the current user, '' if there is nowhere to keep it.
+	 * Old results are removed now and then.
+	 *
+	 * @param  array<int,mixed> $key Values identifying the search and the folder state
+	 * @return string
+	 */
+	private static function searchCacheFile(array $key)
+	{
+		global $conf, $user;
+
+		if (empty($conf->convomail->dir_output) || !is_object($user)) {
+			return '';
+		}
+		$dir = $conf->convomail->dir_output.'/temp/search';
+		if (!is_dir($dir) && dol_mkdir($dir) < 0) {
+			return '';
+		}
+		if (mt_rand(1, 20) === 1) {
+			foreach ((array) glob($dir.'/*.json') as $old) {
+				if (dol_now() - (int) @filemtime($old) > self::SEARCH_CACHE_TTL) {
+					@unlink($old);
+				}
+			}
+		}
+		return $dir.'/'.((int) $user->id).'-'.md5(json_encode($key)).'.json';
 	}
 
 	/**
@@ -485,20 +626,20 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	 * @param  int    $offset     Offset
 	 * @param  int    $limit      Page size
 	 * @param  string $searchText Search text
+	 * @param  bool   $searchBody Also search the message text (slow on servers without a search index)
 	 * @return array<string,mixed>|false
 	 */
-	public function listMessages($folder, $offset, $limit, $searchText = '')
+	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false)
 	{
 		try {
 			$imap = $this->connect();
 
-			$query = null;
-			if (trim($searchText) !== '') {
-				$query = new Horde_Imap_Client_Search_Query();
-				$query->text(trim($searchText), false);
+			$searchText = trim($searchText);
+			if ($searchText === '') {
+				$uids = self::newestFirst($imap->search($folder)['match']);
+			} else {
+				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
 			}
-			$result = $imap->search($folder, $query);
-			$uids = self::newestFirst($result['match']);
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
 

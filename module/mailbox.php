@@ -12,7 +12,8 @@
  * \ingroup convomail
  * \brief   Three-pane mailbox: folders | message list | reading pane
  *
- * GET parameters: accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, page, limit (page size, remembered), refresh, uid (open message), showimages
+ * GET parameters: accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, searchbody (also search message text),
+ *                 page, limit (page size, remembered), refresh, uid (open message), showimages
  * Listing a folder also files replies to project threads on their project (CONVOMAIL_AUTOFILE_REPLIES, on by default).
  */
 
@@ -39,6 +40,7 @@ $accountid  = GETPOSTINT('accountid');
 $folder     = GETPOST('folder', 'restricthtml');
 $role       = GETPOST('role', 'aZ09');
 $search     = trim(GETPOST('search', 'alphanohtml'));
+$searchbody = ($search !== '' && GETPOSTINT('searchbody')) ? 1 : 0;
 $page       = max(0, GETPOSTINT('page'));
 $refresh    = GETPOSTINT('refresh');
 $openuid    = GETPOSTINT('uid');
@@ -75,7 +77,12 @@ if (!$account) {
 }
 
 $client = new ConvomailHordeMailboxClient($account);
+if ($searchbody) {
+	// A search in the message text makes most servers read every message
+	$client->setTimeout(120);
+}
 $folders = convomail_folders($account, $client, (bool) $refresh);
+convomail_release_session();
 if ($folders === false) {
 	print load_fiche_titre($langs->trans('Mailbox'), '', 'email');
 	print '<div class="error">'.$langs->trans('ConvomailImapTestKo', dol_escape_htmltag($account->imap_host), dol_escape_htmltag($client->getError())).'</div>';
@@ -111,7 +118,7 @@ if ((int) getDolUserInt('CONVOMAIL_LAST_ACCOUNT') !== (int) $account->id || getD
 	dol_set_user_param($db, $conf, $user, $tab);
 }
 
-$list = $client->listMessages($folder, $page * $limit, $limit, $search);
+$list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody);
 $messages = ($list !== false) ? $list['messages'] : array();
 $showto = in_array($currentrole, array('sent', 'drafts'), true);
 
@@ -176,6 +183,9 @@ if ($openuid > 0) {
 	}
 }
 $listerror = ($list === false) ? $client->getError() : '';
+if ($listerror !== '' && $search !== '' && preg_match('/timeout|timed out|closed the connection/i', $listerror)) {
+	$listerror = $langs->trans($searchbody ? 'ConvomailSearchTooSlowBody' : 'ConvomailSearchTooSlow').' ('.$listerror.')';
+}
 $client->close();
 
 
@@ -196,7 +206,8 @@ if (!isset($options[$account->id])) {
 }
 
 $selfbase = $_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($folder);
-$listparam = ($search !== '' ? '&search='.urlencode($search) : '').($page > 0 ? '&page='.$page : '');
+$searchparam = ($search !== '' ? '&search='.urlencode($search).($searchbody ? '&searchbody=1' : '') : '');
+$listparam = $searchparam.($page > 0 ? '&page='.$page : '');
 $total = ($list !== false) ? (int) $list['total'] : 0;
 $first = $total ? $page * $limit + 1 : 0;
 $last = min($total, ($page + 1) * $limit);
@@ -247,15 +258,19 @@ foreach ($folders as $f) {
 	}
 }
 print '</select>';
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-search">';
+print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-search" data-searching="'.dol_escape_htmltag($langs->trans('ConvomailSearching')).'">';
 print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
-print '<input type="search" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'">';
+print '<input type="search" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchHelp')).'">';
+print '<label class="cm-searchbody" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchBodyHelp')).'"><input type="checkbox" name="searchbody" value="1"'.($searchbody ? ' checked' : '').'> '.$langs->trans('ConvomailSearchBody').'</label>';
 print '</form>';
 print '<span class="cm-paging">';
 print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-pagesize">';
 print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
 if ($search !== '') {
 	print '<input type="hidden" name="search" value="'.dol_escape_htmltag($search).'">';
+	if ($searchbody) {
+		print '<input type="hidden" name="searchbody" value="1">';
+	}
 }
 print '<select name="limit" class="flat" title="'.dol_escape_htmltag($langs->trans('ConvomailPageSize')).'">';
 foreach (convomail_page_sizes() as $size) {
@@ -265,10 +280,10 @@ print '</select>';
 print '</form>';
 print $total ? $first.'–'.$last.' / '.$total : '0';
 if ($page > 0) {
-	print ' <a class="cm-btn cm-iconbtn" href="'.dol_escape_htmltag($selfbase.($search !== '' ? '&search='.urlencode($search) : '').'&page='.($page - 1)).'">'.img_picto('', 'fa-chevron-left').'</a>';
+	print ' <a class="cm-btn cm-iconbtn" href="'.dol_escape_htmltag($selfbase.$searchparam.'&page='.($page - 1)).'">'.img_picto('', 'fa-chevron-left').'</a>';
 }
 if ($last < $total) {
-	print ' <a class="cm-btn cm-iconbtn" href="'.dol_escape_htmltag($selfbase.($search !== '' ? '&search='.urlencode($search) : '').'&page='.($page + 1)).'">'.img_picto('', 'fa-chevron-right').'</a>';
+	print ' <a class="cm-btn cm-iconbtn" href="'.dol_escape_htmltag($selfbase.$searchparam.'&page='.($page + 1)).'">'.img_picto('', 'fa-chevron-right').'</a>';
 }
 print '</span>';
 print '</div>';
@@ -277,7 +292,12 @@ print '<div class="cm-rows" role="list">';
 if ($listerror !== '') {
 	print '<div class="cm-empty error">'.dol_escape_htmltag($listerror).'</div>';
 } elseif (empty($messages)) {
-	print '<div class="cm-empty">'.$langs->trans($search !== '' ? 'ConvomailNoMatch' : 'ConvomailNoMessage').'</div>';
+	print '<div class="cm-empty">'.$langs->trans($search !== '' ? 'ConvomailNoMatch' : 'ConvomailNoMessage');
+	if ($search !== '' && !$searchbody) {
+		// Nothing in sender, recipients or subject: offer the slower search in the message text
+		print '<br><a href="'.dol_escape_htmltag($selfbase.'&search='.urlencode($search).'&searchbody=1').'">'.$langs->trans('ConvomailSearchInTextToo').'</a>';
+	}
+	print '</div>';
 }
 $todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
 foreach ($messages as $m) {

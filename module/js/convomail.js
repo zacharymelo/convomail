@@ -55,6 +55,25 @@
 		if (switcher) {
 			switcher.addEventListener('change', function () { switcher.form.submit(); });
 		}
+		// Searching can take a while on large folders: say so, and search again when the scope changes
+		var searchform = qs('form.cm-search');
+		if (searchform) {
+			searchform.addEventListener('submit', function () {
+				var rows = qs('.cm-rows');
+				if (rows && searchform.elements.search.value.trim() !== '') {
+					rows.classList.add('cm-searching');
+					rows.setAttribute('data-searching', searchform.getAttribute('data-searching'));
+				}
+			});
+			var bodybox = searchform.querySelector('input[name=searchbody]');
+			if (bodybox) {
+				bodybox.addEventListener('change', function () {
+					if (searchform.elements.search.value.trim() !== '') {
+						searchform.requestSubmit ? searchform.requestSubmit() : searchform.submit();
+					}
+				});
+			}
+		}
 		var pagesize = qs('form.cm-pagesize select');
 		if (pagesize) {
 			pagesize.addEventListener('change', function () { pagesize.form.submit(); });

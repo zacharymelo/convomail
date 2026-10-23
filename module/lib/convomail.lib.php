@@ -186,6 +186,27 @@ function convomail_assets(array $css, array $js = array())
 }
 
 /**
+ * Release the PHP session lock before slow mail server work. PHP keeps one request per session at a time, so
+ * while a mailbox page waits for the server, every other Dolibarr page of the same user would wait too.
+ * The session stays readable for the rest of the request; later writes to it are not saved. Pending notices
+ * are taken out of the stored session first, so they are shown on this page only.
+ *
+ * @return void
+ */
+function convomail_release_session()
+{
+	if (session_status() !== PHP_SESSION_ACTIVE) {
+		return;
+	}
+	$events = $_SESSION['dol_events'] ?? null;
+	unset($_SESSION['dol_events']);
+	session_write_close();
+	if ($events !== null) {
+		$_SESSION['dol_events'] = $events;
+	}
+}
+
+/**
  * Forget the cached folder lists, after an account change
  *
  * @return void

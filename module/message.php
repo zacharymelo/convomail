@@ -137,6 +137,7 @@ if ($action == 'log') {
 }
 
 $folders = convomail_folders($account, $client);
+convomail_release_session();
 $html = ConvomailView::render($account, $client, $folder, $uid, array('showimages' => $showimages, 'context' => 'page', 'folders' => $folders ?: array()));
 $client->close();
 

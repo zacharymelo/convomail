@@ -224,7 +224,11 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
    1. `convomail_get_usable_account()` picks the account: requested, else last used, else default;
    2. `convomail_folders()` lists folders (session cache, 5 minutes);
    3. the folder is chosen: explicit, else role, else last used, else INBOX;
-   4. `listMessages()` loads one page (`convomail_page_size()`: the user's `CONVOMAIL_PAGE_SIZE`, else the setup default, else 25; 10/25/50/100), newest arrival first (UIDs descending, sorted by the module, not by server SORT), with References and previews.
+   4. **Search**, when there is one (`ConvomailHordeMailboxClient::searchUids()`):
+      - every word must match, each in From, To, Cc or Subject (`OR` of `HEADER` criteria). With `searchbody=1` it uses `TEXT` (headers and body), with a 120 s timeout;
+      - servers that refuse grouped criteria get one simple search per header and word, merged by the module;
+      - the matching UIDs are cached for 10 minutes in `<documents>/convomail/temp/search/<user>-<hash>.json`, keyed on the query and the folder's UIDVALIDITY, UIDNEXT and message count, so pages 2+ and repeats don't search again, and new or removed mail refreshes it.
+   5. `listMessages()` loads one page (`convomail_page_size()`: the user's `CONVOMAIL_PAGE_SIZE`, else the setup default, else 25; 10/25/50/100), newest arrival first (UIDs descending, sorted by the module, not by server SORT), with References and previews.
 2. `mapEmails()` and `resolvePage()` give each row its known contact or third party and its project chip.
 3. **Automatic filing** (6.4) runs, then the page renders the three panes. `data-*` attributes on `.cm-app` carry the account, folder, CSRF token and endpoint URLs for `js/convomail.js`.
 4. A row click fetches `ajax/message.php`. `ConvomailView::render()` then:
@@ -303,7 +307,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 
 | Path | Method | Parameters | Access | Output |
 |---|---|---|---|---|
-| `mailbox.php` | GET | `accountid, folder, role, search, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
+| `mailbox.php` | GET | `accountid, folder, role, search, searchbody, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
 | `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log, socid, projectid, contactids[], copyfiles` | same | Page |
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
@@ -385,7 +389,8 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 
 - **IMAP only.** Sign-in is by password, or OAuth with Google or Microsoft 365. OAuth was tested against a local Dovecot with a token check, not yet against Google or Microsoft themselves. Other OAuth providers aren't offered.
 - **No background sync.** Filing replies needs someone to open the mailbox page that lists them.
-- **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's.
+- **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's. The default header search took 0.1–0.3 s on 20,000 messages (Dovecot without full-text index); a search in the message text about 4 s there, and much more on a remote server with large messages.
+- **Session lock:** mailbox, message, reading pane and attachment requests call `convomail_release_session()` before talking to the mail server, so a slow server never blocks the user's other Dolibarr pages. Session writes after that point are not saved; pending notices are moved out first so they show once.
 - **Drafts aren't saved**, there are no shared or team mailboxes, and nothing is permanently deleted (emptying Trash is left to the mail client).
 - **Tested only** on Dolibarr 23.0 with PHP 8.2 and GreenMail. Not yet tested on real Gmail / Microsoft 365, other Dolibarr versions (the user's production runs 24), or the dark theme.
-- **Test-server quirks:** GreenMail omits In-Reply-To from ENVELOPE, returns nothing for partial fetches, and doesn't search Latin-1 bodies. The client works around the first two.
+- **Test-server quirks:** GreenMail omits In-Reply-To from ENVELOPE, returns nothing for partial fetches, doesn't search Latin-1 bodies, refuses grouped search criteria, and matches FROM / TO / CC against whole addresses only (so "dana" finds nothing there; real servers match any part). The client works around the first two and the grouping.

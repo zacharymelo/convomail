@@ -64,12 +64,13 @@ interface ConvomailMailboxClient
 	 * @param  string $folder     Folder name
 	 * @param  int    $offset     Index of the first message (0 = newest)
 	 * @param  int    $limit      Page size
-	 * @param  string $searchText Text to search in headers and body ('' = all)
+	 * @param  string $searchText Words to search for ('' = all); every word must match
+	 * @param  bool   $searchBody Search the message text too; false = sender, recipients and subject only
 	 * @return array{total:int,messages:array<int,array<string,mixed>>}|false
 	 *         Each message: uid, msgid, subject, date (timestamp), from, to, cc (lists of array{name,email}),
 	 *         seen, answered, flagged, size, has_attachments. false on error.
 	 */
-	public function listMessages($folder, $offset, $limit, $searchText = '');
+	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false);
 
 	/**
 	 * Headers and MIME structure of one message.

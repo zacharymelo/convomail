@@ -37,10 +37,10 @@ Phases in order of value as last agreed. Re-check the order with the owner befor
 - Response-time report per user and per customer.
 
 ### Smaller items
+- Search across folders, and Gmail's own search syntax (`X-GM-RAW`) for fast text search on Gmail.
 - Save drafts to the IMAP Drafts folder.
 - Several References ids when core accepts them (UPSTREAM item 7).
 - Translations beyond en_US (fr_FR first).
-- Search across folders; the server's search only covers one folder.
 - A per-user "file this sender always to project X" rule.
 
 ## Toward core

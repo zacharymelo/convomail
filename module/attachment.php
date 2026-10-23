@@ -56,6 +56,7 @@ if (!$account || $uid <= 0 || $folder === '' || !preg_match('/^[0-9]+(\.[0-9]+)*
 	httponly_accessforbidden('Forbidden', 403);
 }
 
+convomail_release_session();
 $client = new ConvomailHordeMailboxClient($account);
 $part = $client->fetchPart($folder, $uid, $partid);
 $client->close();

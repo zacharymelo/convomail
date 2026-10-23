@@ -56,6 +56,16 @@ docker rm -f cm-dovecot
 
 The consent redirect itself can be checked with fake apps: the Connect button sends you to `accounts.google.com` / `login.microsoftonline.com` with Convomail's redirect URI and the right scopes. Going further needs a real app.
 
+## Measure on a large mailbox
+
+`dev/bigmailbox/` makes 20,000 messages for `big@x.test` on a Dovecot without full-text index, like most hosted servers. Message 4321 has the word "zebracactus" in its body only.
+
+```bash
+dev/bigmailbox/start.sh /tmp/cm-vmail
+```
+
+Add `cm-dovecot` to *Allowed mail servers*, add an account (big@x.test / pass, IMAP and SMTP `cm-dovecot`, ports 31143 / 31587, no encryption), then time pages with `curl -w '%{time_total}'`. Stop it with `docker rm -f cm-dovecot`.
+
 ## Fill the mailbox
 
 ```bash

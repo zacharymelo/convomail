@@ -39,7 +39,7 @@ docker compose up -d
 3. Check the result over IMAP where it applies (flags, folders, Sent copy).
 4. For access changes, also try as `salesrep`.
 
-**GreenMail differs from real servers.** It omits In-Reply-To from ENVELOPE, returns nothing for partial body fetches, and doesn't search Latin-1 bodies. The client works around the first two. Real-server behaviour (Gmail, Microsoft 365) is untested.
+**GreenMail differs from real servers.** It omits In-Reply-To from ENVELOPE, returns nothing for partial body fetches, doesn't search Latin-1 bodies, refuses grouped search criteria, and matches FROM / TO / CC against whole addresses only. Test search on `dev/bigmailbox/` (Dovecot, 20,000 messages) instead. Real-server behaviour (Gmail, Microsoft 365) is untested.
 
 ## Release
 
@@ -78,6 +78,10 @@ Only when asked:
 - Horde refuses a blank password before trying XOAUTH2: pass the `Horde_Imap_Client_Password_Xoauth2` object as `password` too.
 - Horde's trace masks passwords but not the XOAUTH2 credential; the trace goes through `ConvomailTraceMaskFilter`. Never log a token.
 - Test without Google or Microsoft with `dev/oauth/start.sh` (Dovecot with an oauth2 passdb; see dev/README.md).
+
+**Performance**
+- Don't send IMAP `TEXT` / `BODY` searches by default: without a full-text index the server reads every message. Header criteria are answered from the server's cache.
+- Call `convomail_release_session()` before slow mail-server work in any new page: PHP serialises a user's requests on the session lock.
 
 **Other**
 - Core's `ajax_autocompleter()` fills one hidden id field; for address lists use jQuery UI `autocomplete()` directly in multi-value mode (`js/convomail-compose.js`), and trim trailing separators server-side.
