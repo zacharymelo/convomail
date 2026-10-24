@@ -233,16 +233,19 @@ class ConvomailLogger
 	}
 
 	/**
-	 * Link an email event logged earlier to a record, unless it is linked to one already (an event has one link).
-	 * Done in SQL: ActionComm::update() would rewrite the event's contacts and owner rows.
+	 * Link an email event logged earlier to a record, unless it is linked to one already (an event has one link) or
+	 * the user asked to move it ($replace). Done in SQL: ActionComm::update() would rewrite the event's contacts and
+	 * owner rows.
 	 *
-	 * @param  int    $eventid  Event id
-	 * @param  string $origin   Element of the record ('invoice_supplier', 'ticket'...; 'project' sets fk_project)
-	 * @param  int    $originid Record id
-	 * @param  int    $socid    Third party to set when the event has none
-	 * @return int              1 linked, 0 already linked elsewhere (left as it is), <0 error
+	 * @param  int    $eventid   Event id
+	 * @param  string $origin    Element of the record ('invoice_supplier', 'ticket'...; 'project' sets fk_project)
+	 * @param  int    $originid  Record id
+	 * @param  int    $socid     Third party: set when the event has none, or always when moving the link
+	 * @param  bool   $replace   Move the link from the record it is on (the user chose to)
+	 * @param  int    $projectid The record's project, set when the event has none
+	 * @return int               1 linked, 0 already linked elsewhere (left as it is), <0 error
 	 */
-	public function linkEvent($eventid, $origin, $originid, $socid = 0)
+	public function linkEvent($eventid, $origin, $originid, $socid = 0, $replace = false, $projectid = 0)
 	{
 		$set = array();
 		$where = '';
@@ -255,10 +258,16 @@ class ConvomailLogger
 		} elseif (!in_array($origin, array('societe', 'contact'), true)) {
 			$set[] = 'fk_element = '.((int) $originid);
 			$set[] = "elementtype = '".$this->db->escape($origin)."'";
-			$where = ' AND (fk_element IS NULL OR fk_element = 0 OR (fk_element = '.((int) $originid)." AND elementtype = '".$this->db->escape($origin)."'))";
+			if (!$replace) {
+				$where = ' AND (fk_element IS NULL OR fk_element = 0 OR (fk_element = '.((int) $originid)." AND elementtype = '".$this->db->escape($origin)."'))";
+			}
 		}
+		// Moved to another record (the user asked): its third party goes with it; otherwise only filled when empty
 		if ((int) $socid > 0) {
-			$set[] = 'fk_soc = CASE WHEN fk_soc IS NULL OR fk_soc = 0 THEN '.((int) $socid).' ELSE fk_soc END';
+			$set[] = $replace ? 'fk_soc = '.((int) $socid) : 'fk_soc = CASE WHEN fk_soc IS NULL OR fk_soc = 0 THEN '.((int) $socid).' ELSE fk_soc END';
+		}
+		if ((int) $projectid > 0 && $origin !== 'project') {
+			$set[] = 'fk_project = CASE WHEN fk_project IS NULL OR fk_project = 0 THEN '.((int) $projectid).' ELSE fk_project END';
 		}
 		if (empty($set)) {
 			return 1;

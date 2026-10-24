@@ -197,7 +197,8 @@
 		var line = qs('.cm-recordline', view);
 		var slot = qs('.cm-recordpanel', view);
 		closeRecordPanel(view);
-		var opener = type === 'file' ? qs('[data-cm-record="file"]', line) : qs('[data-cm-createmenu]', line);
+		// A button of the line (File, Link) or the Create menu, for a kind picked in it
+		var opener = qs(':scope > [data-cm-record="' + type + '"]', line) || qs('[data-cm-createmenu]', line);
 		if (opener) {
 			opener.classList.add('cm-active');
 		}

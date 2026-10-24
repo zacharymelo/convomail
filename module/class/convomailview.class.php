@@ -271,6 +271,32 @@ class ConvomailView
 	}
 
 	/**
+	 * " · on Invoice FA-12": the record an email's event is linked to, for the logged line of the reading pane
+	 *
+	 * @param  DoliDB $db      Database handler
+	 * @param  User   $user    User
+	 * @param  int    $eventid Event
+	 * @return string          HTML, '' if not linked to a record the user may open
+	 */
+	private static function eventRecordLink($db, User $user, $eventid)
+	{
+		global $langs;
+
+		$resql = $db->query('SELECT fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) $eventid));
+		$obj = $resql ? $db->fetch_object($resql) : null;
+		$type = ($obj && (int) $obj->fk_element > 0) ? ConvomailTargets::fromEventType((string) $obj->elementtype) : '';
+		if ($type === '') {
+			return '';
+		}
+		$targets = new ConvomailTargets($db);
+		$o = $targets->fetchVisible($type, (int) $obj->fk_element, $user);
+		if (!$o) {
+			return '';
+		}
+		return ' <span class="cm-eventlink">&middot; '.$langs->trans('ConvomailOnRecord').' <a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($type, (int) $o->id)).'">'.img_picto('', ConvomailTargets::types()[$type]['picto'], 'class="pictofixedwidth"').dol_escape_htmltag(ConvomailTargets::label($type, $o)).'</a></span>';
+	}
+
+	/**
 	 * The "Create" menu of the reading pane: the record kinds the user may create from this email, by group (who
 	 * the email is from). The sender's side comes first: a known supplier's email lists Supplier first.
 	 *
@@ -447,6 +473,7 @@ class ConvomailView
 		$h .= '<div class="cm-projectline">';
 		if ($res && $res['strength'] === ConvomailProjectResolver::LOGGED) {
 			$h .= '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $res['eventid']).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLoggedOpenEvent').'</a>';
+			$h .= self::eventRecordLink($db, $user, (int) $res['eventid']);
 			if ($res['projectid'] > 0 && isset($resolver->projects[$res['projectid']])) {
 				$h .= ' '.self::projectBadge($res['projectid'], $resolver->projects[$res['projectid']], false);
 			}
@@ -466,6 +493,9 @@ class ConvomailView
 		$recordlinks = '';
 		if (!empty($attachments) && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
 			$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="file">'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailFileAttachments').'</button>';
+		}
+		if (getDolGlobalInt('CONVOMAIL_TOOL_LINK') && isModEnabled('agenda') && empty($user->socid)) {
+			$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="link">'.img_picto('', 'fa-link', 'class="pictofixedwidth"').$langs->trans('ConvomailLinkToRecordButton').'</button>';
 		}
 		$recordlinks .= self::createMenu($db, $user, $message, $matched);
 		if ($recordlinks !== '') {

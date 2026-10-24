@@ -215,6 +215,73 @@ class ConvomailTargets
 	}
 
 	/**
+	 * Documents an email is likely about: one whose reference (ours, or the customer's / supplier's) is a number
+	 * in the subject, then the latest documents of the sender's third party. Candidates only: the caller checks
+	 * each one (fetchVisible / fetchWritable).
+	 *
+	 * @param  string   $subject Subject
+	 * @param  int      $socid   The sender's third party, 0 if unknown
+	 * @param  string[] $types   Types to look in
+	 * @param  int      $recent  Latest documents of the third party, per type
+	 * @return array<int,array{0:string,1:int}> Type and id, best first
+	 */
+	public function matches($subject, $socid, array $types, $recent = 2)
+	{
+		$refcols = array(
+			'propal' => array('propal', array('ref', 'ref_client'), 'propal'), 'commande' => array('commande', array('ref', 'ref_client'), 'commande'),
+			'facture' => array('facture', array('ref', 'ref_client'), 'invoice'), 'supplier_proposal' => array('supplier_proposal', array('ref'), 'supplier_proposal'),
+			'order_supplier' => array('commande_fournisseur', array('ref', 'ref_supplier'), 'supplier_order'),
+			'invoice_supplier' => array('facture_fourn', array('ref', 'ref_supplier'), 'supplier_invoice'),
+			'ticket' => array('ticket', array('ref', 'track_id'), 'ticket'), 'contrat' => array('contrat', array('ref', 'ref_customer', 'ref_supplier'), 'contract'),
+			'fichinter' => array('fichinter', array('ref', 'ref_client'), 'intervention'),
+		);
+		// "PO #4512", "Invoice INV-2026-0042", "(PROV2)": words with a digit
+		$tokens = array();
+		if (preg_match_all('/[A-Za-z0-9][A-Za-z0-9\-\/_.()]{1,40}/', (string) $subject, $m)) {
+			foreach ($m[0] as $t) {
+				$t = trim($t, '.');
+				if (preg_match('/[0-9]/', $t) && dol_strlen($t) >= 3) {
+					$tokens[$t] = "'".$this->db->escape($t)."'";
+					$bare = trim($t, '()');
+					$tokens[$bare] = "'".$this->db->escape($bare)."'";
+				}
+			}
+		}
+		$tokens = array_slice($tokens, 0, 12);
+		$out = array();
+		$passes = array();
+		if (!empty($tokens)) {
+			$passes[] = 'ref';
+		}
+		if ((int) $socid > 0 && $recent > 0) {
+			$passes[] = 'recent';
+		}
+		foreach ($passes as $pass) {
+			foreach ($types as $type) {
+				if (!isset($refcols[$type]) || !isModEnabled(self::types()[$type]['module'])) {
+					continue;
+				}
+				list($table, $cols, $entityel) = $refcols[$type];
+				$sql = 'SELECT t.rowid FROM '.MAIN_DB_PREFIX.$table.' as t WHERE t.entity IN ('.getEntity($entityel).')';
+				if ($pass === 'ref') {
+					$or = array();
+					foreach ($cols as $col) {
+						$or[] = 't.'.$col.' IN ('.implode(',', $tokens).')';
+					}
+					$sql .= ' AND ('.implode(' OR ', $or).')'.((int) $socid > 0 ? ' ORDER BY (t.fk_soc = '.((int) $socid).') DESC, t.rowid DESC' : ' ORDER BY t.rowid DESC').$this->db->plimit(5);
+				} else {
+					$sql .= ' AND t.fk_soc = '.((int) $socid).' ORDER BY t.rowid DESC'.$this->db->plimit((int) $recent);
+				}
+				$resql = $this->db->query($sql);
+				while ($resql && ($obj = $this->db->fetch_object($resql))) {
+					$out[$type.$obj->rowid] = array($type, (int) $obj->rowid);
+				}
+			}
+		}
+		return array_values($out);
+	}
+
+	/**
 	 * Records matching a search, checked one by one like the record itself would be (fetchWritable / fetchVisible)
 	 *
 	 * @param  string   $q     Searched text (2 characters at least)

@@ -320,6 +320,24 @@ ConvomailDocBrowserOverLimit = Over %s in total: the largest files picked from D
 
 # Attachments into Dolibarr, records from emails ("From this email" panel, ConvomailRecord)
 ConvomailFromThisEmail = From this email:
+ConvomailLinkToRecord = Link to a record
+ConvomailLinkToRecordButton = Link to record...
+ConvomailLinkTo = Link to
+ConvomailLinkToHelp = The email shows on that record's Events tab. If it is not logged yet, it is logged there; if it is, its agenda event is linked there.
+ConvomailLinkedNow = Linked now to
+ConvomailMoveLink = Move it to the record chosen below
+ConvomailAlsoFileThem = Also file its %s attachment(s) on that record
+ConvomailLinkButton = Link
+ConvomailLinkButtonAnyway = Link anyway
+ConvomailHintLink = An email has one record: its third party and project follow the record.
+ConvomailPickARecordToLink = Search for the record to link it to, and pick it.
+ConvomailAlreadyLinkedHere = The email was already linked to this record.
+ConvomailLinkedElsewhereTick = The email is linked to another record. Tick "Move it to the record chosen below" to link it here instead.
+ConvomailNotYourEvent = Only the event's owner, or a user who may change everyone's events, can move its link.
+ConvomailLinkedTo = Email linked to %s.
+ConvomailCannotOpenRecord = You are not allowed to open this record.
+ConvomailOnRecord = on
+ConvomailToolLinkDesc = Links an email to a record that already exists (an invoice, an order, a ticket...): it is logged there, or its agenda event is linked there. Turned off, the button is hidden for everyone.
 ConvomailNewSupplierInvoice = New supplier invoice
 ConvomailNewOrder = New customer order
 ConvomailNewProposal = New proposal

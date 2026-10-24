@@ -47,6 +47,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | From an email | File attachments on any record or a Documents folder; a Create menu grouped by who the email is from (Customer: proposal, order, invoice; Supplier: invoice, quote; Other: ticket, project/lead) opens a small panel in the reading pane (finished on the record's card), with its files and the email logged on it; each kind can be turned off in setup | 0.13.0 |
 | From an email | The customer invoice kind is on by default, like the others (it started off in 0.13.0) | 0.13.1 |
 | Phones | Mailbox header (account and Compose on one line, folders in one sideways row with full paths, search on its own line), icon-only message toolbar, forms with labels above full-width fields | 0.13.1 |
+| From an email | Link to record: log an email on an existing document, or link (or move) its agenda event there, optionally filing its attachments; suggestions from references in the subject and the sender's latest documents; the pane shows the event's record | 0.14.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

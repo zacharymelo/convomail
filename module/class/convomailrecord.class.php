@@ -128,16 +128,17 @@ class ConvomailRecord
 		global $langs;
 
 		$file = ($type === 'file');
-		$title = $file ? 'ConvomailFileAttachments' : ConvomailCreator::types()[$type]['title'];
-		$picto = $file ? 'fa-paperclip' : ConvomailCreator::types()[$type]['picto'];
+		$link = ($type === 'link');
+		$title = $file ? 'ConvomailFileAttachments' : ($link ? 'ConvomailLinkToRecord' : ConvomailCreator::types()[$type]['title']);
+		$picto = $file ? 'fa-paperclip' : ($link ? 'fa-link' : ConvomailCreator::types()[$type]['picto']);
 
 		$h = '<form class="cm-rp" data-type="'.dol_escape_htmltag($type).'" novalidate>';
-		$h .= '<input type="hidden" name="action" value="'.($file ? 'file' : 'create').'">';
+		$h .= '<input type="hidden" name="action" value="'.($file ? 'file' : ($link ? 'link' : 'create')).'">';
 		$h .= '<input type="hidden" name="type" value="'.dol_escape_htmltag($type).'">';
 		$h .= '<input type="hidden" name="acceptwarnings" value="0">';
 		$h .= '<div class="cm-rp-head">'.img_picto('', $picto, 'class="pictofixedwidth"').'<span class="cm-rp-title">'.$langs->trans($title).'</span>';
 		// The other kinds of its group (picked Order, meant Proposal): switch without losing the third party
-		if (!$file) {
+		if (!$file && !$link) {
 			$kinds = '';
 			$types = ConvomailCreator::types();
 			foreach ($types as $ktype => $kinfo) {
@@ -153,6 +154,8 @@ class ConvomailRecord
 
 		if ($file) {
 			$h .= $this->filePanel($user);
+		} elseif ($link) {
+			$h .= $this->linkPanel($user);
 		} else {
 			$h .= $this->createPanel($type, $user);
 		}
@@ -405,17 +408,22 @@ class ConvomailRecord
 	}
 
 	/**
-	 * Records to suggest for filing: the logged event's record, Dolibarr tracking ids, the sender's third party and
-	 * contact, the project
+	 * Records to suggest: the logged event's record, Dolibarr tracking ids, documents named in the subject and the
+	 * sender's latest ones, the project, the sender's contact and third party
 	 *
-	 * @param  User $user User
+	 * @param  User          $user  User
+	 * @param  bool          $write Records the user may add files to (else ones the user may open)
+	 * @param  string[]|null $only  Only these types
 	 * @return array<string,array{type:string,id:int,label:string}>
 	 */
-	private function suggestions(User $user)
+	private function suggestions(User $user, $write = true, $only = null)
 	{
 		$suggest = array();
-		$add = function ($ttype, $id) use (&$suggest, $user) {
-			if ($id > 0 && !isset($suggest[$ttype.$id]) && ($o = $this->targets->fetchWritable($ttype, $id, $user))) {
+		$add = function ($ttype, $id) use (&$suggest, $user, $write, $only) {
+			if ($only !== null && !in_array($ttype, $only, true)) {
+				return;
+			}
+			if ($id > 0 && !isset($suggest[$ttype.$id]) && ($o = ($write ? $this->targets->fetchWritable($ttype, $id, $user) : $this->targets->fetchVisible($ttype, $id, $user)))) {
 				$suggest[$ttype.$id] = array('type' => $ttype, 'id' => (int) $id, 'label' => ConvomailTargets::label($ttype, $o));
 			}
 		};
@@ -438,10 +446,113 @@ class ConvomailRecord
 			}
 		}
 		$d = $this->creator->defaults('project', $this->message, $this->myemails);
+		// Documents named in the subject (our ref or theirs), then the sender's latest ones
+		$doctypes = array_values(array_diff(ConvomailTargets::enabledTypes(), array('societe', 'contact', 'project')));
+		foreach ($this->targets->matches((string) $this->message['subject'], (int) $d['socid'], $only !== null ? array_intersect($doctypes, $only) : $doctypes) as $m) {
+			if (count($suggest) >= 8) {
+				break;
+			}
+			$add($m[0], $m[1]);
+		}
 		$add('project', (int) $d['projectid']);
 		$add('contact', (int) $d['contactid']);
 		$add('societe', (int) $d['socid']);
 		return $suggest;
+	}
+
+	/**
+	 * Record kinds an email's event can be linked to: documents. Third parties, contacts and projects are what
+	 * "Log to..." sets.
+	 *
+	 * @return string[]
+	 */
+	public static function linkTypes()
+	{
+		return array_values(array_diff(ConvomailTargets::enabledTypes(), array('societe', 'contact', 'project')));
+	}
+
+	/**
+	 * The agenda event of this email, if logged: its id, owner and the record it is linked to
+	 *
+	 * @return array{eventid:int,owner:int,type:string,id:int}|null
+	 */
+	public function eventLink()
+	{
+		$matcher = new ConvomailMatcher($this->db);
+		$events = $matcher->loggedEvents(array($this->message['msgid']));
+		if (empty($events)) {
+			return null;
+		}
+		$resql = $this->db->query('SELECT id, fk_user_action, fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)));
+		$obj = $resql ? $this->db->fetch_object($resql) : null;
+		if (!$obj) {
+			return null;
+		}
+		$type = ((int) $obj->fk_element > 0) ? ConvomailTargets::fromEventType((string) $obj->elementtype) : '';
+		return array('eventid' => (int) $obj->id, 'owner' => (int) $obj->fk_user_action, 'type' => $type, 'id' => $type !== '' ? (int) $obj->fk_element : 0);
+	}
+
+	/**
+	 * Whether the user may move an event's link: its owner, or a user who may change everyone's events
+	 *
+	 * @param  array{owner:int} $event eventLink()
+	 * @param  User             $user  User
+	 * @return bool
+	 */
+	private static function canEditEvent(array $event, User $user)
+	{
+		return $event['owner'] === (int) $user->id || $user->hasRight('agenda', 'allactions', 'create');
+	}
+
+	/**
+	 * Link panel: the record the email is about (suggested or searched); the email is logged on it, or its event
+	 * linked to it; optionally its attachments filed there too
+	 *
+	 * @param  User $user User
+	 * @return string
+	 */
+	private function linkPanel(User $user)
+	{
+		global $langs;
+
+		$typesinfo = ConvomailTargets::types();
+		$types = self::linkTypes();
+		$event = $this->eventLink();
+		$h = '<div class="cm-rp-grid">';
+		if ($event && $event['type'] !== '') {
+			$o = $this->targets->fetchVisible($event['type'], $event['id'], $user);
+			$name = $o ? ConvomailTargets::label($event['type'], $o) : '#'.$event['id'];
+			$now = img_picto('', $typesinfo[$event['type']]['picto'], 'class="pictofixedwidth"').'<a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($event['type'], $event['id'])).'">'.dol_escape_htmltag($name).'</a>';
+			if (self::canEditEvent($event, $user)) {
+				$now .= '<label class="cm-rp-relink"><input type="checkbox" name="relink" value="1"> '.$langs->trans('ConvomailMoveLink').'</label>';
+			}
+			$h .= self::row($langs->trans('ConvomailLinkedNow'), $now);
+		}
+
+		$choices = '';
+		$first = true;
+		foreach ($this->suggestions($user, false, $types) as $key => $s) {
+			if ($event && $s['type'] === $event['type'] && $s['id'] === $event['id']) {
+				continue;	// where it is already
+			}
+			$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="s'.dol_escape_htmltag($key).'"'.($first ? ' checked' : '').'> '.img_picto('', $typesinfo[$s['type']]['picto'], 'class="pictofixedwidth"').dol_escape_htmltag($s['label']).'</label>';
+			$choices .= '<input type="hidden" name="targettype_s'.dol_escape_htmltag($key).'" value="'.dol_escape_htmltag($s['type']).'"><input type="hidden" name="targetid_s'.dol_escape_htmltag($key).'" value="'.((int) $s['id']).'">';
+			$first = false;
+		}
+		$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="other"'.($first ? ' checked' : '').'> '.$langs->trans('ConvomailOtherRecord').'</label> ';
+		$choices .= self::picker('otherid', 0, '', implode(',', $types), '', 'othertype');
+		$h .= self::row($langs->trans('ConvomailLinkTo'), '<span class="cm-rp-targets">'.$choices.'</span>', false, $langs->transnoentitiesnoconv('ConvomailLinkToHelp'));
+
+		// The attachments can go there too (the same checks as File attachments)
+		if (!empty($this->attachments) && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
+			$h .= self::row('', '<label><input type="checkbox" name="fileit" value="1"> '.$langs->trans('ConvomailAlsoFileThem', count($this->attachments)).'</label>');
+			foreach ($this->attachments as $att) {
+				$h .= '<input type="hidden" name="parts[]" value="'.dol_escape_htmltag($att['id']).'">';
+			}
+		}
+		$h .= '</div>';
+		$h .= self::footer('ConvomailLinkButton', 'ConvomailHintLink', empty($types) ? array($langs->trans('ConvomailNoTargetAllowed')) : array());
+		return $h;
 	}
 
 	/*
@@ -544,6 +655,79 @@ class ConvomailRecord
 			'message' => empty($done['stored']) ? $langs->trans('ConvomailRecordCreatedNoFiles', ConvomailTargets::label($type, $this->creator->object)) : $langs->trans('ConvomailRecordCreated', ConvomailTargets::label($type, $this->creator->object), count($done['stored'])),
 			'notes'   => $done['notes'],
 		);
+	}
+
+	/**
+	 * Link the email to the posted record: log it there, or link its event (moved from another record when the user
+	 * ticked it and may change that event); file its attachments there too when asked
+	 *
+	 * @param  User $user User
+	 * @return array{ok:bool,message?:string,notes?:string[],errors?:string[]}
+	 */
+	public function link(User $user)
+	{
+		global $langs;
+
+		$target = GETPOST('target', 'aZ09');
+		if ($target === 'other') {
+			$ttype = GETPOST('othertype', 'aZ09');
+			$tid = GETPOSTINT('otherid');
+		} else {
+			$ttype = GETPOST('targettype_'.$target, 'aZ09');
+			$tid = GETPOSTINT('targetid_'.$target);
+		}
+		if ($target === 'other' && $tid <= 0) {
+			return array('ok' => false, 'errors' => array($langs->trans('ConvomailPickARecordToLink')));
+		}
+		$object = in_array((string) $ttype, self::linkTypes(), true) ? $this->targets->fetchVisible((string) $ttype, (int) $tid, $user) : null;
+		if (!$object) {
+			return array('ok' => false, 'errors' => array($langs->trans($this->targets->error === 'ConvomailTargetNotAllowed' ? 'ConvomailCannotOpenRecord' : 'ConvomailTargetUnknown')));
+		}
+		$socid = (int) ($object->socid ?? ($object->fk_soc ?? 0));
+		$projectid = (int) ($object->fk_project ?? 0);
+		$label = '<a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($ttype, (int) $object->id)).'">'.dol_escape_htmltag(ConvomailTargets::label($ttype, $object)).'</a>';
+		$notes = array();
+
+		$event = $this->eventLink();
+		if (!$event) {
+			if (ConvomailView::logMessage($this->db, $user, $this->account, $this->client, $this->folder, $this->uid, $this->message, $socid, $projectid, array(), false, $object->element, (int) $object->id) < 0) {
+				return array('ok' => false, 'errors' => array(dol_escape_htmltag(ConvomailView::$error)));
+			}
+		} elseif ($event['type'] === $ttype && $event['id'] === (int) $object->id) {
+			$notes[] = $langs->trans('ConvomailAlreadyLinkedHere');
+		} else {
+			$replace = ($event['type'] !== '');
+			if ($replace && !GETPOSTINT('relink')) {
+				return array('ok' => false, 'errors' => array($langs->trans('ConvomailLinkedElsewhereTick')));
+			}
+			if ($replace && !self::canEditEvent($event, $user)) {
+				return array('ok' => false, 'errors' => array($langs->trans('ConvomailNotYourEvent')));
+			}
+			$logger = new ConvomailLogger($this->db);
+			if ($logger->linkEvent($event['eventid'], $object->element, (int) $object->id, $socid, $replace, $projectid) <= 0) {
+				return array('ok' => false, 'errors' => array($langs->trans('ConvomailEventLinkedElsewhere')));
+			}
+		}
+
+		if (GETPOSTINT('fileit') && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
+			$writable = $this->targets->fetchWritable($ttype, (int) $object->id, $user);
+			if (!$writable) {
+				$notes[] = $langs->trans('ConvomailTargetNotAllowed');
+			} else {
+				$parts = array();
+				foreach ($this->attachments as $att) {
+					if (!ConvomailFiler::refusedExtension($att['name'] !== '' ? $att['name'] : 'part-'.$att['id'])) {
+						$parts[] = (string) $att['id'];
+					}
+				}
+				$done = $this->fileAndLog($ttype, $writable, $parts, false, $user);
+				$notes = array_merge($notes, $done['notes']);
+				if (!empty($done['stored'])) {
+					$notes[] = $langs->trans('ConvomailFilesStored', count($done['stored']), $label);
+				}
+			}
+		}
+		return array('ok' => true, 'message' => $langs->trans('ConvomailLinkedTo', $label), 'notes' => $notes);
 	}
 
 	/**
