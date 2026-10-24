@@ -376,6 +376,8 @@ if ($listerror !== '') {
 	print '</div>';
 }
 $todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
+// Sent with the tracking image: opened or not, one query for the page
+$opens = ConvomailTracker::opens($db, (int) $account->id, array_column($messages, 'msgid'));
 foreach ($messages as $m) {
 	// Web form mail: show the visitor (Reply-To), with the form's address after "via"
 	$via = $showto ? array() : (ConvomailMatcher::replyToOthers($m) ? $m['from'] : array());
@@ -401,6 +403,9 @@ foreach ($messages as $m) {
 	print '</span>';
 	print '</a>';
 	print '<span class="cm-row-tags">';
+	if (isset($opens[$m['msgid'] ?? ''])) {
+		print ConvomailTracker::openIcon($opens[$m['msgid']]);
+	}
 	if ($m['has_attachments']) {
 		print img_picto($langs->trans('ConvomailHasAttachments'), 'fa-paperclip', 'class="opacitymedium"');
 	}

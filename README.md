@@ -289,7 +289,7 @@ Convomail offers both, because they answer different questions:
 | How | Standard `Disposition-Notification-To` header | Invisible 1×1 image served by `custom/convomail/public/open.php` |
 | Recipient sees | Their mail app may ask "Send a read receipt?" | Nothing |
 | Reliability | The recipient can refuse; Gmail web and many apps ignore it | Approximate: image blocking misses opens; Apple Mail Privacy Protection and security scanners load images without anyone reading |
-| Where results appear | As emails in the sender's inbox (visible in the Mailbox; file them with Log to… or an Email Collector) | "Email opened" event on the timeline (first open), and an open count on the sent email's event card |
+| Where results appear | As emails in the sender's inbox (visible in the Mailbox; file them with Log to… or an Email Collector) | In the Mailbox: an eye on the sent email's row (crossed out while not opened; the count and first/last open times in its tooltip), "Opened 3 times, first on …, last on …" on the open message, and the eye in the conversation. Also an "Email opened" event on the timeline (first open) and an open count on the sent email's event card |
 | Default | Off; an admin can make it ticked by default | Off; an admin must switch it on |
 
 Before switching open tracking on:

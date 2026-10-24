@@ -199,7 +199,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailMatcher` | Addresses to contacts and third parties | `parseAddresses()`, `mapEmails()` (per address), `matchRecipients()` (contacts + single third party), `loggedEvents()` (Message-ID → event) |
 | `ConvomailProjectResolver` | Which project a message belongs to | `resolvePage()` (whole page in about 4 queries), `resolve()`, `parentIds()`; `$projects` cache (ref, title, socid) |
 | `ConvomailLogger` | Write agenda events + link rows | `logSent()`, `logReceived()`, `fetchReplyTarget()` |
-| `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `recordOpen()` (first open creates `AC_CONVOMAIL_OPENED`) |
+| `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `recordOpen()` (first open creates `AC_CONVOMAIL_OPENED`); `opens()` (count, first and last open of tracked messages by account + Message-ID: one query for a list page or a conversation; empty while tracking is off), `openText()`, `openIcon()` — shown on mailbox rows, the message and the conversation |
 | `ConvomailView` | Shared server-side views and filing | `render()` (reading pane / full page), `logMessage()` (filing used by all paths), `defaultLinks()`, `projectThreads()`, `projectBadge()`, `myEmails()`, `msgid()` |
 | `ActionsConvomail` | Hooks | `getElementProperties`, `addMoreActionsButtons` (**Reply** on email events; third party, contact and project cards keep only core's **Send email**, see ROADMAP), `formObjectOptions` (receipt status on the event card) |
 
