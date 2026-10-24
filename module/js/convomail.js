@@ -598,6 +598,88 @@
 		});
 		var openTimer = null;
 
+		// Moving a folder: drag one of the user's folders (data-movable) onto another folder, or onto the
+		// top-level zone above the list; ajax/folder.php action=move renames it, subfolders included
+		var movingFolder = null;
+		var rootZone = qs('[data-cm-root]', folderBox);
+		function within(name, ancestor) {	// name is ancestor or one of its subfolders
+			for (var n = name; n; n = parentOf[n]) {
+				if (n === ancestor) {
+					return true;
+				}
+			}
+			return false;
+		}
+		function folderTarget(ev) {	// where a dragged folder may go: a folder name, '' (top level) or null
+			if (!movingFolder) {
+				return null;
+			}
+			if (rootZone && ev.target.closest('[data-cm-root]')) {
+				return parentOf[movingFolder] ? '' : null;
+			}
+			var f = ev.target.closest('.cm-folder');
+			if (!f) {
+				return null;
+			}
+			var name = f.getAttribute('data-name');
+			return (within(name, movingFolder) || parentOf[movingFolder] === name) ? null : name;
+		}
+		folderBox.addEventListener('dragstart', function (ev) {
+			var f = ev.target.closest ? ev.target.closest('.cm-folder[data-movable]') : null;
+			if (!f) {
+				return;
+			}
+			movingFolder = f.getAttribute('data-name');
+			ev.dataTransfer.effectAllowed = 'move';
+			ev.dataTransfer.setData('text/plain', f.getAttribute('data-label'));
+			app.classList.add('cm-dragging-folder');
+			f.classList.add('cm-dragged');
+		});
+		folderBox.addEventListener('dragend', function () {
+			movingFolder = null;
+			app.classList.remove('cm-dragging-folder');
+			qsa('.cm-dragged, .cm-drop', folderBox).forEach(function (el) { el.classList.remove('cm-dragged', 'cm-drop'); });
+		});
+		folderBox.addEventListener('dragover', function (ev) {
+			var dest = folderTarget(ev);
+			if (dest === null) {
+				return;
+			}
+			ev.preventDefault();
+			ev.dataTransfer.dropEffect = 'move';
+			var el = dest === '' ? rootZone : ev.target.closest('.cm-folder');
+			qsa('.cm-drop', folderBox).forEach(function (o) { if (o !== el) { o.classList.remove('cm-drop'); } });
+			if (dest !== '' && !el.classList.contains('cm-drop') && el.classList.contains('cm-folder-collapsed')) {
+				clearTimeout(openTimer);
+				openTimer = setTimeout(function () {
+					if (el.classList.contains('cm-drop')) {
+						setCollapsed(dest, false);
+						applyTree();
+					}
+				}, 700);
+			}
+			el.classList.add('cm-drop');
+		});
+		folderBox.addEventListener('drop', function (ev) {
+			var dest = folderTarget(ev);
+			if (dest === null) {
+				return;
+			}
+			ev.preventDefault();
+			var name = movingFolder;
+			var active = app.getAttribute('data-folder');
+			folderCall('move', { name: name, parent: dest }).then(function (res) {
+				if (dest) {
+					setCollapsed(dest, false);	// show where it went
+				}
+				if (within(active, name)) {
+					window.location.href = folderPage(res.name + active.slice(name.length));	// the open folder moved too
+				} else {
+					window.location.reload();
+				}
+			}, function (e) { notify(e.message, false); });
+		});
+
 		// Drag messages onto a folder: the ticked ones if the dragged row is ticked, else that row
 		var dragging = null;
 		function endDrag() {

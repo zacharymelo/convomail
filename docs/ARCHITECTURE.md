@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.11.0**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.12.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -353,7 +353,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|filing_on\|filing_off\|filing_run` | own (`account->read`) or any (`account->admin`) | Page |
 | `admin/setup.php` | GET / POST | `action=update, CONVOMAIL_ALLOWED_HOSTS` | admin | Page |
 | `ajax/message.php` | GET | `accountid, folder, uid, showimages` | `account->read`; usable account | HTML fragment |
-| `ajax/folder.php` | POST | `token, accountid, action=create\|rename\|delete, name, newname, parent` (create in a folder) | `account->read`; usable account; `canManage()`. Never Inbox / role folders / the account's Sent folder; delete only empty without subfolders | JSON |
+| `ajax/folder.php` | POST | `token, accountid, action=create\|rename\|move\|delete, name, newname, parent` (create in a folder; move into a folder, '' = top level, refused into itself or its subfolders) | `account->read`; usable account; `canManage()`. Never Inbox / role folders / the account's Sent folder; delete only empty without subfolders | JSON |
 | `ajax/thread.php` | GET | `accountid, folder, uid`; `body=1, showimages` for one message | `account->read`; usable account | HTML fragment |
 | `ajax/action.php` | POST + token | `accountid, folder, uids[], action, dest, projectid, socid, contactids` | `account->read`; usable account | JSON |
 | `ajax/template.php` | GET | `id, socid, contactid, projectid` | `message->send`; template public or own | JSON `{subject, body}` |
