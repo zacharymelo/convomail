@@ -1187,6 +1187,11 @@
 		if (selected) {
 			selected.scrollIntoView({ block: 'nearest' });
 		}
+		// Phones: the folders are one row that scrolls sideways; show the open one
+		var activeFolder = qs('.cm-folderlist a.cm-folder.active', app);
+		if (activeFolder && activeFolder.parentNode.scrollWidth > activeFolder.parentNode.clientWidth) {
+			activeFolder.parentNode.scrollLeft = activeFolder.offsetLeft - activeFolder.parentNode.offsetLeft - 16;
+		}
 	});
 
 	/**

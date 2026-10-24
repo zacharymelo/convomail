@@ -381,15 +381,16 @@ class ConvomailView
 		// Toolbar
 		$h .= '<div class="cm-toolbar cm-view-toolbar">';
 		if ($user->hasRight('convomail', 'message', 'send')) {
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').$langs->trans('ConvomailReply').'</a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').$langs->trans('ConvomailReplyAll').'</a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').$langs->trans('ConvomailForward').'</a>';
+			// Labels in .cm-btn-label: phones show the icons only (css/convomail.css), the title says what each does
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r" title="'.dol_escape_htmltag($langs->trans('ConvomailReply')).' (r)">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReply').'</span></a>';
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a" title="'.dol_escape_htmltag($langs->trans('ConvomailReplyAll')).' (a)">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReplyAll').'</span></a>';
+			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f" title="'.dol_escape_htmltag($langs->trans('ConvomailForward')).' (f)">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailForward').'</span></a>';
 		}
 		$h .= '<span class="cm-sep"></span>';
-		$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').$langs->trans('ConvomailArchive').'</button>';
-		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').$langs->trans('Delete').'</button>';
-		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</button>';
-		$h .= '<button type="button" class="cm-btn" data-cm-action="unread">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').$langs->trans('ConvomailMarkUnread').'</button>';
+		$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
+		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
+		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
+		$h .= '<button type="button" class="cm-btn" data-cm-action="unread" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkUnread')).' (u)">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailMarkUnread').'</span></button>';
 		if (!empty($opts['folders'])) {
 			$h .= '<select class="cm-move flat" data-cm-action="move"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailMoveTo')).'</option>';
 			foreach ($opts['folders'] as $f) {

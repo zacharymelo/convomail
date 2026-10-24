@@ -150,18 +150,46 @@
 .cm-chips .cm-chip a { margin-left: 4px; font-weight: 600; }
 .convomail-signature { color: var(--cm-muted); }
 
+.cm-folder-full { display: none; }	/* a subfolder's path: phones only */
+
 /* Narrow screens: one column, rows open the full page */
 @media (max-width: 1100px) {
 	.cm-app { grid-template-columns: var(--cm-col1, 170px) 5px var(--cm-col2, 300px) 5px minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
-	.cm-app { display: block; height: auto; border: 0; }
-	.cm-folders { border-right: 0; border-bottom: 1px solid var(--cm-border); }
-	.cm-folderlist { display: flex; flex-wrap: wrap; gap: 4px; }
-	.cm-folderlist a { border-radius: 14px; }
+	.cm-app { display: block; height: auto; min-height: 0; border: 0; }
 	.cm-list { border-right: 0; }
 	.cm-rows { overflow: visible; }
 	.cm-pane, .cm-resize { display: none; }
+	/* The folder column becomes a header: account and Compose on one line, the folders in one row that scrolls
+	   sideways (no tree: a subfolder shows its path), then the small links */
+	.cm-folders { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--cm-border); }
+	.cm-folders .convomail-switcher { flex: 1 1 0; min-width: 0; margin: 0; }
+	.cm-folders .cm-account { width: 100% !important; }
+	.cm-compose { flex: 0 0 auto; padding: 6px 14px; }
+	.cm-folderlist { flex: 1 1 100%; display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+	.cm-folderlist::-webkit-scrollbar { display: none; }
+	.cm-folderlist a.cm-folder, .cm-folderlist.cm-has-tree a.cm-folder { flex: 0 0 auto; gap: 6px; padding: 6px 12px; border: 1px solid var(--cm-border); border-radius: 16px; }
+	.cm-folderlist a.cm-folder.cm-folder-hidden { display: flex !important; }
+	.cm-folder-name { overflow: visible; }
+	.cm-folder-toggle, .cm-folder-tools, .cm-folder-root { display: none !important; }
+	.cm-folder-short { display: none; }
+	.cm-folder-full { display: inline; }
+	.cm-newfolder, .cm-refresh, .cm-conversation-switch { flex: 0 0 auto; margin: 0; padding: 2px 4px; }
+	.cm-list-toolbar .cm-search { flex: 1 1 100%; order: 5; }
+	/* Message: icons only, bigger to tap */
+	.cm-view-toolbar { gap: 2px; }
+	.cm-view-toolbar .cm-btn { padding: 8px 10px; }
+	.cm-view-toolbar .cm-btn-label, .cm-view-toolbar .cm-sep { display: none; }
+	.cm-view-toolbar .cm-btn .pictofixedwidth { margin-right: 0; }
+	.cm-view-toolbar select.cm-move { flex: 1 1 100px; max-width: none; }
+	/* Forms (compose, accounts, Log to...): labels above full-width fields */
+	.mod-convomail .tableforfieldcreate, .mod-convomail .tableforfieldcreate > tbody, .mod-convomail .tableforfieldcreate > tbody > tr, .mod-convomail .tableforfieldcreate > tbody > tr > td { display: block; width: auto !important; height: auto !important; }
+	.mod-convomail .tableforfieldcreate > tbody > tr > td:first-child { padding-bottom: 0; border-bottom: 0; }
+	.mod-convomail .tableforfieldcreate td > .pictofixedwidth { display: none; }	/* would sit alone above its full-width field */
+	.mod-convomail .tableforfieldcreate input[type="text"], .mod-convomail .tableforfieldcreate input[type="email"], .mod-convomail .tableforfieldcreate input[type="password"],
+	.mod-convomail .tableforfieldcreate input[type="number"], .mod-convomail .tableforfieldcreate select, .mod-convomail .tableforfieldcreate textarea,
+	.mod-convomail .tableforfieldcreate .select2-container { width: 100% !important; min-width: 0 !important; max-width: 100%; box-sizing: border-box; }
 }
 
 /* Project Emails tab */
