@@ -251,6 +251,25 @@ function convomail_folders(ConvomailAccount $account, $client, $refresh = false)
 }
 
 /**
+ * Shown name of a folder from convomail_folders(): the standard name for Inbox, Sent... (translated), else the
+ * folder's name, or its whole path ("Clients › Acme") where it appears outside the folder tree (menus, chips)
+ *
+ * @param  array<string,mixed> $folder Folder
+ * @param  bool                $path   Full path instead of the name within its parent
+ * @return string                      Plain text (escape before printing)
+ */
+function convomail_folder_label(array $folder, $path = false)
+{
+	global $langs;
+
+	if ($folder['role'] !== '') {
+		return $langs->trans('ConvomailFolder'.ucfirst($folder['role']));
+	}
+	$shown = $path ? ($folder['path'] ?? '') : ($folder['display'] ?? '');
+	return $shown !== '' ? $shown : $folder['label'];
+}
+
+/**
  * Format an address list for display
  *
  * @param  array<int,array{name:string,email:string}> $list Addresses

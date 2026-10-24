@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.10.0)
+## Where it stands (0.11.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -40,6 +40,8 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Conversations | Reply, Reply all and Forward on each opened message of the conversation panel | 0.9.1 |
 | Fixes | The folder list shows subscribed folders, as mail apps do, so an unsubscribed leftover (an empty `INBOX.sent`) no longer appears as a second Sent; folders Convomail creates are subscribed when the server uses subscriptions | 0.10.0 |
 | Folders | New folder (also from Move to), rename and delete empty folders, drag messages onto a folder; shared mailboxes' folders are managed by admins | 0.10.0 |
+| Folders | Folder tree: subfolders indented and collapsible, New subfolder, renames carry subfolders and their subscriptions, full paths in the Move menus | 0.11.0 |
+| Fixes | The personal namespace ("INBOX." servers) was never detected, so new folders went to the top level there | 0.11.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

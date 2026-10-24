@@ -216,3 +216,11 @@
 .cm-row.cm-dragged { opacity: .45; }
 .cm-dragging .cm-folder { outline: 1px dashed transparent; }
 .cm-folder.cm-drop { background: var(--cm-selected); outline: 2px dashed var(--cm-accent); outline-offset: -2px; }
+
+/* Folder tree: subfolders indented under their parent, collapsible */
+.cm-folderlist.cm-has-tree a.cm-folder { padding-left: calc(4px + var(--cm-depth, 0) * 14px); }
+.cm-folder-toggle { display: inline-block; width: 14px; text-align: center; color: var(--cm-muted); cursor: pointer; }
+.cm-folder-toggle-none { cursor: default; }
+.cm-folder-toggle .fa, .cm-folder-toggle .fas { transition: transform .12s; }
+.cm-folder-collapsed .cm-folder-toggle .fa, .cm-folder-collapsed .cm-folder-toggle .fas { transform: rotate(-90deg); }
+.cm-folder-hidden { display: none !important; }

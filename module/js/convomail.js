@@ -404,15 +404,18 @@
 		function folderPage(name) {
 			return window.location.pathname + '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid')) + '&folder=' + encodeURIComponent(name);
 		}
-		// A text field in place of an element: Enter saves, Escape or leaving it cancels
-		function askName(el, value, save) {
+		// A text field in place of an element (or under it, keep = true): Enter saves, Escape or leaving it cancels
+		function askName(el, value, save, keep) {
 			var input = document.createElement('input');
 			input.type = 'text';
 			input.className = 'cm-folder-input';
 			input.maxLength = 100;
 			input.value = value;
 			input.placeholder = app.getAttribute('data-new-folder-prompt');
-			el.style.display = 'none';
+			if (keep) {
+				input.style.marginLeft = 'calc(' + ((parseInt(el.getAttribute('data-depth') || '0', 10) + 1) * 14) + 'px)';
+			}
+			el.style.display = keep ? '' : 'none';
 			el.parentNode.insertBefore(input, el.nextSibling);
 			input.focus();
 			input.select();
@@ -491,6 +494,13 @@
 					askName(tool, '', function (name) {
 						return folderCall('create', { name: name }).then(function () { window.location.reload(); });
 					});
+				} else if (what === 'subfolder') {
+					askName(link, '', function (name) {
+						return folderCall('create', { name: name, parent: link.getAttribute('data-name') }).then(function () {
+							setCollapsed(link.getAttribute('data-name'), false);	// show the new subfolder
+							window.location.reload();
+						});
+					}, true);
 				} else if (what === 'rename') {
 					askName(link, link.getAttribute('data-label'), function (name) {
 						return folderCall('rename', { name: link.getAttribute('data-name'), newname: name }).then(function (res) {
@@ -522,6 +532,71 @@
 				}
 			});
 		}
+
+		// Folder tree: collapse a folder's subfolders (kept per account in this browser). The open folder's
+		// branch is always shown; a collapsed folder opens while messages are dragged over it.
+		var collapseKey = 'convomail.collapsed.' + app.getAttribute('data-accountid');
+		var collapsed = {};
+		try {
+			(JSON.parse(window.localStorage.getItem(collapseKey)) || []).forEach(function (n) { collapsed[n] = true; });
+		} catch (e) {
+			collapsed = {};
+		}
+		var folderLinks = qsa('.cm-folder', folderBox);
+		var parentOf = {};
+		folderLinks.forEach(function (a) { parentOf[a.getAttribute('data-name')] = a.getAttribute('data-parent') || ''; });
+		function setCollapsed(name, on) {
+			if (on) {
+				collapsed[name] = true;
+			} else {
+				delete collapsed[name];
+			}
+			try {
+				window.localStorage.setItem(collapseKey, JSON.stringify(Object.keys(collapsed)));
+			} catch (e) { /* sizes last for this page only */ }
+		}
+		function applyTree() {
+			folderLinks.forEach(function (a) {
+				var hidden = false;
+				for (var p = parentOf[a.getAttribute('data-name')]; p; p = parentOf[p]) {
+					if (collapsed[p]) {
+						hidden = true;
+						break;
+					}
+				}
+				a.classList.toggle('cm-folder-hidden', hidden);
+				var toggle = qs('[data-cm-toggle]', a);
+				if (toggle) {
+					var closed = !!collapsed[a.getAttribute('data-name')];
+					a.classList.toggle('cm-folder-collapsed', closed);
+					toggle.setAttribute('aria-expanded', closed ? 'false' : 'true');
+				}
+			});
+		}
+		for (var open = parentOf[app.getAttribute('data-folder')]; open; open = parentOf[open]) {
+			if (collapsed[open]) {
+				setCollapsed(open, false);
+			}
+		}
+		applyTree();
+		folderBox.addEventListener('click', function (ev) {
+			var toggle = ev.target.closest('[data-cm-toggle]');
+			if (toggle) {
+				ev.preventDefault();
+				ev.stopPropagation();
+				var name = toggle.closest('.cm-folder').getAttribute('data-name');
+				setCollapsed(name, !collapsed[name]);
+				applyTree();
+			}
+		}, true);
+		folderBox.addEventListener('keydown', function (ev) {
+			var toggle = ev.target.closest('[data-cm-toggle]');
+			if (toggle && (ev.key === 'Enter' || ev.key === ' ')) {
+				ev.preventDefault();
+				toggle.click();
+			}
+		});
+		var openTimer = null;
 
 		// Drag messages onto a folder: the ticked ones if the dragged row is ticked, else that row
 		var dragging = null;
@@ -557,6 +632,15 @@
 			ev.preventDefault();
 			ev.dataTransfer.dropEffect = 'move';
 			qsa('.cm-drop', folderBox).forEach(function (o) { if (o !== f) { o.classList.remove('cm-drop'); } });
+			if (!f.classList.contains('cm-drop') && f.classList.contains('cm-folder-collapsed')) {
+				clearTimeout(openTimer);
+				openTimer = setTimeout(function () {
+					if (f.classList.contains('cm-drop')) {
+						setCollapsed(f.getAttribute('data-name'), false);
+						applyTree();
+					}
+				}, 700);
+			}
 			f.classList.add('cm-drop');
 		});
 		folderBox.addEventListener('dragleave', function (ev) {
