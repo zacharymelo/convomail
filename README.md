@@ -197,7 +197,7 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 
 ## From an email into Dolibarr
 
-Under the people of an open message, **From this email:** offers a few buttons. Each opens a small panel right there, above the message, so the email stays in view; Esc or ✕ closes it.
+Under the people of an open message, **From this email:** offers **File attachments...** and a **Create ▾** menu. Each opens a small panel right there, above the message, so the email stays in view; Esc or ✕ closes it.
 
 - **File attachments...** The attachments are chips, all on (click one to leave it out). Then pick where they go:
   - a suggested record: the one the email is already logged on, the record named by Dolibarr's tracking id in what the email answers, its third party, contact or project;
@@ -205,13 +205,23 @@ Under the people of an open message, **From this email:** offers a few buttons. 
   - or a folder of the Documents module.
 
   The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before). You stay in the mailbox.
-- **Supplier invoice**, **Customer order**, **Ticket**, **Project / lead**: only the few fields a draft needs, pre-filled from the email. **Create and open** creates the draft with the ticked attachments filed on it and the email logged on it, then opens it in Dolibarr, where you finish it.
+- **Create ▾** groups what an email can become by who it is from:
+
+  | Group | Kinds |
+  |---|---|
+  | **Customer** | Proposal, Order, Invoice (Invoice is off until an admin turns it on: an invoice usually follows an order or a proposal) |
+  | **Supplier** | Invoice, Quote (recorded as a Dolibarr supplier proposal) |
+  | **Other** | Ticket, Project / lead |
+
+  When the sender is a known supplier, Supplier comes first; otherwise Customer. A panel asks only the few fields a draft needs, pre-filled from the email; its switch (Proposal · Order · Invoice, Invoice · Quote) changes the kind without losing the third party or the customer's reference. **Create and open** creates the draft with the ticked attachments filed on it and the email logged on it, then opens it in Dolibarr, where you finish it.
+  - **Proposal / Customer invoice:** the customer and their reference. A proposal is valid for the setup's default days; an invoice takes the customer's payment terms. Warned if this customer already has one with that reference.
+  - **Supplier quote:** the supplier; their prices are entered on the quote.
   - **Supplier invoice:** the supplier (from the sender's address when it is a supplier), their invoice number (from the subject), the date, and optionally the amount without VAT with its rate (one line). Due date from the supplier's terms; other lines on the invoice. Refused if this supplier already has an invoice with that number; warned if one has the same amount within a week, or if the PDF is already filed on a supplier invoice.
   - **Customer order:** the customer and their purchase order number (customer reference, from the subject), dated by the email; the PO is attached and the contact added. Products are added on the order.
   - **Ticket:** third party and subject; the email's text is the message, type, category and severity are the dictionary defaults, and the assignee is set on the ticket. Replies thread with the ticket. The customer is only emailed that the ticket is open if you tick it.
   - **Project / lead:** third party and title; the email's text is the description. You become its project leader; amounts and dates are set on the project.
 
-  The project the email belongs to shows as a chip on the invoice, order and ticket panels (✕ to leave it out). Warnings show next to the button, which then reads **Create anyway and open**.
+  The project the email belongs to shows as a chip on the panels (✕ to leave it out). Warnings show next to the button, which then reads **Create anyway and open**.
 
   A record created from an email is created only once: the same email can't make a second ticket, project, invoice or order of that kind.
 

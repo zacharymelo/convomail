@@ -44,7 +44,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | The personal namespace ("INBOX." servers) was never detected, so new folders went to the top level there | 0.11.0 |
 | Folders | Move a folder by dragging it onto another folder or onto the top-level zone; subfolders, messages and subscriptions follow | 0.12.0 |
 | Fixes | Dragging a folder was cancelled by the browser as soon as it started (the top-level zone appeared and moved the list); the zone now lays over the column | 0.12.1 |
-| From an email | File attachments on any record or a Documents folder; create a supplier invoice, customer order, ticket or project/lead from an email in a small panel of the reading pane (finished on the record's card), with its files and the email logged on it; each button can be turned off in setup | next release |
+| From an email | File attachments on any record or a Documents folder; a Create menu grouped by who the email is from (Customer: proposal, order, invoice; Supplier: invoice, quote; Other: ticket, project/lead) opens a small panel in the reading pane (finished on the record's card), with its files and the email logged on it; each kind can be turned off in setup (customer invoice starts off) | 0.13.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
@@ -52,7 +52,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
 
-### Reading supplier invoices (in progress on `dev`)
+### Reading supplier invoices (next)
 - Fill the supplier invoice panel from the invoice: e-invoice XML attached (CII/UBL), Factur-X/ZUGFeRD embedded in the PDF, else the PDF's text through Dolibarr's AI module when the admin turns it on. The readers are written (`ConvomailEInvoice`, `ConvomailPdfEmbedded`, `ConvomailInvoiceAi`, `ConvomailInvoiceReader`) but not wired in.
 - Filled fields get a "check" badge naming where they came from; the user still submits. The supplier is never taken from the document: it is pre-selected only when the sender's address and the VAT number agree.
 - No OCR: a scanned invoice has no text, so it is typed by hand.

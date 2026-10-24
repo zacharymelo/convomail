@@ -32,6 +32,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/ajax.lib.php';
 dol_include_once('/convomail/lib/convomail.lib.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailoauth.class.php');
+dol_include_once('/convomail/class/convomailcreator.class.php');
 
 $langs->loadLangs(array('admin', 'mails', 'convomail@convomail'));
 
@@ -159,17 +160,21 @@ print '<td class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingDesc', do
 
 // "From this email" tools of the reading pane: an admin can hide those not used here
 print '<tr class="liste_titre"><td colspan="3">'.$langs->trans('ConvomailToolsTitle').'</td></tr>';
-foreach (array(
-	'CONVOMAIL_TOOL_FILE' => array('ConvomailFileAttachments', ''),
-	'CONVOMAIL_TOOL_SUPPLIER_INVOICE' => array('ConvomailCreateSupplierInvoice', 'supplier_invoice'),
-	'CONVOMAIL_TOOL_ORDER' => array('ConvomailCreateOrder', 'order'),
-	'CONVOMAIL_TOOL_TICKET' => array('ConvomailCreateTicket', 'ticket'),
-	'CONVOMAIL_TOOL_PROJECT' => array('ConvomailCreateProject', 'project'),
-) as $const => $info) {
-	$moduleoff = ($info[1] !== '' && !isModEnabled($info[1]));
-	print '<tr class="oddeven"><td>'.$langs->trans($info[0]).'</td>';
-	print '<td>'.ajax_constantonoff($const).'</td>';
-	print '<td class="opacitymedium">'.$langs->trans($const === 'CONVOMAIL_TOOL_FILE' ? 'ConvomailToolFileDesc' : 'ConvomailToolCreateDesc').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailFileAttachments').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_TOOL_FILE').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailToolFileDesc').'</td></tr>';
+// The Create menu, by group (who the email is from)
+$targettypes = ConvomailTargets::types();
+foreach (ConvomailCreator::groups() as $group => $grouplabel) {
+	foreach (ConvomailCreator::types() as $ctype => $info) {
+		if ($info['group'] !== $group) {
+			continue;
+		}
+		$moduleoff = !isModEnabled($targettypes[$ctype]['module']);
+		print '<tr class="oddeven"><td>'.$langs->trans('ConvomailCreateMenu').' &rsaquo; '.$langs->trans($grouplabel).' &rsaquo; '.$langs->trans($info['label']).'</td>';
+		print '<td>'.ajax_constantonoff($info['setting']).'</td>';
+		print '<td class="opacitymedium">'.$langs->trans('ConvomailToolCreateDesc').($ctype === 'facture' ? ' '.$langs->trans('ConvomailToolInvoiceDesc') : '').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
+	}
 }
 
 // Debug mode (always last)

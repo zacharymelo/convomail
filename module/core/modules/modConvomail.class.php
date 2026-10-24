@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.12.91';
+		$this->version = '0.13.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -74,6 +74,9 @@ class modConvomail extends DolibarrModules
 			4 => array('CONVOMAIL_TOOL_ORDER', 'chaine', '1', 'Create a customer order from an email', 0, 'current', 0),
 			5 => array('CONVOMAIL_TOOL_TICKET', 'chaine', '1', 'Create a ticket from an email', 0, 'current', 0),
 			6 => array('CONVOMAIL_TOOL_PROJECT', 'chaine', '1', 'Create a project or lead from an email', 0, 'current', 0),
+			7 => array('CONVOMAIL_TOOL_PROPOSAL', 'chaine', '1', 'Create a proposal from an email', 0, 'current', 0),
+			8 => array('CONVOMAIL_TOOL_SUPPLIER_QUOTE', 'chaine', '1', 'Record a supplier quote from an email', 0, 'current', 0),
+			// CONVOMAIL_TOOL_INVOICE (a customer invoice from an email) is off until an admin turns it on
 		);
 
 		// Mail accounts tab on the user card
@@ -290,13 +293,13 @@ class modConvomail extends DolibarrModules
 		if (getDolGlobalString('CONVOMAIL_DB_VERSION') !== $this->version) {
 			global $conf, $user;
 
-			// The "From this email" tools (0.13.0) start on for installs made before them; only once, since a
-			// switch turned off is a missing constant and must stay off (0.12.90 is the first version that has them, the 0.13 dev builds)
-			if (version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), '0.12.90', '<')) {
-				foreach ($this->const as $c) {
-					if (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 && !getDolGlobalString($c[0])) {
-						dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
-					}
+			// The "From this email" tools start on for installs made before each of them; only once, since a
+			// switch turned off is a missing constant and must stay off (0.12.90: the first 0.13 dev build)
+			$toolsince = array('CONVOMAIL_TOOL_PROPOSAL' => '0.12.92', 'CONVOMAIL_TOOL_SUPPLIER_QUOTE' => '0.12.92');
+			foreach ($this->const as $c) {
+				$since = $toolsince[$c[0]] ?? '0.12.90';
+				if (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 && version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), $since, '<') && !getDolGlobalString($c[0])) {
+					dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
 				}
 			}
 
