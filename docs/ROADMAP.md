@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.12.0)
+## Where it stands (0.12.1)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -43,6 +43,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Folders | Folder tree: subfolders indented and collapsible, New subfolder, renames carry subfolders and their subscriptions, full paths in the Move menus | 0.11.0 |
 | Fixes | The personal namespace ("INBOX." servers) was never detected, so new folders went to the top level there | 0.11.0 |
 | Folders | Move a folder by dragging it onto another folder or onto the top-level zone; subfolders, messages and subscriptions follow | 0.12.0 |
+| Fixes | Dragging a folder was cancelled by the browser as soon as it started (the top-level zone appeared and moved the list); the zone now lays over the column | 0.12.1 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

@@ -226,7 +226,9 @@
 .cm-folder-hidden { display: none !important; }
 
 /* Moving a folder: the top-level zone shows only while a folder is dragged */
-.cm-folder-root { display: none; padding: 6px 8px; border: 1px dashed var(--cm-border); border-radius: 6px; color: var(--cm-muted); font-size: .9em; }
+.cm-folders { position: relative; }
+/* Laid over the top of the folder column, so showing it moves nothing under the dragged folder */
+.cm-folder-root { display: none; position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; padding: 14px 8px; border: 1px dashed var(--cm-accent); border-radius: 6px; background: var(--colorbackbody, #fff); color: var(--cm-muted); font-size: .9em; text-align: center; box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
 .cm-dragging-folder .cm-folder-root { display: block; }
 .cm-folder-root.cm-drop { background: var(--cm-selected); border-color: var(--cm-accent); color: inherit; }
 .cm-folder.cm-dragged { opacity: .45; }
