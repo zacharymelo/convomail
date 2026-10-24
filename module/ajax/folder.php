@@ -13,7 +13,7 @@
  * \brief   Folder management of a mailbox (JSON): create, rename, delete an empty folder
  *
  * POST parameters: token, accountid, action (create|rename|delete), name (create: the new folder's name;
- * rename/delete: the folder's full name), newname (rename)
+ * rename/delete: the folder's full name), newname (rename), parent (create: full name of the folder to create it in)
  * Who: the account's manager (owner of a personal account, mail accounts admin for a shared mailbox).
  * Inbox, Sent, Drafts, Trash, Junk, Archive and the account's Sent folder are never renamed or deleted.
  */
@@ -72,6 +72,7 @@ $accountid = GETPOSTINT('accountid');
 $action    = GETPOST('action', 'aZ09');
 $name      = trim(GETPOST('name', 'restricthtml'));
 $newname   = trim(GETPOST('newname', 'restricthtml'));
+$parent    = trim(GETPOST('parent', 'restricthtml'));
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read')) {
 	convomail_folder_json(array('ok' => false, 'error' => 'Forbidden'), 403);
@@ -114,7 +115,14 @@ switch ($action) {
 		if (!$valid($name)) {
 			convomail_folder_json(array('ok' => false, 'error' => $invalid), 400);
 		}
+		// Top level (inside the personal namespace), or inside an existing folder: New subfolder
 		$full = $ns['prefix'].$name;
+		if ($parent !== '') {
+			if ($client->folderStatus($parent) === false) {
+				convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderUnknown')), 400);
+			}
+			$full = $parent.$ns['delimiter'].$name;
+		}
 		if ($client->folderStatus($full) !== false) {
 			convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderExists', $name)), 400);
 		}

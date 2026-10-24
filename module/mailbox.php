@@ -249,18 +249,36 @@ print '</form>';
 if ($user->hasRight('convomail', 'message', 'send')) {
 	print '<a class="cm-compose" href="'.dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id).'">'.img_picto('', 'fa-pen', 'class="pictofixedwidth"').$langs->trans('ComposeEmail').'</a>';
 }
-print '<nav class="cm-folderlist">';
-$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
+$hastree = false;
 foreach ($folders as $f) {
-	$label = $f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label'];
+	$hastree = $hastree || !empty($f['children']);
+}
+print '<nav class="cm-folderlist'.($hastree ? ' cm-has-tree' : '').'">';
+$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
+// Folders come in tree order (ConvomailHordeMailboxClient::folderTree()): each is followed by its subfolders,
+// indented by depth; a folder with subfolders can be collapsed (js/convomail.js, kept in this browser)
+foreach ($folders as $f) {
+	$depth = (int) ($f['depth'] ?? 0);
+	$children = (int) ($f['children'] ?? 0);
 	print '<a href="'.dol_escape_htmltag($_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($f['name'])).'" class="cm-folder'.($f['name'] === $folder ? ' active' : '').'" title="'.dol_escape_htmltag($f['name']).'"';
-	print ' data-name="'.dol_escape_htmltag($f['name']).'" data-label="'.dol_escape_htmltag($f['label']).'">';
-	print '<span class="cm-folder-name">'.img_picto('', $icons[$f['role']] ?? 'fa-folder', 'class="pictofixedwidth"').dol_escape_htmltag($label).'</span>';
-	// The user's own folders can be renamed and deleted (when empty); standard ones keep their role
-	if ($canmanagefolders && $f['role'] === '' && $f['name'] !== (string) $account->sent_folder) {
+	print ' data-name="'.dol_escape_htmltag($f['name']).'" data-label="'.dol_escape_htmltag($f['label']).'" data-parent="'.dol_escape_htmltag($f['parent'] ?? '').'" data-depth="'.$depth.'" style="--cm-depth: '.$depth.'">';
+	print '<span class="cm-folder-name">';
+	if ($children > 0) {
+		print '<span role="button" tabindex="0" class="cm-folder-toggle" data-cm-toggle="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFolderToggle')).'" aria-expanded="true">'.img_picto('', 'fa-caret-down').'</span>';
+	} elseif ($hastree) {
+		print '<span class="cm-folder-toggle cm-folder-toggle-none"></span>';	// keeps names aligned
+	}
+	print img_picto('', $icons[$f['role']] ?? 'fa-folder', 'class="pictofixedwidth"').dol_escape_htmltag(convomail_folder_label($f)).'</span>';
+	// The user's own folders can be renamed and deleted (when empty); standard ones keep their role.
+	// Subfolders can be made in the user's folders and in Archive.
+	$editable = ($f['role'] === '' && $f['name'] !== (string) $account->sent_folder);
+	if ($canmanagefolders && ($editable || $f['role'] === 'archive')) {
 		print '<span class="cm-folder-tools">';
-		print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="rename" title="'.dol_escape_htmltag($langs->trans('ConvomailRenameFolder')).'">'.img_picto('', 'fa-pen').'</span>';
-		print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="delete" title="'.dol_escape_htmltag($langs->trans('ConvomailDeleteFolder')).'">'.img_picto('', 'fa-trash').'</span>';
+		print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="subfolder" title="'.dol_escape_htmltag($langs->trans('ConvomailNewSubfolder')).'">'.img_picto('', 'fa-folder-plus').'</span>';
+		if ($editable) {
+			print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="rename" title="'.dol_escape_htmltag($langs->trans('ConvomailRenameFolder')).'">'.img_picto('', 'fa-pen').'</span>';
+			print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="delete" title="'.dol_escape_htmltag($langs->trans('ConvomailDeleteFolder')).'">'.img_picto('', 'fa-trash').'</span>';
+		}
 		print '</span>';
 	}
 	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts'), true)) {
@@ -297,7 +315,7 @@ print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="delete" tit
 print '<select class="cm-move flat" data-cm-bulk="move"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailMoveTo')).'</option>';
 foreach ($folders as $f) {
 	if ($f['name'] !== $folder) {
-		print '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag($f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label']).'</option>';
+		print '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag(convomail_folder_label($f, true)).'</option>';
 	}
 }
 if ($canmanagefolders) {

@@ -339,7 +339,7 @@ class ConvomailView
 			$h .= '<select class="cm-move flat" data-cm-action="move"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailMoveTo')).'</option>';
 			foreach ($opts['folders'] as $f) {
 				if ($f['name'] !== $folder) {
-					$h .= '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag($f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label']).'</option>';
+					$h .= '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag(convomail_folder_label($f, true)).'</option>';
 				}
 			}
 			if ($account->canManage($user)) {

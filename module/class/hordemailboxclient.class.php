@@ -451,7 +451,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	{
 		try {
 			$imap = $this->connect();
-			foreach ($imap->getNamespaces() as $ns) {
+			foreach ($imap->getNamespaces(array(), array('ob_return' => true)) as $ns) {	// objects; arrays without it
 				if ((int) $ns->type === Horde_Imap_Client_Data_Namespace::NS_PERSONAL) {
 					return array('prefix' => (string) $ns->name, 'delimiter' => (string) $ns->delimiter);
 				}
@@ -498,14 +498,22 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	{
 		try {
 			$imap = $this->connect();
-			$wassubscribed = in_array($from, $this->subscribedNames($imap), true);
-			$imap->renameMailbox($from, $to);
-			if ($wassubscribed) {
+			$list = $imap->listMailboxes($from, Horde_Imap_Client::MBOX_ALL, array('delimiter' => true));
+			$info = reset($list);
+			$delimiter = (is_array($info) && !empty($info['delimiter'])) ? (string) $info['delimiter'] : '';
+			$subscribed = $this->subscribedNames($imap);
+			$imap->renameMailbox($from, $to);	// the server renames its subfolders too (RFC 3501)
+			// Subscriptions follow: the folder's and its subfolders'
+			foreach ($subscribed as $old) {
+				if ($old !== $from && ($delimiter === '' || strpos($old, $from.$delimiter) !== 0)) {
+					continue;
+				}
+				$new = $to.substr($old, strlen($from));
 				try {
-					$imap->subscribeMailbox($to, true);
-					$imap->subscribeMailbox($from, false);
+					$imap->subscribeMailbox($new, true);
+					$imap->subscribeMailbox($old, false);
 				} catch (Horde_Imap_Client_Exception $e) {
-					dol_syslog('Convomail: subscription not moved from '.$from.' to '.$to.': '.$e->getMessage(), LOG_WARNING);
+					dol_syslog('Convomail: subscription not moved from '.$old.' to '.$new.': '.$e->getMessage(), LOG_WARNING);
 				}
 			}
 			return true;
@@ -587,11 +595,17 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				}
 				$delimiter = isset($info['delimiter']) ? (string) $info['delimiter'] : '/';
 				$folders[$name] = array(
-					'name'     => $name,
-					'label'    => ($delimiter !== '' && strpos($name, $delimiter) !== false) ? substr($name, strrpos($name, $delimiter) + 1) : $name,
-					'role'     => self::folderRole($name, $attributes),
-					'messages' => 0,
-					'unseen'   => 0,
+					'name'      => $name,
+					'label'     => ($delimiter !== '' && strpos($name, $delimiter) !== false) ? substr($name, strrpos($name, $delimiter) + 1) : $name,
+					'role'      => self::folderRole($name, $attributes),
+					'messages'  => 0,
+					'unseen'    => 0,
+					'delimiter' => $delimiter,
+					'parent'    => '',
+					'depth'     => 0,
+					'children'  => 0,
+					'display'   => '',
+					'path'      => '',
 				);
 			}
 
@@ -605,17 +619,76 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				}
 			}
 
-			// Standard folders first, in mail-client order, then the rest by name
-			$order = array('inbox' => 0, 'drafts' => 1, 'sent' => 2, 'archive' => 3, 'junk' => 4, 'trash' => 5, '' => 9);
-			uasort($folders, function ($a, $b) use ($order) {
-				$c = $order[$a['role']] <=> $order[$b['role']];
-				return $c !== 0 ? $c : strcasecmp($a['name'], $b['name']);
-			});
-			return array_values($folders);
+			return self::folderTree($folders, $this->folderNamespace());
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
 			return false;
 		}
+	}
+
+	/**
+	 * Folders in tree order: standard folders first (mail-client order), then the others by name, each followed by
+	 * its subfolders. Hierarchy is read after the personal namespace prefix: on servers that keep every folder under
+	 * "INBOX.", "INBOX.Clients" is a top-level folder, as mail apps show it. A standard folder (Sent, Trash...) is
+	 * always top level. A subfolder whose parent isn't listed (not subscribed, or not a real folder such as
+	 * "[Gmail]") goes under its nearest listed ancestor, showing the parts in between.
+	 *
+	 * Adds to each folder: parent (name, '' at the top), depth, children (count), display (shown name) and path
+	 * (all parts, for menus).
+	 *
+	 * @param  array<string,array<string,mixed>>          $folders Folders by name
+	 * @param  array{prefix:string,delimiter:string}|false $ns      Personal namespace
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function folderTree(array $folders, $ns)
+	{
+		$prefix = ($ns && $ns['prefix'] !== '') ? $ns['prefix'] : '';
+		foreach ($folders as $name => $f) {
+			$d = $f['delimiter'];
+			$inns = ($prefix !== '' && stripos($name, $prefix) === 0);
+			$rel = $inns ? substr($name, strlen($prefix)) : $name;
+			$parts = ($d !== '') ? explode($d, $rel) : array($rel);
+			$parent = '';
+			$shown = array(end($parts));
+			if ($f['role'] === '') {
+				for ($k = count($parts) - 1; $k >= 1; $k--) {
+					$candidate = ($inns ? $prefix : '').implode($d, array_slice($parts, 0, $k));
+					if (isset($folders[$candidate]) && $candidate !== $name) {
+						$parent = $candidate;
+						break;
+					}
+					array_unshift($shown, $parts[$k - 1]);	// a level that isn't listed: shown in the name
+				}
+			}
+			$folders[$name]['parent'] = $parent;
+			$folders[$name]['display'] = implode(' › ', $shown);
+			$folders[$name]['path'] = implode(' › ', $parts);
+		}
+		$kids = array();
+		foreach ($folders as $name => $f) {
+			$kids[$f['parent']][] = $name;
+			if ($f['parent'] !== '') {
+				$folders[$f['parent']]['children']++;
+			}
+		}
+		$order = array('inbox' => 0, 'drafts' => 1, 'sent' => 2, 'archive' => 3, 'junk' => 4, 'trash' => 5, '' => 9);
+		$sortkids = function (array $names) use ($folders, $order) {
+			usort($names, function ($a, $b) use ($folders, $order) {
+				$c = $order[$folders[$a]['role']] <=> $order[$folders[$b]['role']];
+				return $c !== 0 ? $c : strcasecmp($folders[$a]['display'], $folders[$b]['display']);
+			});
+			return $names;
+		};
+		$out = array();
+		$walk = function ($parent, $depth) use (&$walk, &$out, &$folders, $kids, $sortkids) {
+			foreach ($sortkids($kids[$parent] ?? array()) as $name) {
+				$folders[$name]['depth'] = $depth;
+				$out[] = $folders[$name];
+				$walk($name, $depth + 1);
+			}
+		};
+		$walk('', 0);
+		return $out;
 	}
 
 	/**

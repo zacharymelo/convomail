@@ -161,7 +161,7 @@ class ConvomailThread
 		}
 		$labels = array();
 		foreach ($folders as $f) {
-			$labels[$f['name']] = $f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label'];
+			$labels[$f['name']] = convomail_folder_label($f, true);
 		}
 		$bodyurl = dol_buildpath('/convomail/ajax/thread.php', 1).'?accountid='.((int) $account->id).'&body=1';
 
