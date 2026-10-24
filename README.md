@@ -195,6 +195,28 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 - Remote images are blocked until you click **Show images**, so tracking pixels in incoming mail don't report that you opened it.
 - Attachments are always downloads (only PNG, JPEG, GIF and WebP images appear inline), sent with `nosniff` and a sandbox policy.
 
+## From an email into Dolibarr
+
+Under the people of an open message, **From this email:** offers:
+
+- **File attachments...** Tick the attachments, then pick where they go:
+  - a suggested record: the one the email is already logged on, the record named by Dolibarr's tracking id in what the email answers, its third party, contact or project;
+  - any other record you may add files to (third party, contact, project, proposal, order, invoice, supplier proposal, order or invoice, ticket, contract, intervention);
+  - or a folder of the Documents module.
+
+  The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before).
+- **Supplier invoice**, **Customer order**, **Ticket**, **Project / lead**: a short form, pre-filled from the email, then a draft is created with the ticked attachments filed on it and the email logged on it. Dolibarr then opens the record for you to finish.
+  - **Supplier invoice:** supplier from the sender's address when it is a supplier, the invoice number from the subject, dates, and the amounts per VAT rate (one line each). Refused if this supplier already has an invoice with that number; warned if one has the same amount within a week, or if the PDF is already filed on a supplier invoice.
+  - **Customer order:** the customer and their purchase order number (customer reference) from the subject; the PO is attached and the contact added. Lines are added on the order.
+  - **Ticket:** subject, the email's text as the message, type, category and severity (dictionary defaults), assignee. Replies thread with the ticket. The customer is only sent the "ticket created" email if you tick it.
+  - **Project / lead:** title, the email's text as description, opportunity amount when opportunities are on. You become its project leader.
+
+  A record created from an email is created only once: the same email can't make a second ticket, project, invoice or order of that kind.
+
+**Safety.** Nothing is created or filed without a user submitting the form: emails come from outside. The text of the email is read again from the mail server, never taken from the form. Every attachment is checked like an upload: only the parts the message lists, size limits, no executable or script files (core's list, and SVG), the antivirus and core's "no JavaScript in a PDF" check, a clean name, and never over an existing file. Each record needs the user's right to add files to it, and the user must be able to open it.
+
+**Setup.** Each button can be turned off under **Setup → "From this email" buttons**, to keep the reading pane uncluttered. Buttons also follow the modules enabled and each user's rights.
+
 ## Email on projects
 
 ![Project Emails tab](docs/project-emails.jpg)

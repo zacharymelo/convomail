@@ -44,6 +44,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Fixes | The personal namespace ("INBOX." servers) was never detected, so new folders went to the top level there | 0.11.0 |
 | Folders | Move a folder by dragging it onto another folder or onto the top-level zone; subfolders, messages and subscriptions follow | 0.12.0 |
 | Fixes | Dragging a folder was cancelled by the browser as soon as it started (the top-level zone appeared and moved the list); the zone now lays over the column | 0.12.1 |
+| From an email | File attachments on any record or a Documents folder; create a supplier invoice, customer order, ticket or project/lead from an email after a short form, with its files and the email logged on it; each button can be turned off in setup | next release |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 

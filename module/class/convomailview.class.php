@@ -21,6 +21,8 @@ dol_include_once('/convomail/class/convomailrenderer.class.php');
 dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
+dol_include_once('/convomail/class/convomailfiler.class.php');
+dol_include_once('/convomail/class/convomailcreator.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
 
 /**
@@ -152,9 +154,11 @@ class ConvomailView
 	 * @param  int                    $projectid  Project
 	 * @param  int[]                  $contactids Contacts
 	 * @param  bool                   $copyfiles  Copy attachments to the event
+	 * @param  string                 $origin     Record the email is filed on (element, see ConvomailLogger::logReceived())
+	 * @param  int                    $originid   Its id
 	 * @return int                                Event id, 0 if already logged, <0 on error (see self::$error)
 	 */
-	public static function logMessage($db, $user, ConvomailAccount $account, $client, $folder, $uid, array $message, $socid, $projectid, array $contactids, $copyfiles = true)
+	public static function logMessage($db, $user, ConvomailAccount $account, $client, $folder, $uid, array $message, $socid, $projectid, array $contactids, $copyfiles = true, $origin = '', $originid = 0)
 	{
 		global $conf;
 
@@ -169,17 +173,13 @@ class ConvomailView
 		$attachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
 		$renderer = new ConvomailRenderer($client, $folder, $uid, $message, $attachmentbase);
 
+		// Attachments go through the same checks as filing them on a record (size, type, antivirus)
 		$files = array();
-		$tmpdir = $conf->convomail->dir_temp.'/log-'.((int) $user->id).'-'.dol_print_date(dol_now(), 'dayhourlog').'-'.mt_rand(1000, 9999);
+		$filer = new ConvomailFiler($db);
 		if ($copyfiles) {
-			foreach ($renderer->attachments() as $att) {
-				$content = $client->fetchPart($folder, $uid, $att['id']);
-				if ($content !== false) {
-					dol_mkdir($tmpdir);
-					$name = dol_sanitizeFileName($att['name'] !== '' ? $att['name'] : 'part-'.$att['id']);
-					file_put_contents($tmpdir.'/'.$name, $content['data']);
-					$files[] = array('path' => $tmpdir.'/'.$name, 'name' => $name);
-				}
+			$filer->stage($client, $account, $folder, $uid, $message, array_column($renderer->attachments(), 'id'));
+			foreach ($filer->staged as $file) {
+				$files[] = array('path' => $file['path'], 'name' => $file['name']);
 			}
 		}
 
@@ -202,13 +202,13 @@ class ConvomailView
 			'socid'       => (int) $socid,
 			'contactids'  => $contactids,
 			'projectid'   => (int) $projectid,
+			'origin'      => (string) $origin,
+			'originid'    => (int) $originid,
 			'folder'      => $folder,
 			'uid'         => (int) $uid,
 			'files'       => $files,
 		));
-		if (is_dir($tmpdir)) {
-			dol_delete_dir_recursive($tmpdir);
-		}
+		$filer->cleanup();
 		if ($eventid < 0) {
 			self::$error = $logger->error.' '.implode(', ', $logger->errors);
 		}
@@ -404,6 +404,21 @@ class ConvomailView
 			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($pageurl.'&action=log&token='.newToken()).'">'.$langs->trans('ConvomailLogTo').'</a>';
 		}
 		$h .= '</div>';
+
+		// File the attachments on a record, or create a record from the email (record.php, always through a form)
+		$recordurl = dol_buildpath('/convomail/record.php', 1).$base.'&token='.newToken();
+		$recordlinks = '';
+		if (!empty($attachments) && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
+			$recordlinks .= '<a class="cm-btn" href="'.dol_escape_htmltag($recordurl.'&action=file').'">'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailFileAttachments').'</a>';
+		}
+		foreach (ConvomailCreator::types() as $ctype => $cinfo) {
+			if (ConvomailCreator::available($ctype, $user)) {
+				$recordlinks .= '<a class="cm-btn" href="'.dol_escape_htmltag($recordurl.'&action=create&type='.$ctype).'">'.img_picto('', $cinfo['picto'], 'class="pictofixedwidth"').$langs->trans($cinfo['label']).'</a>';
+			}
+		}
+		if ($recordlinks !== '') {
+			$h .= '<div class="cm-recordline"><span class="opacitymedium">'.$langs->trans('ConvomailFromThisEmail').'</span> '.$recordlinks.'</div>';
+		}
 
 		// Attachments
 		if (!empty($attachments)) {

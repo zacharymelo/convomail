@@ -133,7 +133,8 @@ class ConvomailLogger
 	 * @param  ConvomailAccount    $account Mailbox it was read from
 	 * @param  array<string,mixed> $data    Keys: msgid, in_reply_to, subject, body (clean HTML), from, to, cc (header strings),
 	 *                                      date (timestamp), outgoing (bool), socid, contactids (int[]), projectid,
-	 *                                      folder, uid, files (array of array('path','name'))
+	 *                                      origin, originid (record the email is filed on), folder, uid,
+	 *                                      files (array of array('path','name'))
 	 * @return int                          Event id if OK, <0 if KO
 	 */
 	public function logReceived(User $user, ConvomailAccount $account, array $data)
@@ -168,6 +169,12 @@ class ConvomailLogger
 			if ((int) $contactid > 0) {
 				$event->socpeopleassigned[(int) $contactid] = (int) $contactid;
 			}
+		}
+		// As for sent mail: third party, contact and project have their own fields; documents go into fk_element
+		if (!empty($data['origin']) && !empty($data['originid']) && !in_array($data['origin'], array('societe', 'contact', 'project'))) {
+			$event->fk_element = (int) $data['originid'];
+			$event->elementid = (int) $data['originid'];
+			$event->elementtype = $data['origin'];
 		}
 
 		$eventid = $event->create($user);
@@ -223,6 +230,46 @@ class ConvomailLogger
 		foreach ($files as $file) {
 			dol_copy($file['path'], $destdir.'/'.dol_sanitizeFileName($file['name']));
 		}
+	}
+
+	/**
+	 * Link an email event logged earlier to a record, unless it is linked to one already (an event has one link).
+	 * Done in SQL: ActionComm::update() would rewrite the event's contacts and owner rows.
+	 *
+	 * @param  int    $eventid  Event id
+	 * @param  string $origin   Element of the record ('invoice_supplier', 'ticket'...; 'project' sets fk_project)
+	 * @param  int    $originid Record id
+	 * @param  int    $socid    Third party to set when the event has none
+	 * @return int              1 linked, 0 already linked elsewhere (left as it is), <0 error
+	 */
+	public function linkEvent($eventid, $origin, $originid, $socid = 0)
+	{
+		$set = array();
+		$where = '';
+		// As ActionComm::create() stores them (facture => invoice...), so the record's event list finds it
+		$map = array('facture' => 'invoice', 'commande' => 'order', 'contrat' => 'contract');
+		$origin = $map[$origin] ?? $origin;
+		if ($origin === 'project') {
+			$set[] = 'fk_project = '.((int) $originid);
+			$where = ' AND (fk_project IS NULL OR fk_project = 0 OR fk_project = '.((int) $originid).')';
+		} elseif (!in_array($origin, array('societe', 'contact'), true)) {
+			$set[] = 'fk_element = '.((int) $originid);
+			$set[] = "elementtype = '".$this->db->escape($origin)."'";
+			$where = ' AND (fk_element IS NULL OR fk_element = 0 OR (fk_element = '.((int) $originid)." AND elementtype = '".$this->db->escape($origin)."'))";
+		}
+		if ((int) $socid > 0) {
+			$set[] = 'fk_soc = CASE WHEN fk_soc IS NULL OR fk_soc = 0 THEN '.((int) $socid).' ELSE fk_soc END';
+		}
+		if (empty($set)) {
+			return 1;
+		}
+		$sql = 'UPDATE '.MAIN_DB_PREFIX.'actioncomm SET '.implode(', ', $set).' WHERE id = '.((int) $eventid).$where;
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		return $this->db->affected_rows($resql) > 0 ? 1 : 0;
 	}
 
 	/**

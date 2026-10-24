@@ -167,6 +167,16 @@
 		bindFrames(document);
 		loadThread(document);
 
+		// A select that reloads its page with the chosen value (record.php: the type of record to file on)
+		qsa('select[data-cm-reload]').forEach(function (sel) {
+			var go = function () { window.location.href = sel.getAttribute('data-cm-reload') + encodeURIComponent(sel.value); };
+			if (window.jQuery) {
+				jQuery(sel).on('change', go);	// also gets select2's change, which native listeners miss
+			} else {
+				sel.addEventListener('change', go);
+			}
+		});
+
 		var switcher = qs('form.convomail-switcher select');
 		if (switcher) {
 			switcher.addEventListener('change', function () { switcher.form.submit(); });

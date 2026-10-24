@@ -157,6 +157,21 @@ print '<tr class="oddeven"><td>'.$langs->trans('ConvomailOpenTracking').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_OPEN_TRACKING').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingDesc', dol_buildpath('/convomail/public/open.php', 2)).'</td></tr>';
 
+// "From this email" tools of the reading pane: an admin can hide those not used here
+print '<tr class="liste_titre"><td colspan="3">'.$langs->trans('ConvomailToolsTitle').'</td></tr>';
+foreach (array(
+	'CONVOMAIL_TOOL_FILE' => array('ConvomailFileAttachments', ''),
+	'CONVOMAIL_TOOL_SUPPLIER_INVOICE' => array('ConvomailCreateSupplierInvoice', 'supplier_invoice'),
+	'CONVOMAIL_TOOL_ORDER' => array('ConvomailCreateOrder', 'order'),
+	'CONVOMAIL_TOOL_TICKET' => array('ConvomailCreateTicket', 'ticket'),
+	'CONVOMAIL_TOOL_PROJECT' => array('ConvomailCreateProject', 'project'),
+) as $const => $info) {
+	$moduleoff = ($info[1] !== '' && !isModEnabled($info[1]));
+	print '<tr class="oddeven"><td>'.$langs->trans($info[0]).'</td>';
+	print '<td>'.ajax_constantonoff($const).'</td>';
+	print '<td class="opacitymedium">'.$langs->trans($const === 'CONVOMAIL_TOOL_FILE' ? 'ConvomailToolFileDesc' : 'ConvomailToolCreateDesc').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
+}
+
 // Debug mode (always last)
 print '<tr class="oddeven"><td>'.$langs->trans('DebugMode').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_DEBUG_MODE').'</td>';

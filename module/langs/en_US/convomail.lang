@@ -317,3 +317,53 @@ ConvomailNoShared = No shared mailbox yet: create one with New shared mailbox.
 
 # Document Browser module (optional)
 ConvomailDocBrowserOverLimit = Over %s in total: the largest files picked from Dolibarr will be sent as share links.
+
+# Attachments into Dolibarr, records from emails (record.php)
+ConvomailFromThisEmail = From this email:
+ConvomailToolsTitle = "From this email" buttons of the reading pane
+ConvomailToolFileDesc = Files the attachments you tick on a record (third party, project, invoice...) or in the Documents module. Turned off, the button is hidden for everyone.
+ConvomailToolCreateDesc = Creates this record as a draft from an email, after a short form the user checks, with the attachments filed on it. Turned off, the button is hidden for everyone; users still need the right to create the record.
+ConvomailToolModuleOff = Its module is not enabled, so the button does not show anyway.
+ConvomailFileAttachments = File attachments...
+ConvomailCreateSupplierInvoice = Supplier invoice
+ConvomailCreateOrder = Customer order
+ConvomailCreateTicket = Ticket
+ConvomailCreateProject = Project / lead
+ConvomailBackToMessage = Back to the message
+ConvomailAttachmentsToFile = Attachments to file
+ConvomailNoAttachments = This email has no attachments.
+ConvomailFileOn = File them on
+ConvomailOtherRecord = Another record:
+ConvomailDocumentsFolder = A folder of the Documents module:
+ConvomailNoTargetAllowed = You have no right to add files to any record.
+ConvomailAlsoLogEmail = Also log the email on this record (agenda)
+ConvomailFileButton = File
+ConvomailFilesStored = %s file(s) filed on %s.
+ConvomailFilesStoredEcm = %s file(s) filed in the Documents module.
+ConvomailNothingFiled = Nothing was filed.
+ConvomailFileRefused = %s was not filed: %s
+ConvomailFileBadName = no usable file name
+ConvomailFileTypeRefused = this type of file is not accepted (it could run code)
+ConvomailFileTooBig = larger than %s
+ConvomailTargetUnknown = This record or folder does not exist.
+ConvomailTargetNotAllowed = You are not allowed to add files to this record.
+ConvomailEventLinkedElsewhere = The email was already logged on another record; that link was kept.
+ConvomailRecordCreated = %s created, with %s file(s). Check it and complete it here.
+ConvomailCreateNote = A draft is created with the files you ticked and the email logged on it. Nothing is sent to anyone.
+ConvomailCreateAnyway = Create it anyway
+ConvomailAlreadyCreatedFromEmail = A record of this kind was already created from this email: %s.
+ConvomailDupFromEmail = Already created from this email: %s.
+ConvomailDupSupplierRef = This supplier already has an invoice numbered %s: %s.
+ConvomailDupSupplierAmount = This supplier has an invoice with the same amount within 7 days: %s. Is it the same one?
+ConvomailDupSupplierFile = This PDF is already filed on supplier invoice %s.
+ConvomailDupOrderRef = This customer already has an order with their reference %s: %s.
+ConvomailDateOutOfRange = The date is too far in the past or the future.
+ConvomailNotASupplier = This third party is not a supplier.
+ConvomailBadAmount = "%s" is not an amount.
+ConvomailDueFromTerms = Empty: from the supplier's payment terms.
+ConvomailRefCustomerHelp = Their purchase order number.
+ConvomailInvoiceAmounts = Amounts
+ConvomailInvoiceAmountsHelp = One line per VAT rate, amounts without VAT. Lines can be detailed later on the invoice.
+ConvomailTicketNotifyCustomer = Send the customer the "ticket created" email
+ConvomailTextFromEmail = Taken from the email when you create it.
+
