@@ -311,6 +311,7 @@
 					item.setAttribute('data-id', r.id);
 					item.setAttribute('data-type', r.type);
 					item.setAttribute('data-name', r.name);
+					item.setAttribute('data-url', r.url || '');
 					item.textContent = r.label;
 					box.appendChild(item);
 				});
@@ -331,6 +332,11 @@
 			type.value = item.getAttribute('data-type');
 		}
 		qs('.cm-picker-input', picker).value = item.getAttribute('data-name');
+		var open = qs('.cm-picker-open', picker);
+		if (open) {
+			open.href = item.getAttribute('data-url');
+			open.hidden = !item.getAttribute('data-url');
+		}
 		pickerResults(picker).innerHTML = '';
 		checkTarget(picker);
 	}
@@ -419,6 +425,10 @@
 		if (ev.target.classList.contains('cm-picker-input')) {
 			var picker = ev.target.closest('.cm-picker');
 			qsa('[data-cm-pick]', picker).forEach(function (h) { h.value = ''; });	// typed: nothing chosen yet
+			var open = qs('.cm-picker-open', picker);
+			if (open) {
+				open.hidden = true;
+			}
 			clearTimeout(ev.target.cmTimer);
 			ev.target.cmTimer = setTimeout(function () { pickerSearch(ev.target); }, 250);
 		}
