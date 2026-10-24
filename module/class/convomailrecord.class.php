@@ -136,6 +136,19 @@ class ConvomailRecord
 		$h .= '<input type="hidden" name="type" value="'.dol_escape_htmltag($type).'">';
 		$h .= '<input type="hidden" name="acceptwarnings" value="0">';
 		$h .= '<div class="cm-rp-head">'.img_picto('', $picto, 'class="pictofixedwidth"').'<span class="cm-rp-title">'.$langs->trans($title).'</span>';
+		// The other kinds of its group (picked Order, meant Proposal): switch without losing the third party
+		if (!$file) {
+			$kinds = '';
+			$types = ConvomailCreator::types();
+			foreach ($types as $ktype => $kinfo) {
+				if ($kinfo['group'] === $types[$type]['group'] && $kinfo['group'] !== 'other' && ConvomailCreator::available($ktype, $user)) {
+					$kinds .= '<button type="button" class="cm-rp-kind'.($ktype === $type ? ' active' : '').'" data-cm-kind="'.$ktype.'"'.($ktype === $type ? ' aria-pressed="true"' : '').'>'.$langs->trans($kinfo['label']).'</button>';
+				}
+			}
+			if (substr_count($kinds, 'data-cm-kind') > 1) {
+				$h .= '<span class="cm-rp-kinds" role="group">'.$kinds.'</span>';
+			}
+		}
 		$h .= '<button type="button" class="cm-rp-close" data-cm-rp-close="1" title="'.dol_escape_htmltag($langs->trans('CloseWindow')).'">&times;</button></div>';
 
 		if ($file) {
@@ -188,7 +201,7 @@ class ConvomailRecord
 		if ($typename !== '') {
 			$h .= '<input type="hidden" name="'.dol_escape_htmltag($typename).'" value="" data-cm-pick="type">';
 		}
-		$h .= '<input type="text" class="cm-picker-input minwidth250" value="'.dol_escape_htmltag($label).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchToPick')).'" autocomplete="off" spellcheck="false">';
+		$h .= '<input type="text" class="cm-picker-input" value="'.dol_escape_htmltag($label).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchToPick')).'" autocomplete="off" spellcheck="false">';
 		$h .= '<span class="cm-picker-results" role="listbox"></span></span>';
 		return $h;
 	}
@@ -271,6 +284,16 @@ class ConvomailRecord
 			return self::footer('ConvomailCreateAndOpen', '', $blocks);
 		}
 		$v = $this->creator->defaults($type, $this->message, $this->myemails);
+		// Carried over from another kind of the same group (the kind switch)
+		$role = ConvomailCreator::types()[$type]['role'];
+		$carrysoc = GETPOSTINT('carry_socid');
+		if ($carrysoc > 0 && $carrysoc !== (int) $v['socid'] && ($role === '' || $this->creator->hasRole($carrysoc, $role)) && $this->targets->fetchVisible('societe', $carrysoc, $user)) {
+			$v['socid'] = $carrysoc;
+			$v['contactid'] = 0;
+		}
+		if (array_key_exists('ref_client', $v) && GETPOST('carry_ref', 'alphanohtml') !== '') {
+			$v['ref_client'] = dol_trunc(trim(GETPOST('carry_ref', 'alphanohtml')), 255, 'right', 'UTF-8', 1);
+		}
 		$dups = $this->creator->duplicates($type, $v, array('pdfhashes' => $type === 'invoice_supplier' ? $this->pdfHashes(array_map('strval', array_column($this->attachments, 'id'))) : array()));
 		$socname = '';
 		if ($v['socid'] > 0) {
@@ -296,16 +319,20 @@ class ConvomailRecord
 			$amount = '<input type="text" name="amount" class="width75 right" inputmode="decimal" value="'.dol_escape_htmltag($line['amount'] === '' ? '' : price((float) $line['amount'])).'">';
 			$amount .= ' &nbsp; '.$langs->trans('VAT').' '.$form->load_tva('vat', $line['vat'] === '' ? -1 : $line['vat'], $supplier ?: $mysoc, $mysoc);
 			$h .= self::row($langs->trans('AmountHT'), $amount, false, $langs->transnoentitiesnoconv('ConvomailAmountHelp'));
-		} elseif ($type === 'commande') {
+		} elseif ($role === 'customer') {
+			// Proposal, order, invoice: the customer and their reference
+			$refhelp = array('propal' => 'ConvomailRefCustomerProposalHelp', 'commande' => 'ConvomailRefCustomerHelp', 'facture' => 'ConvomailRefCustomerInvoiceHelp');
 			$h .= self::row($langs->trans('Customer'), self::picker('socid', $v['socid'], $socname, 'societe', 'customer'), true);
-			$h .= self::row($langs->trans('RefCustomer'), '<input type="text" name="ref_client" class="minwidth150" maxlength="255" value="'.dol_escape_htmltag($v['ref_client']).'">', false, $langs->transnoentitiesnoconv('ConvomailRefCustomerHelp'));
+			$h .= self::row($langs->trans('RefCustomer'), '<input type="text" name="ref_client" class="minwidth150" maxlength="255" value="'.dol_escape_htmltag($v['ref_client']).'">', false, $langs->transnoentitiesnoconv($refhelp[$type]));
+		} elseif ($role === 'supplier') {
+			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier'), true);
 		} else {
 			$required = ($type === 'project' && getDolGlobalString('PROJECT_THIRDPARTY_REQUIRED'));
 			$h .= self::row($langs->trans('ThirdParty'), self::picker('socid', $v['socid'], $socname, 'societe'), $required);
 			$h .= self::row($langs->trans($type === 'project' ? 'Label' : 'Subject'), '<input type="text" name="subject" class="minwidth300 cm-rp-wide" maxlength="255" value="'.dol_escape_htmltag($v['subject']).'">', true);
 		}
-		if (in_array($type, array('invoice_supplier', 'commande'), true)) {
-			$h .= '<input type="hidden" name="subject" value="'.dol_escape_htmltag($v['subject']).'">';
+		if ($role !== '') {
+			$h .= '<input type="hidden" name="subject" value="'.dol_escape_htmltag($v['subject']).'">';	// the label / private note
 		}
 		// The project the email belongs to, as a chip: removed here, changed on the card
 		if ($type !== 'project' && isModEnabled('project') && $v['projectid'] > 0 && ($p = $this->targets->fetchVisible('project', (int) $v['projectid'], $user))) {
@@ -319,7 +346,11 @@ class ConvomailRecord
 		$h .= $this->chips();
 		$h .= '</div>';
 
-		$hints = array('invoice_supplier' => 'ConvomailHintSupplierInvoice', 'commande' => 'ConvomailHintOrder', 'ticket' => 'ConvomailHintTicket', 'project' => 'ConvomailHintProject');
+		$hints = array(
+			'propal' => 'ConvomailHintProposal', 'commande' => 'ConvomailHintOrder', 'facture' => 'ConvomailHintInvoice',
+			'invoice_supplier' => 'ConvomailHintSupplierInvoice', 'supplier_proposal' => 'ConvomailHintSupplierQuote',
+			'ticket' => 'ConvomailHintTicket', 'project' => 'ConvomailHintProject',
+		);
 		$h .= self::footer('ConvomailCreateAndOpen', $hints[$type], $blocks, $dups['warn'], $dups['block']);
 		return $h;
 	}

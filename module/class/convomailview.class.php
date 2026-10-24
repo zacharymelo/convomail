@@ -271,6 +271,61 @@ class ConvomailView
 	}
 
 	/**
+	 * The "Create" menu of the reading pane: the record kinds the user may create from this email, by group (who
+	 * the email is from). The sender's side comes first: a known supplier's email lists Supplier first.
+	 *
+	 * @param  DoliDB              $db      Database handler
+	 * @param  User                $user    User
+	 * @param  array<string,mixed> $message fetchMessage() result
+	 * @param  array<string,array<string,mixed>> $matched ConvomailMatcher::mapEmails() of the message's people
+	 * @return string                       HTML, '' if nothing is available
+	 */
+	private static function createMenu($db, User $user, array $message, array $matched)
+	{
+		global $langs;
+
+		$bygroup = array();
+		foreach (ConvomailCreator::types() as $ctype => $cinfo) {
+			if (ConvomailCreator::available($ctype, $user)) {
+				$bygroup[$cinfo['group']][$ctype] = $cinfo;
+			}
+		}
+		if (empty($bygroup)) {
+			return '';
+		}
+		$groups = array_keys(ConvomailCreator::groups());
+		$senders = ConvomailMatcher::senders($message);
+		$socid = 0;
+		foreach ($senders as $a) {
+			if (!empty($matched[$a['email']]['socid'])) {
+				$socid = (int) $matched[$a['email']]['socid'];
+				break;
+			}
+		}
+		if ($socid > 0) {
+			$resql = $db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid);
+			$obj = $resql ? $db->fetch_object($resql) : null;
+			if ($obj && (int) $obj->fournisseur === 1 && !in_array((int) $obj->client, array(1, 2, 3), true)) {
+				$groups = array('supplier', 'customer', 'other');
+			}
+		}
+		$items = '';
+		foreach ($groups as $group) {
+			if (empty($bygroup[$group])) {
+				continue;
+			}
+			$items .= '<div class="cm-menu-group" role="presentation">'.$langs->trans(ConvomailCreator::groups()[$group]).'</div>';
+			foreach ($bygroup[$group] as $ctype => $cinfo) {
+				$items .= '<button type="button" class="cm-menu-item" role="menuitem" data-cm-record="'.$ctype.'">'.img_picto('', $cinfo['picto'], 'class="pictofixedwidth"').$langs->trans($cinfo['label']).'</button>';
+			}
+		}
+		$h = '<span class="cm-createmenu">';
+		$h .= '<button type="button" class="cm-btn" data-cm-createmenu="1" aria-haspopup="menu" aria-expanded="false">'.img_picto('', 'fa-plus-circle', 'class="pictofixedwidth"').$langs->trans('ConvomailCreateMenu').' <span class="fas fa-caret-down"></span></button>';
+		$h .= '<span class="cm-menu" role="menu" hidden>'.$items.'</span></span>';
+		return $h;
+	}
+
+	/**
 	 * HTML of one message: toolbar, subject, people, project line, attachments, sandboxed body
 	 *
 	 * @param  ConvomailAccount       $account Account
@@ -411,11 +466,7 @@ class ConvomailView
 		if (!empty($attachments) && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
 			$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="file">'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailFileAttachments').'</button>';
 		}
-		foreach (ConvomailCreator::types() as $ctype => $cinfo) {
-			if (ConvomailCreator::available($ctype, $user)) {
-				$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="'.$ctype.'">'.img_picto('', $cinfo['picto'], 'class="pictofixedwidth"').$langs->trans($cinfo['label']).'</button>';
-			}
-		}
+		$recordlinks .= self::createMenu($db, $user, $message, $matched);
 		if ($recordlinks !== '') {
 			$h .= '<div class="cm-recordline" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/record.php', 1).$base).'" data-search="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/records.php', 1)).'" data-token="'.newToken().'">';
 			$h .= '<span class="opacitymedium">'.$langs->trans('ConvomailFromThisEmail').'</span> '.$recordlinks.'</div>';

@@ -176,29 +176,41 @@
 		var slot = qs('.cm-recordpanel', view);
 		if (slot) {
 			slot.innerHTML = '';
+			slot.removeAttribute('data-type');
 		}
-		qsa('[data-cm-record]', view).forEach(function (b) { b.classList.remove('cm-active'); });
+		qsa('.cm-recordline .cm-active', view).forEach(function (b) { b.classList.remove('cm-active'); });
 	}
 
-	function openRecordPanel(btn) {
-		var view = btn.closest('.cm-view');
-		var line = recordLine(btn);
+	function closeCreateMenus(except) {
+		qsa('.cm-createmenu .cm-menu:not([hidden])').forEach(function (menu) {
+			if (menu !== except) {
+				menu.hidden = true;
+				qs('[data-cm-createmenu]', menu.parentNode).setAttribute('aria-expanded', 'false');
+			}
+		});
+	}
+
+	/**
+	 * Open the panel of a type ('file' or a record kind) under the buttons; extra: query string to add (kind switch)
+	 */
+	function openRecordPanel(view, type, extra) {
+		var line = qs('.cm-recordline', view);
 		var slot = qs('.cm-recordpanel', view);
-		if (btn.classList.contains('cm-active')) {
-			closeRecordPanel(view);
-			return;
-		}
 		closeRecordPanel(view);
-		btn.classList.add('cm-active');
+		var opener = type === 'file' ? qs('[data-cm-record="file"]', line) : qs('[data-cm-createmenu]', line);
+		if (opener) {
+			opener.classList.add('cm-active');
+		}
+		slot.setAttribute('data-type', type);
 		slot.classList.add('loading');
-		var url = line.getAttribute('data-url') + '&action=panel&type=' + encodeURIComponent(btn.getAttribute('data-cm-record'))
-			+ '&token=' + encodeURIComponent(line.getAttribute('data-token'));
+		var url = line.getAttribute('data-url') + '&action=panel&type=' + encodeURIComponent(type)
+			+ '&token=' + encodeURIComponent(line.getAttribute('data-token')) + (extra || '');
 		fetch(url, { credentials: 'same-origin' })
 			.then(function (r) { return r.ok ? r.text() : Promise.reject(new Error(r.status)); })
 			.then(function (html) {
 				slot.classList.remove('loading');
-				if (!btn.classList.contains('cm-active') || !slot.isConnected) {
-					return;	// closed, or another message opened meanwhile
+				if (slot.getAttribute('data-type') !== type || !slot.isConnected) {
+					return;	// closed, another panel or another message opened meanwhile
 				}
 				slot.innerHTML = html;
 				var form = qs('form.cm-rp', slot);
@@ -214,7 +226,7 @@
 			})
 			.catch(function () {
 				slot.classList.remove('loading');
-				btn.classList.remove('cm-active');
+				closeRecordPanel(view);
 				notify('Error', false);
 			});
 	}
@@ -332,10 +344,41 @@
 	}
 
 	document.addEventListener('click', function (ev) {
+		var toggle = ev.target.closest('[data-cm-createmenu]');
+		var menu = toggle ? qs('.cm-menu', toggle.parentNode) : null;
+		closeCreateMenus(menu);
+		if (toggle) {
+			ev.preventDefault();
+			menu.hidden = !menu.hidden;
+			toggle.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+			if (!menu.hidden) {
+				qs('.cm-menu-item', menu).focus();
+			}
+			return;
+		}
 		var btn = ev.target.closest('[data-cm-record]');
 		if (btn) {
 			ev.preventDefault();
-			openRecordPanel(btn);
+			var view = btn.closest('.cm-view');
+			var slot = qs('.cm-recordpanel', view);
+			if (btn.classList.contains('cm-active') || slot.getAttribute('data-type') === btn.getAttribute('data-cm-record')) {
+				closeRecordPanel(view);	// the File button again, or the kind already open
+			} else {
+				openRecordPanel(view, btn.getAttribute('data-cm-record'));
+			}
+			return;
+		}
+		// Another kind of the same group: keep the third party and the customer's reference
+		var kind = ev.target.closest('[data-cm-kind]');
+		if (kind) {
+			ev.preventDefault();
+			var form = kind.closest('form.cm-rp');
+			if (kind.classList.contains('active')) {
+				return;
+			}
+			var carry = '&carry_socid=' + encodeURIComponent(form.elements.socid ? form.elements.socid.value : '')
+				+ '&carry_ref=' + encodeURIComponent(form.elements.ref_client ? form.elements.ref_client.value : '');
+			openRecordPanel(form.closest('.cm-view'), kind.getAttribute('data-cm-kind'), carry);
 			return;
 		}
 		if (ev.target.closest('[data-cm-rp-close]')) {
@@ -400,6 +443,20 @@
 		}
 	});
 	document.addEventListener('keydown', function (ev) {
+		var menu = ev.target.closest && ev.target.closest('.cm-createmenu');
+		if (menu && !qs('.cm-menu', menu).hidden) {
+			var items = qsa('.cm-menu-item', menu);
+			var i = items.indexOf(document.activeElement);
+			if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+				ev.preventDefault();
+				items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+			} else if (ev.key === 'Escape') {
+				ev.preventDefault();
+				closeCreateMenus(null);
+				qs('[data-cm-createmenu]', menu).focus();
+			}
+			return;
+		}
 		var form = ev.target.closest && ev.target.closest('form.cm-rp');
 		if (!form) {
 			return;
@@ -1081,7 +1138,7 @@
 		// Keyboard shortcuts
 		document.addEventListener('keydown', function (ev) {
 			var t = ev.target;
-			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize, .cm-rp')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
+			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize, .cm-rp, .cm-createmenu')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
 				return;
 			}
 			var list = rows();

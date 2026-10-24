@@ -10,7 +10,7 @@
 /**
  * \file    class/convomailcreator.class.php
  * \ingroup convomail
- * \brief   Creates a draft record from an email: supplier invoice, customer order, ticket, project/lead
+ * \brief   Creates a draft record from an email: proposal, order, invoice; supplier invoice, supplier quote; ticket, project/lead
  *
  * Always after a user reviewed the values (the reading pane panel, ConvomailRecord), never on its own: emails come from outside, and nothing
  * they contain decides alone what is created. The third party is the one the user picks; the email only
@@ -43,18 +43,32 @@ class ConvomailCreator
 	}
 
 	/**
-	 * Record types that can be created from an email, with their ConvomailTargets type and picto
+	 * Record types that can be created from an email (ConvomailTargets types), in their menu groups: who the email
+	 * is from. role: the third party it needs (customer, supplier, or any).
 	 *
-	 * @return array<string,array{label:string,title:string,picto:string,setting:string}>
+	 * @return array<string,array{label:string,title:string,picto:string,setting:string,group:string,role:string}>
 	 */
 	public static function types()
 	{
 		return array(
-			'invoice_supplier' => array('label' => 'ConvomailCreateSupplierInvoice', 'title' => 'ConvomailNewSupplierInvoice', 'picto' => 'supplier_invoice', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_INVOICE'),
-			'commande'         => array('label' => 'ConvomailCreateOrder', 'title' => 'ConvomailNewOrder', 'picto' => 'order', 'setting' => 'CONVOMAIL_TOOL_ORDER'),
-			'ticket'           => array('label' => 'ConvomailCreateTicket', 'title' => 'ConvomailNewTicket', 'picto' => 'ticket', 'setting' => 'CONVOMAIL_TOOL_TICKET'),
-			'project'          => array('label' => 'ConvomailCreateProject', 'title' => 'ConvomailNewProject', 'picto' => 'project', 'setting' => 'CONVOMAIL_TOOL_PROJECT'),
+			'propal'            => array('label' => 'ConvomailCreateProposal', 'title' => 'ConvomailNewProposal', 'picto' => 'propal', 'setting' => 'CONVOMAIL_TOOL_PROPOSAL', 'group' => 'customer', 'role' => 'customer'),
+			'commande'          => array('label' => 'ConvomailCreateOrder', 'title' => 'ConvomailNewOrder', 'picto' => 'order', 'setting' => 'CONVOMAIL_TOOL_ORDER', 'group' => 'customer', 'role' => 'customer'),
+			'facture'           => array('label' => 'ConvomailCreateInvoice', 'title' => 'ConvomailNewInvoice', 'picto' => 'bill', 'setting' => 'CONVOMAIL_TOOL_INVOICE', 'group' => 'customer', 'role' => 'customer'),
+			'invoice_supplier'  => array('label' => 'ConvomailCreateSupplierInvoice', 'title' => 'ConvomailNewSupplierInvoice', 'picto' => 'supplier_invoice', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_INVOICE', 'group' => 'supplier', 'role' => 'supplier'),
+			'supplier_proposal' => array('label' => 'ConvomailCreateSupplierQuote', 'title' => 'ConvomailNewSupplierQuote', 'picto' => 'supplier_proposal', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_QUOTE', 'group' => 'supplier', 'role' => 'supplier'),
+			'ticket'            => array('label' => 'ConvomailCreateTicket', 'title' => 'ConvomailNewTicket', 'picto' => 'ticket', 'setting' => 'CONVOMAIL_TOOL_TICKET', 'group' => 'other', 'role' => ''),
+			'project'           => array('label' => 'ConvomailCreateProject', 'title' => 'ConvomailNewProject', 'picto' => 'project', 'setting' => 'CONVOMAIL_TOOL_PROJECT', 'group' => 'other', 'role' => ''),
 		);
+	}
+
+	/**
+	 * Menu groups, in their usual order
+	 *
+	 * @return array<string,string> Group => label key
+	 */
+	public static function groups()
+	{
+		return array('customer' => 'ConvomailGroupCustomer', 'supplier' => 'ConvomailGroupSupplier', 'other' => 'ConvomailGroupOther');
 	}
 
 	/**
@@ -72,6 +86,12 @@ class ConvomailCreator
 			return false;
 		}
 		switch ($type) {
+			case 'propal':
+				return isModEnabled('propal') && $user->hasRight('propal', 'creer');
+			case 'facture':
+				return isModEnabled('invoice') && $user->hasRight('facture', 'creer');
+			case 'supplier_proposal':
+				return isModEnabled('supplier_proposal') && $user->hasRight('supplier_proposal', 'creer');
 			case 'invoice_supplier':
 				return isModEnabled('supplier_invoice') && ($user->hasRight('fournisseur', 'facture', 'creer') || $user->hasRight('supplier_invoice', 'creer'));
 			case 'commande':
@@ -112,8 +132,10 @@ class ConvomailCreator
 				break;
 			}
 		}
-		if ($type === 'invoice_supplier' && $socid > 0 && !$this->isSupplier($socid)) {
-			$socid = 0;	// a customer's email: the user picks the supplier
+		// The sender's company only when it has the role the record needs (a customer's email: the user picks the supplier)
+		$role = self::types()[$type]['role'] ?? '';
+		if ($socid > 0 && $role !== '' && !$this->hasRole($socid, $role)) {
+			$socid = 0;
 			$contactid = 0;
 		}
 		$resolver = new ConvomailProjectResolver($this->db);
@@ -133,6 +155,12 @@ class ConvomailCreator
 		}
 		if ($type === 'commande') {
 			$values['ref_client'] = self::guessNumber($subject, '(?:purchase\s*order|order|commande|bestellung|pedido|ordine|p\.?o\.?)');
+		}
+		if ($type === 'propal') {
+			$values['ref_client'] = self::guessNumber($subject, '(?:rfq|request\s*for\s*quot(?:e|ation)|quote|quotation|devis|angebot|anfrage|presupuesto|preventivo|ref(?:erence)?)');
+		}
+		if ($type === 'facture') {
+			$values['ref_client'] = self::guessNumber($subject, '(?:purchase\s*order|order|p\.?o\.?|ref(?:erence)?)');
 		}
 		if ($type === 'ticket') {
 			$values['type_code'] = $this->defaultCode('c_ticket_type');
@@ -162,14 +190,20 @@ class ConvomailCreator
 	}
 
 	/**
-	 * @param  int  $socid Third party
-	 * @return bool        Whether it is a supplier
+	 * Whether a third party is a supplier, or a customer or prospect
+	 *
+	 * @param  int    $socid Third party
+	 * @param  string $role  supplier|customer
+	 * @return bool
 	 */
-	private function isSupplier($socid)
+	public function hasRole($socid, $role)
 	{
-		$resql = $this->db->query('SELECT fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid));
+		$resql = $this->db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid));
 		$obj = $resql ? $this->db->fetch_object($resql) : null;
-		return $obj && (int) $obj->fournisseur === 1;
+		if (!$obj) {
+			return false;
+		}
+		return ($role === 'supplier') ? (int) $obj->fournisseur === 1 : in_array((int) $obj->client, array(1, 2, 3), true);
 	}
 
 	/**
@@ -222,8 +256,11 @@ class ConvomailCreator
 		if ($v['subject'] === '') {
 			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'project' ? 'Label' : 'Subject'));
 		}
+		$role = self::types()[$type]['role'] ?? '';
 		if ($type !== 'ticket' && $v['socid'] <= 0 && !($type === 'project' && !getDolGlobalString('PROJECT_THIRDPARTY_REQUIRED'))) {
-			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'invoice_supplier' ? 'Supplier' : 'Customer'));
+			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($role === 'supplier' ? 'Supplier' : ($role === 'customer' ? 'Customer' : 'ThirdParty')));
+		} elseif ($v['socid'] > 0 && $role !== '' && !$this->hasRole($v['socid'], $role)) {
+			$errors[] = $langs->trans($role === 'supplier' ? 'ConvomailNotASupplier' : 'ConvomailNotACustomer');
 		}
 		// An order is dated by the email (set by the caller)
 		if ($type === 'invoice_supplier') {
@@ -234,9 +271,6 @@ class ConvomailCreator
 			}
 		}
 		if ($type === 'invoice_supplier') {
-			if ($v['socid'] > 0 && !$this->isSupplier($v['socid'])) {
-				$errors[] = $langs->trans('ConvomailNotASupplier');
-			}
 			$v['ref_supplier'] = dol_trunc(trim(GETPOST('ref_supplier', 'alphanohtml')), 180, 'right', 'UTF-8', 1);
 			if ($v['ref_supplier'] === '') {
 				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('RefSupplier'));
@@ -254,7 +288,7 @@ class ConvomailCreator
 				}
 			}
 		}
-		if ($type === 'commande') {
+		if (in_array($type, array('commande', 'propal', 'facture'), true)) {
 			$v['ref_client'] = dol_trunc(trim(GETPOST('ref_client', 'alphanohtml')), 255, 'right', 'UTF-8', 1);
 		}
 		if ($type === 'ticket') {
@@ -285,7 +319,7 @@ class ConvomailCreator
 
 		$out = array('block' => array(), 'warn' => array());
 		$link = function ($table, $id, $ref) {
-			$types = array('facture_fourn' => 'invoice_supplier', 'commande' => 'commande', 'ticket' => 'ticket', 'projet' => 'project');
+			$types = array('facture_fourn' => 'invoice_supplier', 'commande' => 'commande', 'propal' => 'propal', 'facture' => 'facture', 'ticket' => 'ticket', 'projet' => 'project');
 			return '<a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($types[$table], (int) $id)).'">'.dol_escape_htmltag($ref).'</a>';
 		};
 		if ($type === 'invoice_supplier' && $values['socid'] > 0) {
@@ -321,11 +355,14 @@ class ConvomailCreator
 				$out['warn'][] = $langs->trans('ConvomailDupSupplierFile', $link('facture_fourn', $obj->rowid, $obj->ref));
 			}
 		}
-		if ($type === 'commande' && $values['socid'] > 0 && ($values['ref_client'] ?? '') !== '') {
-			$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.'commande WHERE fk_soc = '.((int) $values['socid'])." AND ref_client = '".$this->db->escape(trim($values['ref_client']))."' AND entity IN (".getEntity('commande').')';
+		// Customer documents: this customer already has one with their reference
+		$customerdocs = array('commande' => array('commande', 'commande', 'ConvomailDupOrderRef'), 'propal' => array('propal', 'propal', 'ConvomailDupProposalRef'), 'facture' => array('facture', 'invoice', 'ConvomailDupInvoiceRef'));
+		if (isset($customerdocs[$type]) && $values['socid'] > 0 && ($values['ref_client'] ?? '') !== '') {
+			list($table, $entityel, $key) = $customerdocs[$type];
+			$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.$table.' WHERE fk_soc = '.((int) $values['socid'])." AND ref_client = '".$this->db->escape(trim($values['ref_client']))."' AND entity IN (".getEntity($entityel).')';
 			$resql = $this->db->query($sql);
 			if ($resql && ($obj = $this->db->fetch_object($resql))) {
-				$out['warn'][] = $langs->trans('ConvomailDupOrderRef', $values['ref_client'], $link('commande', $obj->rowid, $obj->ref));
+				$out['warn'][] = $langs->trans($key, $values['ref_client'], $link($table, $obj->rowid, $obj->ref));
 			}
 		}
 		// Ticket and project keep the Message-ID they were made from (as Email Collector does): one per email
@@ -362,6 +399,15 @@ class ConvomailCreator
 				break;
 			case 'commande':
 				$id = $this->createOrder($values, $user);
+				break;
+			case 'propal':
+				$id = $this->createProposal($values, $user);
+				break;
+			case 'facture':
+				$id = $this->createInvoice($values, $user);
+				break;
+			case 'supplier_proposal':
+				$id = $this->createSupplierQuote($values, $user);
 				break;
 			case 'ticket':
 				$id = $this->createTicket($values, $email, $user);
@@ -440,6 +486,105 @@ class ConvomailCreator
 			$order->add_contact($v['contactid'], 'CUSTOMER', 'external');
 		}
 		$this->object = $order;
+		return $id;
+	}
+
+	/**
+	 * A customer's proposal (a request for a quote): customer, their reference, validity from the setup
+	 *
+	 * @param  array<string,mixed> $v    Values
+	 * @param  User                $user User
+	 * @return int
+	 */
+	private function createProposal(array $v, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/comm/propal/class/propal.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$soc = new Societe($this->db);
+		$soc->fetch($v['socid']);
+
+		$propal = new Propal($this->db);
+		$propal->socid = (int) $v['socid'];
+		$propal->ref_client = $v['ref_client'];
+		$propal->date = dol_now();
+		$propal->duree_validite = getDolGlobalInt('PROPALE_VALIDITY_DURATION', 15);	// as comm/propal/card.php
+		$propal->fk_project = (int) $v['projectid'];
+		$propal->cond_reglement_id = (int) ($soc->cond_reglement_id ?? 0);
+		$propal->mode_reglement_id = (int) ($soc->mode_reglement_id ?? 0);
+		$propal->note_private = $v['subject'];
+		$id = $propal->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($propal->error), (array) $propal->errors);
+			return -1;
+		}
+		if ($v['contactid'] > 0) {
+			$propal->add_contact($v['contactid'], 'CUSTOMER', 'external');
+		}
+		$this->object = $propal;
+		return $id;
+	}
+
+	/**
+	 * A customer invoice: customer, their reference, the customer's payment terms; dated today (a draft)
+	 *
+	 * @param  array<string,mixed> $v    Values
+	 * @param  User                $user User
+	 * @return int
+	 */
+	private function createInvoice(array $v, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$soc = new Societe($this->db);
+		$soc->fetch($v['socid']);
+
+		$invoice = new Facture($this->db);
+		$invoice->socid = (int) $v['socid'];
+		$invoice->type = Facture::TYPE_STANDARD;
+		$invoice->ref_client = $v['ref_client'];
+		$invoice->date = dol_now();
+		$invoice->fk_project = (int) $v['projectid'];
+		$invoice->cond_reglement_id = (int) ($soc->cond_reglement_id ?? 0);
+		$invoice->mode_reglement_id = (int) ($soc->mode_reglement_id ?? 0);
+		$invoice->note_private = $v['subject'];
+		$id = $invoice->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($invoice->error), (array) $invoice->errors);
+			return -1;
+		}
+		if ($v['contactid'] > 0) {
+			$invoice->add_contact($v['contactid'], 'BILLING', 'external');
+		}
+		$this->object = $invoice;
+		return $id;
+	}
+
+	/**
+	 * A supplier's quote, recorded as a supplier proposal (price request) with the supplier's payment terms
+	 *
+	 * @param  array<string,mixed> $v    Values
+	 * @param  User                $user User
+	 * @return int
+	 */
+	private function createSupplierQuote(array $v, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/supplier_proposal/class/supplier_proposal.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$soc = new Societe($this->db);
+		$soc->fetch($v['socid']);
+
+		$quote = new SupplierProposal($this->db);
+		$quote->socid = (int) $v['socid'];
+		$quote->fk_project = (int) $v['projectid'];
+		$quote->cond_reglement_id = (int) ($soc->cond_reglement_supplier_id ?? 0);
+		$quote->mode_reglement_id = (int) ($soc->mode_reglement_supplier_id ?? 0);
+		$quote->note_private = $v['subject'];
+		$id = $quote->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($quote->error), (array) $quote->errors);
+			return -1;
+		}
+		$this->object = $quote;
 		return $id;
 	}
 

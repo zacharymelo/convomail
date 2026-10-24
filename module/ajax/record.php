@@ -64,7 +64,7 @@ function convomail_json($data, $code = 200)
 	exit;
 }
 
-$langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'bills', 'orders', 'other', 'ecm', 'ticket'));
+$langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects', 'bills', 'orders', 'propal', 'supplier_proposal', 'other', 'ecm', 'ticket'));
 
 $accountid = GETPOSTINT('accountid');
 $folder    = GETPOST('folder', 'restricthtml');
