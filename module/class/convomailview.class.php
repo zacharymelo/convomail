@@ -405,19 +405,21 @@ class ConvomailView
 		}
 		$h .= '</div>';
 
-		// File the attachments on a record, or create a record from the email (record.php, always through a form)
-		$recordurl = dol_buildpath('/convomail/record.php', 1).$base.'&token='.newToken();
+		// File the attachments on a record, or create a record from the email: a panel opens under this line
+		// (ajax/record.php, js/convomail.js), always submitted by the user
 		$recordlinks = '';
 		if (!empty($attachments) && getDolGlobalInt('CONVOMAIL_TOOL_FILE')) {
-			$recordlinks .= '<a class="cm-btn" href="'.dol_escape_htmltag($recordurl.'&action=file').'">'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailFileAttachments').'</a>';
+			$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="file">'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailFileAttachments').'</button>';
 		}
 		foreach (ConvomailCreator::types() as $ctype => $cinfo) {
 			if (ConvomailCreator::available($ctype, $user)) {
-				$recordlinks .= '<a class="cm-btn" href="'.dol_escape_htmltag($recordurl.'&action=create&type='.$ctype).'">'.img_picto('', $cinfo['picto'], 'class="pictofixedwidth"').$langs->trans($cinfo['label']).'</a>';
+				$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="'.$ctype.'">'.img_picto('', $cinfo['picto'], 'class="pictofixedwidth"').$langs->trans($cinfo['label']).'</button>';
 			}
 		}
 		if ($recordlinks !== '') {
-			$h .= '<div class="cm-recordline"><span class="opacitymedium">'.$langs->trans('ConvomailFromThisEmail').'</span> '.$recordlinks.'</div>';
+			$h .= '<div class="cm-recordline" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/record.php', 1).$base).'" data-search="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/records.php', 1)).'" data-token="'.newToken().'">';
+			$h .= '<span class="opacitymedium">'.$langs->trans('ConvomailFromThisEmail').'</span> '.$recordlinks.'</div>';
+			$h .= '<div class="cm-recordpanel"></div>';
 		}
 
 		// Attachments

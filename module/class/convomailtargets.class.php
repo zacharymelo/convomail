@@ -139,13 +139,38 @@ class ConvomailTargets
 	 */
 	public function fetchWritable($type, $id, User $user)
 	{
+		return $this->fetchChecked($type, $id, $user, true);
+	}
+
+	/**
+	 * A record the user may open (to choose it as a third party or project of a new record), else null
+	 *
+	 * @param  string $type Type
+	 * @param  int    $id   Record id
+	 * @param  User   $user User
+	 * @return CommonObject|null
+	 */
+	public function fetchVisible($type, $id, User $user)
+	{
+		return $this->fetchChecked($type, $id, $user, false);
+	}
+
+	/**
+	 * @param  string $type  Type
+	 * @param  int    $id    Record id
+	 * @param  User   $user  User
+	 * @param  bool   $write Also the right to add files
+	 * @return CommonObject|null
+	 */
+	private function fetchChecked($type, $id, User $user, $write)
+	{
 		$this->error = '';
 		$types = self::types();
 		if (!isset($types[$type]) || !isModEnabled($types[$type]['module'])) {
 			$this->error = 'ConvomailTargetUnknown';
 			return null;
 		}
-		if (!empty($user->socid) || !self::canWrite($type, $user)) {
+		if (!empty($user->socid) || ($write && !self::canWrite($type, $user))) {
 			$this->error = 'ConvomailTargetNotAllowed';
 			return null;
 		}
@@ -157,13 +182,111 @@ class ConvomailTargets
 			$this->error = 'ConvomailTargetUnknown';
 			return null;
 		}
-		// The check of the record's own Documents tab: sales representative restriction, project contacts...
+		// The check of the record's own card and Documents tab: read right, sales representative restriction, project contacts...
 		$r = $types[$type]['restrict'];
 		if (restrictedArea($user, $r[0], $object->id, $r[1], $r[2], $r[3], 'rowid', 0, 1) <= 0) {
 			$this->error = 'ConvomailTargetNotAllowed';
 			return null;
 		}
 		return $object;
+	}
+
+	/**
+	 * Table, searched columns and entity element of each type, for the pickers of the reading pane panel
+	 *
+	 * @return array<string,array{0:string,1:string[],2:string}>
+	 */
+	private static function searchInfo()
+	{
+		return array(
+			'societe' => array('societe', array('nom', 'name_alias', 'code_client', 'code_fournisseur', 'email'), 'societe'),
+			'contact' => array('socpeople', array('lastname', 'firstname', 'email'), 'contact'),
+			'project' => array('projet', array('ref', 'title'), 'project'),
+			'propal' => array('propal', array('ref', 'ref_client'), 'propal'),
+			'commande' => array('commande', array('ref', 'ref_client'), 'commande'),
+			'facture' => array('facture', array('ref', 'ref_client'), 'invoice'),
+			'supplier_proposal' => array('supplier_proposal', array('ref'), 'supplier_proposal'),
+			'order_supplier' => array('commande_fournisseur', array('ref', 'ref_supplier'), 'supplier_order'),
+			'invoice_supplier' => array('facture_fourn', array('ref', 'ref_supplier'), 'supplier_invoice'),
+			'ticket' => array('ticket', array('ref', 'subject'), 'ticket'),
+			'contrat' => array('contrat', array('ref', 'ref_customer'), 'contract'),
+			'fichinter' => array('fichinter', array('ref'), 'intervention'),
+		);
+	}
+
+	/**
+	 * Records matching a search, checked one by one like the record itself would be (fetchWritable / fetchVisible)
+	 *
+	 * @param  string   $q     Searched text (2 characters at least)
+	 * @param  string[] $types Types searched
+	 * @param  string   $role  Third parties only: supplier|customer|''
+	 * @param  bool     $write Only records the user may add files to
+	 * @param  User     $user  User
+	 * @param  int      $limit Most results
+	 * @return array<int,array{type:string,id:int,label:string,name:string,picto:string}>
+	 */
+	public function search($q, array $types, $role, $write, User $user, $limit = 10)
+	{
+		global $langs;
+
+		$out = array();
+		$q = trim((string) $q);
+		if (dol_strlen($q) < 2 || !empty($user->socid)) {
+			return $out;
+		}
+		$info = self::searchInfo();
+		$like = $this->db->escape($this->db->escapeforlike($q));
+		$socnames = array();
+		foreach ($types as $type) {
+			if (!isset($info[$type]) || !isModEnabled(self::types()[$type]['module']) || ($write && !self::canWrite($type, $user))) {
+				continue;
+			}
+			$where = array();
+			foreach ($info[$type][1] as $col) {
+				$where[] = 't.'.$col." LIKE '%".$like."%'";
+			}
+			$sql = 'SELECT t.rowid FROM '.MAIN_DB_PREFIX.$info[$type][0].' as t WHERE ('.implode(' OR ', $where).') AND t.entity IN ('.getEntity($info[$type][2]).')';
+			if ($type === 'societe') {
+				$sql .= ' AND t.status = 1';
+				if ($role === 'supplier') {
+					$sql .= ' AND t.fournisseur = 1';
+				} elseif ($role === 'customer') {
+					$sql .= ' AND t.client IN (1, 2, 3)';
+				}
+			}
+			$sql .= ' ORDER BY t.rowid DESC'.$this->db->plimit(3 * $limit);
+			$resql = $this->db->query($sql);
+			while ($resql && ($obj = $this->db->fetch_object($resql)) && count($out) < $limit) {
+				$o = $this->fetchChecked($type, (int) $obj->rowid, $user, $write);
+				if (!$o) {
+					continue;
+				}
+				// One type searched (the third party of a new record): its kind goes without saying
+				$label = (count($types) === 1 && $type === 'societe') ? (string) $o->name : self::label($type, $o);
+				$socid = ($type === 'societe') ? 0 : (int) ($o->socid ?? ($o->fk_soc ?? 0));
+				if ($socid > 0) {
+					if (!isset($socnames[$socid])) {
+						$r = $this->db->query('SELECT nom FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid);
+						$so = $r ? $this->db->fetch_object($r) : null;
+						$socnames[$socid] = $so ? (string) $so->nom : '';
+					}
+					if ($socnames[$socid] !== '') {
+						$label .= ' – '.$socnames[$socid];
+					}
+				}
+				$out[] = array(
+					'type'  => $type,
+					'id'    => (int) $o->id,
+					'label' => $label,
+					'name'  => ($type === 'societe') ? (string) $o->name : $label,
+					'picto' => self::types()[$type]['picto'],
+				);
+			}
+			if (count($out) >= $limit) {
+				break;
+			}
+		}
+		return $out;
 	}
 
 	/**

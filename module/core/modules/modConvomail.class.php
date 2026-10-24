@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.12.90';
+		$this->version = '0.12.91';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -68,7 +68,7 @@ class modConvomail extends DolibarrModules
 		$this->const = array(
 			0 => array('CONVOMAIL_AUTOFILE_REPLIES', 'chaine', '1', 'File replies to project threads automatically', 0, 'current', 0),
 			1 => array('CONVOMAIL_ADD_SIGNATURE', 'chaine', '1', 'Add the user signature when composing', 0, 'current', 0),
-			// "From this email" tools of the reading pane, each one hidden by turning it off (record.php)
+			// "From this email" tools of the reading pane, each one hidden by turning it off (ConvomailRecord)
 			2 => array('CONVOMAIL_TOOL_FILE', 'chaine', '1', 'File attachments on records', 0, 'current', 0),
 			3 => array('CONVOMAIL_TOOL_SUPPLIER_INVOICE', 'chaine', '1', 'Create a supplier invoice from an email', 0, 'current', 0),
 			4 => array('CONVOMAIL_TOOL_ORDER', 'chaine', '1', 'Create a customer order from an email', 0, 'current', 0),

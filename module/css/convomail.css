@@ -235,8 +235,40 @@
 
 /* From this email: file attachments, create a record (record.php) */
 .cm-recordline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 16px 6px; font-size: .92em; }
-.cm-record-email { margin: 0 0 12px; }
-.cm-record-att, .cm-record-target { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0; }
-.cm-record-lines td { padding: 3px 6px; }
-.cm-record-preview { max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--colortopbordertitle1, #d8d8d8); border-radius: 4px; background: var(--colorbackbody, #fff); }
-.cm-record-note { margin: 10px 0; }
+.cm-recordline .cm-btn.cm-active { background: var(--cm-selected); border-color: var(--cm-accent); color: var(--cm-accent); }
+/* "From this email" panel (ConvomailRecord): compact rows that wrap in a narrow pane */
+.cm-recordpanel { margin: 0 16px; }
+.cm-recordpanel.loading { min-height: 40px; opacity: .5; }
+.cm-rp { margin: 0 0 8px; padding: 8px 12px 10px; border: 1px solid var(--cm-border); border-left: 3px solid var(--cm-accent); border-radius: 4px; background: var(--colorbackbody, #fff); font-size: .92em; }
+.cm-rp.loading { opacity: .6; pointer-events: none; }
+.cm-rp-head { display: flex; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.cm-rp-title { flex: 1 1 auto; }
+.cm-rp-close { border: 0; background: transparent; font-size: 1.4em; line-height: 1; cursor: pointer; color: var(--cm-muted); padding: 0 4px; }
+.cm-rp-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+.cm-rp-row { display: contents; }
+.cm-rp-label { color: var(--cm-muted); white-space: nowrap; }
+.cm-rp-value { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.cm-rp-wide { width: 100%; max-width: 520px; box-sizing: border-box; }
+.cm-rp-targets { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; max-width: 100%; }
+.cm-rp-target { display: inline-flex; align-items: center; gap: 4px; }
+.cm-rp-targets > .cm-picker, .cm-rp-targets > select { margin-left: 22px; max-width: calc(100% - 22px); }
+.cm-rp:has(input[name="target"][value="ecm"]:checked) .cm-rp-row:has(.cm-rp-logit) { display: none; }	/* a Documents folder has no agenda */
+.cm-rp-msgs:not(:empty) { margin-top: 8px; }
+.cm-rp-msgs .error, .cm-rp-msgs .warning { margin: 4px 0; padding: 4px 8px; }
+.cm-rp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.cm-rp-foot .button { margin: 0; }
+.cm-rp-hint { font-size: .9em; }
+.cm-filechip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 4px; border: 1px solid var(--cm-border); border-radius: 12px; cursor: pointer; white-space: nowrap; }
+.cm-filechip:has(input:checked) { background: var(--cm-selected); border-color: var(--cm-accent); }
+.cm-filechip-off { opacity: .55; cursor: not-allowed; text-decoration: line-through; }
+.cm-chip-x { border: 0; background: transparent; cursor: pointer; padding: 0 0 0 4px; color: inherit; font-size: 1.1em; line-height: 1; }
+.cm-picker { position: relative; display: inline-block; max-width: 100%; }
+.cm-picker-input { max-width: 100%; box-sizing: border-box; }
+.cm-picker-results { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; max-height: 260px; overflow: auto; background: var(--colorbackbody, #fff); box-shadow: 0 3px 10px rgba(0, 0, 0, .18); border-radius: 4px; }
+.cm-picker-results:empty { display: none; }
+.cm-picker-item { display: block; width: 100%; padding: 5px 10px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cm-picker-item:hover, .cm-picker-item.active { background: var(--cm-selected); }
+.cm-picker-none { display: block; padding: 5px 10px; }
+@media (max-width: 600px) {
+	.cm-rp-grid { grid-template-columns: minmax(0, 1fr); }
+}
