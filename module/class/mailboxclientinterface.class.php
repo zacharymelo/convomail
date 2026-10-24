@@ -97,6 +97,38 @@ interface ConvomailMailboxClient
 	public function findRelated($folder, array $ids, $before, array $answering, $since);
 
 	/**
+	 * Personal namespace prefix and hierarchy separator, to name new folders.
+	 *
+	 * @return array{prefix:string,delimiter:string}|false
+	 */
+	public function folderNamespace();
+
+	/**
+	 * Number of messages and subfolders of a folder.
+	 *
+	 * @param  string $name Folder name
+	 * @return array{messages:int,children:int}|false
+	 */
+	public function folderStatus($name);
+
+	/**
+	 * Rename a folder (its subscription follows).
+	 *
+	 * @param  string $from Current name
+	 * @param  string $to   New name
+	 * @return bool
+	 */
+	public function renameFolder($from, $to);
+
+	/**
+	 * Delete a folder and its subscription. Callers check it is empty first.
+	 *
+	 * @param  string $name Folder name
+	 * @return bool
+	 */
+	public function deleteFolder($name);
+
+	/**
 	 * Content of one MIME part, transfer-decoded (charset not converted).
 	 *
 	 * @param  string $folder Folder name

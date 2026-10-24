@@ -345,12 +345,12 @@
 
 		function run(action, uids, extra) {
 			if (!uids.length) {
-				return;
+				return Promise.resolve(null);
 			}
 			if (action === 'delete' && uids.length > 1 && !window.confirm(app.getAttribute('data-confirm-delete'))) {
-				return;
+				return Promise.resolve(null);
 			}
-			post(action, uids, extra).then(function (data) {
+			return post(action, uids, extra).then(function (data) {
 				if (!data.ok) {
 					return;
 				}
@@ -378,8 +378,203 @@
 				}
 				qsa('.cm-check:checked', rowsBox).forEach(function (c) { c.checked = false; });
 				notify(data.message, true);
+				return data;
 			});
 		}
+
+		/*
+		 * Folders (ajax/folder.php): New folder, rename and delete an empty folder, "New folder..." in the Move
+		 * menus, and dragging messages from the list onto a folder
+		 */
+		function folderCall(action, fields) {
+			var fd = new FormData();
+			fd.append('token', app.getAttribute('data-token'));
+			fd.append('accountid', app.getAttribute('data-accountid'));
+			fd.append('action', action);
+			Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
+			return fetch(app.getAttribute('data-ajax-folder'), { method: 'POST', body: fd, credentials: 'same-origin' })
+				.then(function (r) { return r.json(); })
+				.then(function (res) {
+					if (!res.ok) {
+						throw new Error(res.error || 'Error');
+					}
+					return res;
+				});
+		}
+		function folderPage(name) {
+			return window.location.pathname + '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid')) + '&folder=' + encodeURIComponent(name);
+		}
+		// A text field in place of an element: Enter saves, Escape or leaving it cancels
+		function askName(el, value, save) {
+			var input = document.createElement('input');
+			input.type = 'text';
+			input.className = 'cm-folder-input';
+			input.maxLength = 100;
+			input.value = value;
+			input.placeholder = app.getAttribute('data-new-folder-prompt');
+			el.style.display = 'none';
+			el.parentNode.insertBefore(input, el.nextSibling);
+			input.focus();
+			input.select();
+			var done = false;
+			var close = function () {
+				if (!done) {
+					done = true;
+					input.remove();
+					el.style.display = '';
+				}
+			};
+			input.addEventListener('keydown', function (ev) {
+				if (ev.key === 'Escape') {
+					close();
+				} else if (ev.key === 'Enter') {
+					ev.preventDefault();
+					var v = input.value.trim();
+					if (!v || v === value) {
+						close();
+						return;
+					}
+					input.disabled = true;
+					save(v).catch(function (e) {
+						notify(e.message, false);
+						input.disabled = false;
+						input.focus();
+					});
+				}
+			});
+			input.addEventListener('blur', function () { setTimeout(function () { if (!input.disabled) { close(); } }, 150); });
+		}
+		// Destination of a Move menu: the chosen folder, or a new one ("New folder..."); null when cancelled
+		function pickFolder(sel) {
+			if (sel.value !== '__new__') {
+				return Promise.resolve(sel.value);
+			}
+			var name = window.prompt(app.getAttribute('data-new-folder-prompt'));
+			sel.value = '';
+			if (!name || !name.trim()) {
+				return Promise.resolve(null);
+			}
+			return folderCall('create', { name: name.trim() }).then(function (res) {
+				app.setAttribute('data-folders-changed', '1');
+				return res.name;
+			}, function (e) {
+				notify(e.message, false);
+				return null;
+			});
+		}
+		function moveTo(sel, uids) {
+			pickFolder(sel).then(function (dest) {
+				sel.value = '';
+				if (!dest) {
+					return;
+				}
+				run('move', uids, { dest: dest }).then(function () {
+					if (app.getAttribute('data-folders-changed')) {
+						window.location.reload();	// show the new folder in the list
+					}
+				});
+			});
+		}
+
+		var folderBox = qs('.cm-folders', app);
+		if (app.getAttribute('data-ajax-folder')) {
+			folderBox.addEventListener('click', function (ev) {
+				var tool = ev.target.closest('[data-cm-folder]');
+				if (!tool) {
+					return;
+				}
+				ev.preventDefault();
+				ev.stopPropagation();
+				var what = tool.getAttribute('data-cm-folder');
+				var link = tool.closest('.cm-folder');
+				if (what === 'create') {
+					askName(tool, '', function (name) {
+						return folderCall('create', { name: name }).then(function () { window.location.reload(); });
+					});
+				} else if (what === 'rename') {
+					askName(link, link.getAttribute('data-label'), function (name) {
+						return folderCall('rename', { name: link.getAttribute('data-name'), newname: name }).then(function (res) {
+							if (link.classList.contains('active')) {
+								window.location.href = folderPage(res.name);	// the open folder has a new name
+							} else {
+								window.location.reload();
+							}
+						});
+					});
+				} else if (what === 'delete') {
+					if (!window.confirm(app.getAttribute('data-confirm-delete-folder').replace('%s', link.getAttribute('data-label')))) {
+						return;
+					}
+					folderCall('delete', { name: link.getAttribute('data-name') }).then(function () {
+						if (link.classList.contains('active')) {
+							window.location.href = folderPage('INBOX');
+						} else {
+							window.location.reload();
+						}
+					}, function (e) { notify(e.message, false); });
+				}
+			});
+			folderBox.addEventListener('keydown', function (ev) {
+				var tool = ev.target.closest('[data-cm-folder]');
+				if (tool && (ev.key === 'Enter' || ev.key === ' ')) {
+					ev.preventDefault();
+					tool.click();
+				}
+			});
+		}
+
+		// Drag messages onto a folder: the ticked ones if the dragged row is ticked, else that row
+		var dragging = null;
+		function endDrag() {
+			dragging = null;
+			app.classList.remove('cm-dragging');
+			qsa('.cm-dragged', rowsBox).forEach(function (r) { r.classList.remove('cm-dragged'); });
+			qsa('.cm-drop', folderBox).forEach(function (f) { f.classList.remove('cm-drop'); });
+		}
+		rowsBox.addEventListener('dragstart', function (ev) {
+			var row = ev.target.closest ? ev.target.closest('.cm-row') : null;
+			if (!row) {
+				return;
+			}
+			var check = qs('.cm-check', row);
+			dragging = (check && check.checked) ? selectedUids() : [parseInt(row.getAttribute('data-uid'), 10)];
+			ev.dataTransfer.effectAllowed = 'move';
+			ev.dataTransfer.setData('text/plain', dragging.length + ' message' + (dragging.length > 1 ? 's' : ''));
+			app.classList.add('cm-dragging');
+			dragging.forEach(function (u) {
+				var r = rowByUid(u);
+				if (r) {
+					r.classList.add('cm-dragged');
+				}
+			});
+		});
+		rowsBox.addEventListener('dragend', endDrag);
+		folderBox.addEventListener('dragover', function (ev) {
+			var f = ev.target.closest('.cm-folder');
+			if (!dragging || !f || f.getAttribute('data-name') === app.getAttribute('data-folder')) {
+				return;
+			}
+			ev.preventDefault();
+			ev.dataTransfer.dropEffect = 'move';
+			qsa('.cm-drop', folderBox).forEach(function (o) { if (o !== f) { o.classList.remove('cm-drop'); } });
+			f.classList.add('cm-drop');
+		});
+		folderBox.addEventListener('dragleave', function (ev) {
+			var f = ev.target.closest('.cm-folder');
+			if (f && !f.contains(ev.relatedTarget)) {
+				f.classList.remove('cm-drop');
+			}
+		});
+		folderBox.addEventListener('drop', function (ev) {
+			var f = ev.target.closest('.cm-folder');
+			if (!dragging || !f) {
+				return;
+			}
+			ev.preventDefault();
+			var uids = dragging;
+			endDrag();
+			run('move', uids, { dest: f.getAttribute('data-name') });
+		});
 
 		// Rows: open, star, select
 		rowsBox.addEventListener('click', function (ev) {
@@ -416,8 +611,7 @@
 			if (el.tagName === 'SELECT') {
 				el.addEventListener('change', function () {
 					if (el.value) {
-						run('move', selectedUids(), { dest: el.value });
-						el.value = '';
+						moveTo(el, selectedUids());
 					}
 				});
 			} else {
@@ -446,7 +640,7 @@
 		pane.addEventListener('change', function (ev) {
 			var sel = ev.target.closest('select[data-cm-action="move"]');
 			if (sel && sel.value) {
-				run('move', [currentUid()], { dest: sel.value });
+				moveTo(sel, [currentUid()]);
 			}
 		});
 
@@ -636,9 +830,33 @@
 		});
 		view.addEventListener('change', function (ev) {
 			var sel = ev.target.closest('select[data-cm-action="move"]');
-			if (sel && sel.value) {
-				send('move', { dest: sel.value });
+			if (!sel || !sel.value) {
+				return;
 			}
+			if (sel.value !== '__new__') {
+				send('move', { dest: sel.value });
+				return;
+			}
+			// "New folder...": create it (ajax/folder.php), then move there
+			var name = window.prompt(view.getAttribute('data-new-folder-prompt'));
+			sel.value = '';
+			if (!name || !name.trim()) {
+				return;
+			}
+			var fd = new FormData();
+			fd.append('token', view.getAttribute('data-token'));
+			fd.append('accountid', view.getAttribute('data-accountid'));
+			fd.append('action', 'create');
+			fd.append('name', name.trim());
+			fetch(view.getAttribute('data-ajax-action').replace(/action\.php$/, 'folder.php'), { method: 'POST', body: fd, credentials: 'same-origin' })
+				.then(function (r) { return r.json(); })
+				.then(function (res) {
+					if (res.ok) {
+						send('move', { dest: res.name });
+					} else {
+						notify(res.error || 'Error', false);
+					}
+				});
 		});
 		function send(action, data) {
 			var fd = new FormData();

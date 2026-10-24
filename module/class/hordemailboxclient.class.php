@@ -425,6 +425,112 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			if (empty($existing)) {
 				$imap->createMailbox($name);
 			}
+			// Subscribed, so it shows in the user's mail app and in Convomail (both list subscribed folders) - only when
+			// the server keeps subscriptions: on one that keeps none, a first subscription would hide every other folder
+			if (!empty($this->subscribedNames($imap))) {
+				try {
+					$imap->subscribeMailbox($name, true);
+				} catch (Horde_Imap_Client_Exception $e) {
+					dol_syslog('Convomail: could not subscribe to '.$name.': '.$e->getMessage(), LOG_WARNING);
+				}
+			}
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Where new folders go: the personal namespace prefix ("INBOX." on servers that keep every folder under
+	 * INBOX, '' elsewhere) and the hierarchy separator
+	 *
+	 * @return array{prefix:string,delimiter:string}|false
+	 */
+	public function folderNamespace()
+	{
+		try {
+			$imap = $this->connect();
+			foreach ($imap->getNamespaces() as $ns) {
+				if ((int) $ns->type === Horde_Imap_Client_Data_Namespace::NS_PERSONAL) {
+					return array('prefix' => (string) $ns->name, 'delimiter' => (string) $ns->delimiter);
+				}
+			}
+			$list = $imap->listMailboxes('INBOX', Horde_Imap_Client::MBOX_ALL, array('delimiter' => true));
+			$info = reset($list);
+			return array('prefix' => '', 'delimiter' => (is_array($info) && !empty($info['delimiter'])) ? (string) $info['delimiter'] : '/');
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Messages and subfolders of a folder, to check it is empty before deleting it
+	 *
+	 * @param  string $name Folder name
+	 * @return array{messages:int,children:int}|false
+	 */
+	public function folderStatus($name)
+	{
+		try {
+			$imap = $this->connect();
+			$status = $imap->status($name, Horde_Imap_Client::STATUS_MESSAGES);
+			$list = $imap->listMailboxes($name, Horde_Imap_Client::MBOX_ALL, array('delimiter' => true));
+			$info = reset($list);
+			$delimiter = (is_array($info) && !empty($info['delimiter'])) ? (string) $info['delimiter'] : '';
+			$children = $delimiter === '' ? array() : $imap->listMailboxes($name.$delimiter.'*', Horde_Imap_Client::MBOX_ALL, array('flat' => true));
+			return array('messages' => (int) ($status['messages'] ?? 0), 'children' => count($children));
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Rename a folder, moving its subscription with it
+	 *
+	 * @param  string $from Current name
+	 * @param  string $to   New name
+	 * @return bool
+	 */
+	public function renameFolder($from, $to)
+	{
+		try {
+			$imap = $this->connect();
+			$wassubscribed = in_array($from, $this->subscribedNames($imap), true);
+			$imap->renameMailbox($from, $to);
+			if ($wassubscribed) {
+				try {
+					$imap->subscribeMailbox($to, true);
+					$imap->subscribeMailbox($from, false);
+				} catch (Horde_Imap_Client_Exception $e) {
+					dol_syslog('Convomail: subscription not moved from '.$from.' to '.$to.': '.$e->getMessage(), LOG_WARNING);
+				}
+			}
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Delete a folder (callers check it is empty first, see folderStatus())
+	 *
+	 * @param  string $name Folder name
+	 * @return bool
+	 */
+	public function deleteFolder($name)
+	{
+		try {
+			$imap = $this->connect();
+			try {
+				$imap->subscribeMailbox($name, false);
+			} catch (Horde_Imap_Client_Exception $e) {
+				// Not subscribed: nothing to undo
+			}
+			$imap->deleteMailbox($name);
 			return true;
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
@@ -464,11 +570,19 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$list = $imap->listMailboxes('*', Horde_Imap_Client::MBOX_ALL, array('attributes' => true, 'delimiter' => true));
 			}
 
+			// Only the folders the user subscribed to, as mail apps show them (a server can hold folders the user's
+			// mail app hides, such as an old empty INBOX.sent). INBOX and the account's Sent folder always show.
+			// A server that reports no subscriptions at all shows every folder.
+			$subscribed = $this->subscribedNames($imap);
+
 			$folders = array();
 			foreach ($list as $name => $info) {
 				$name = (string) $name;
 				$attributes = isset($info['attributes']) ? $info['attributes'] : array();
 				if (in_array('\\noselect', $attributes, true) || in_array('\\nonexistent', $attributes, true)) {
+					continue;
+				}
+				if (!empty($subscribed) && !in_array($name, $subscribed, true) && strcasecmp($name, 'INBOX') !== 0 && $name !== (string) $this->account->sent_folder) {
 					continue;
 				}
 				$delimiter = isset($info['delimiter']) ? (string) $info['delimiter'] : '/';
@@ -502,6 +616,24 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$this->error = $e->getMessage();
 			return false;
 		}
+	}
+
+	/**
+	 * Subscribed folders other than INBOX (Horde always counts INBOX): empty when the server keeps no subscriptions
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap Connection
+	 * @return string[]
+	 */
+	private function subscribedNames($imap)
+	{
+		try {
+			$names = array_map('strval', $imap->listMailboxes('*', Horde_Imap_Client::MBOX_SUBSCRIBED_EXISTS, array('flat' => true)));
+		} catch (Horde_Imap_Client_Exception $e) {
+			return array();
+		}
+		return array_values(array_filter($names, function ($name) {
+			return strcasecmp($name, 'INBOX') !== 0;
+		}));
 	}
 
 	/**
