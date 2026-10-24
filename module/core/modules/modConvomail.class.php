@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.12.1';
+		$this->version = '0.13.0-dev.1';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -68,6 +68,12 @@ class modConvomail extends DolibarrModules
 		$this->const = array(
 			0 => array('CONVOMAIL_AUTOFILE_REPLIES', 'chaine', '1', 'File replies to project threads automatically', 0, 'current', 0),
 			1 => array('CONVOMAIL_ADD_SIGNATURE', 'chaine', '1', 'Add the user signature when composing', 0, 'current', 0),
+			// "From this email" tools of the reading pane, each one hidden by turning it off (record.php)
+			2 => array('CONVOMAIL_TOOL_FILE', 'chaine', '1', 'File attachments on records', 0, 'current', 0),
+			3 => array('CONVOMAIL_TOOL_SUPPLIER_INVOICE', 'chaine', '1', 'Create a supplier invoice from an email', 0, 'current', 0),
+			4 => array('CONVOMAIL_TOOL_ORDER', 'chaine', '1', 'Create a customer order from an email', 0, 'current', 0),
+			5 => array('CONVOMAIL_TOOL_TICKET', 'chaine', '1', 'Create a ticket from an email', 0, 'current', 0),
+			6 => array('CONVOMAIL_TOOL_PROJECT', 'chaine', '1', 'Create a project or lead from an email', 0, 'current', 0),
 		);
 
 		// Mail accounts tab on the user card
@@ -282,7 +288,17 @@ class modConvomail extends DolibarrModules
 		// Scheduled jobs and menu entries added by a newer version (jobs are skipped if they exist; menus are rebuilt)
 		$this->insert_cronjobs();
 		if (getDolGlobalString('CONVOMAIL_DB_VERSION') !== $this->version) {
-			global $user;
+			global $conf, $user;
+
+			// The "From this email" tools (0.13.0) start on for installs made before them; only once, since a
+			// switch turned off is a missing constant and must stay off ('0.13.0-dev' so 0.13.0-dev.N counts as having them)
+			if (version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), '0.13.0-dev', '<')) {
+				foreach ($this->const as $c) {
+					if (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 && !getDolGlobalString($c[0])) {
+						dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
+					}
+				}
+			}
 
 			$this->delete_menus();
 			$this->insert_menus();

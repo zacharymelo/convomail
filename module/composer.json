@@ -6,7 +6,8 @@
 	"require": {
 		"php": ">=8.1",
 		"bytestream/horde-imap-client": "^2.34",
-		"ezyang/htmlpurifier": "^4.18"
+		"ezyang/htmlpurifier": "^4.18",
+		"smalot/pdfparser": "2.13.1"
 	},
 	"config": {
 		"optimize-autoloader": true,

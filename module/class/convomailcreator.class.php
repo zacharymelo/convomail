@@ -1,0 +1,551 @@
+<?php
+/* Copyright (C) 2026 DPG Supply
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+/**
+ * \file    class/convomailcreator.class.php
+ * \ingroup convomail
+ * \brief   Creates a draft record from an email: supplier invoice, customer order, ticket, project/lead
+ *
+ * Always after a user reviewed the values (record.php), never on its own: emails come from outside, and nothing
+ * they contain decides alone what is created. The third party is the one the user picks; the email only
+ * pre-selects it when its sender is a known contact or third party.
+ */
+dol_include_once('/convomail/class/convomailmatcher.class.php');
+dol_include_once('/convomail/class/convomailprojectresolver.class.php');
+
+/**
+ * Class ConvomailCreator
+ */
+class ConvomailCreator
+{
+	/** @var DoliDB */
+	public $db;
+
+	/** @var string[] Errors */
+	public $errors = array();
+
+	/** @var CommonObject|null Record created by create() */
+	public $object = null;
+
+	/**
+	 * @param DoliDB $db Database handler
+	 */
+	public function __construct($db)
+	{
+		$this->db = $db;
+	}
+
+	/**
+	 * Record types that can be created from an email, with their ConvomailTargets type and picto
+	 *
+	 * @return array<string,array{label:string,picto:string,setting:string}>
+	 */
+	public static function types()
+	{
+		return array(
+			'invoice_supplier' => array('label' => 'ConvomailCreateSupplierInvoice', 'picto' => 'supplier_invoice', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_INVOICE'),
+			'commande'         => array('label' => 'ConvomailCreateOrder', 'picto' => 'order', 'setting' => 'CONVOMAIL_TOOL_ORDER'),
+			'ticket'           => array('label' => 'ConvomailCreateTicket', 'picto' => 'ticket', 'setting' => 'CONVOMAIL_TOOL_TICKET'),
+			'project'          => array('label' => 'ConvomailCreateProject', 'picto' => 'project', 'setting' => 'CONVOMAIL_TOOL_PROJECT'),
+		);
+	}
+
+	/**
+	 * Whether the user may create this type here: the admin left the tool on (setup), module on, create right,
+	 * internal user
+	 *
+	 * @param  string $type Type
+	 * @param  User   $user User
+	 * @return bool
+	 */
+	public static function available($type, User $user)
+	{
+		$types = self::types();
+		if (!empty($user->socid) || !isset($types[$type]) || !getDolGlobalInt($types[$type]['setting'])) {
+			return false;
+		}
+		switch ($type) {
+			case 'invoice_supplier':
+				return isModEnabled('supplier_invoice') && ($user->hasRight('fournisseur', 'facture', 'creer') || $user->hasRight('supplier_invoice', 'creer'));
+			case 'commande':
+				return isModEnabled('order') && $user->hasRight('commande', 'creer');
+			case 'ticket':
+				return isModEnabled('ticket') && $user->hasRight('ticket', 'write');
+			case 'project':
+				return isModEnabled('project') && $user->hasRight('projet', 'creer');
+		}
+		return false;
+	}
+
+	/**
+	 * Values the form starts with, from the email
+	 *
+	 * @param  string              $type     Type
+	 * @param  array<string,mixed> $message  fetchMessage() result (msgid set)
+	 * @param  string[]            $myemails The user's own addresses
+	 * @return array<string,mixed>
+	 */
+	public function defaults($type, array $message, array $myemails)
+	{
+		$matcher = new ConvomailMatcher($this->db);
+		$people = array();
+		foreach (array_merge(ConvomailMatcher::senders($message), $message['to'] ?? array(), $message['cc'] ?? array()) as $a) {
+			if (!in_array($a['email'], $myemails, true)) {
+				$people[] = $a['email'];
+			}
+		}
+		$matched = $matcher->mapEmails($people);
+		$socid = 0;
+		$contactid = 0;
+		// The sender first (the Reply-To person for web form mail)
+		foreach ($people as $email) {
+			if (!empty($matched[$email]['socid'])) {
+				$socid = (int) $matched[$email]['socid'];
+				$contactid = (int) $matched[$email]['contactid'];
+				break;
+			}
+		}
+		if ($type === 'invoice_supplier' && $socid > 0 && !$this->isSupplier($socid)) {
+			$socid = 0;	// a customer's email: the user picks the supplier
+			$contactid = 0;
+		}
+		$resolver = new ConvomailProjectResolver($this->db);
+		$res = $resolver->resolve($message, $matched, $myemails);
+
+		$subject = trim((string) $message['subject']);
+		$values = array(
+			'socid'     => $socid,
+			'contactid' => $contactid,
+			'projectid' => ($res && $res['projectid'] > 0) ? (int) $res['projectid'] : 0,
+			'subject'   => $subject !== '' ? $subject : '-',
+			'date'      => !empty($message['date']) ? (int) $message['date'] : dol_now(),
+		);
+		if ($type === 'invoice_supplier') {
+			$values['ref_supplier'] = self::guessNumber($subject, '(?:invoice|facture|rechnung|factura|fattura|inv)');
+			$values['lines'] = array(array('desc' => $subject, 'amount' => '', 'vat' => '', 'qty' => 1));
+		}
+		if ($type === 'commande') {
+			$values['ref_client'] = self::guessNumber($subject, '(?:purchase\s*order|order|commande|bestellung|pedido|ordine|p\.?o\.?)');
+		}
+		if ($type === 'ticket') {
+			$values['type_code'] = $this->defaultCode('c_ticket_type');
+			$values['category_code'] = $this->defaultCode('c_ticket_category');
+			$values['severity_code'] = $this->defaultCode('c_ticket_severity');
+			$values['notify'] = 0;
+		}
+		if ($type === 'project') {
+			$values['opp_amount'] = '';
+		}
+		return $values;
+	}
+
+	/**
+	 * A reference number after a keyword in a subject ("Invoice INV-2026-0042", "PO #4512"), '' if none
+	 *
+	 * @param  string $subject Subject
+	 * @param  string $keyword Regex of the keywords
+	 * @return string
+	 */
+	public static function guessNumber($subject, $keyword)
+	{
+		if (preg_match('/\b'.$keyword.'\b\s*(?:no\.?|n°|nr\.?|number|num\.?|#|:)?\s*([A-Z0-9][A-Z0-9\-\/._]{1,40}[A-Z0-9])/iu', $subject, $m) && preg_match('/[0-9]/', $m[1])) {
+			return $m[1];
+		}
+		return '';
+	}
+
+	/**
+	 * @param  int  $socid Third party
+	 * @return bool        Whether it is a supplier
+	 */
+	private function isSupplier($socid)
+	{
+		$resql = $this->db->query('SELECT fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid));
+		$obj = $resql ? $this->db->fetch_object($resql) : null;
+		return $obj && (int) $obj->fournisseur === 1;
+	}
+
+	/**
+	 * Default code of a ticket dictionary (use_default), else the first active one
+	 *
+	 * @param  string $table c_ticket_type, c_ticket_category or c_ticket_severity
+	 * @return string
+	 */
+	private function defaultCode($table)
+	{
+		$sql = 'SELECT code FROM '.MAIN_DB_PREFIX.$table.' WHERE active = 1 AND entity IN ('.getEntity($table).') ORDER BY use_default DESC, pos ASC, rowid ASC';
+		$resql = $this->db->query($sql);
+		$obj = $resql ? $this->db->fetch_object($resql) : null;
+		return $obj ? (string) $obj->code : '';
+	}
+
+	/**
+	 * Read and check the posted form; the email's own text is added by the caller on the server
+	 *
+	 * @param  string $type Type
+	 * @return array{values:array<string,mixed>,errors:string[]}
+	 */
+	public function fromPost($type)
+	{
+		global $langs;
+
+		$errors = array();
+		$v = array(
+			'socid'     => GETPOSTINT('socid'),
+			'contactid' => GETPOSTINT('contactid'),
+			'projectid' => max(0, GETPOSTINT('projectid')),
+			'subject'   => dol_trunc(trim(GETPOST('subject', 'alphanohtml')), 255, 'right', 'UTF-8', 1),
+			'date'      => dol_mktime(12, 0, 0, GETPOSTINT('datemonth'), GETPOSTINT('dateday'), GETPOSTINT('dateyear')),
+		);
+		if ($v['subject'] === '') {
+			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'project' ? 'Label' : 'Subject'));
+		}
+		if ($type !== 'ticket' && $v['socid'] <= 0 && !($type === 'project' && !getDolGlobalString('PROJECT_THIRDPARTY_REQUIRED'))) {
+			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'invoice_supplier' ? 'Supplier' : 'Customer'));
+		}
+		if ($type === 'invoice_supplier' || $type === 'commande') {
+			if (empty($v['date'])) {
+				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('Date'));
+			} elseif ($v['date'] > dol_now() + 400 * 86400 || $v['date'] < dol_now() - 5 * 366 * 86400) {
+				$errors[] = $langs->trans('ConvomailDateOutOfRange');
+			}
+		}
+		if ($type === 'invoice_supplier') {
+			if ($v['socid'] > 0 && !$this->isSupplier($v['socid'])) {
+				$errors[] = $langs->trans('ConvomailNotASupplier');
+			}
+			$v['ref_supplier'] = dol_trunc(trim(GETPOST('ref_supplier', 'alphanohtml')), 180, 'right', 'UTF-8', 1);
+			if ($v['ref_supplier'] === '') {
+				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('RefSupplier'));
+			}
+			$due = dol_mktime(12, 0, 0, GETPOSTINT('duemonth'), GETPOSTINT('dueday'), GETPOSTINT('dueyear'));
+			$v['date_due'] = $due ?: 0;
+			$v['lines'] = array();
+			$descs = GETPOST('line_desc', 'array');
+			$amounts = GETPOST('line_amount', 'array');
+			$vats = GETPOST('line_vat', 'array');
+			foreach (array_slice(array_keys((array) $amounts), 0, 20) as $i) {
+				$amount = trim((string) ($amounts[$i] ?? ''));
+				if ($amount === '') {
+					continue;
+				}
+				$amount = price2num($amount, 'MU');
+				if (!is_numeric($amount)) {
+					$errors[] = $langs->trans('ConvomailBadAmount', dol_escape_htmltag((string) $amounts[$i]));
+					continue;
+				}
+				$vat = (string) ($vats[$i] ?? '0');
+				$v['lines'][] = array(
+					'desc'   => dol_trunc(trim(dol_string_nohtmltag((string) ($descs[$i] ?? ''))), 500, 'right', 'UTF-8', 1) ?: $v['subject'],
+					'amount' => (float) $amount,
+					'vat'    => $vat,
+				);
+			}
+		}
+		if ($type === 'commande') {
+			$v['ref_client'] = dol_trunc(trim(GETPOST('ref_client', 'alphanohtml')), 255, 'right', 'UTF-8', 1);
+		}
+		if ($type === 'ticket') {
+			foreach (array('type_code' => 'c_ticket_type', 'category_code' => 'c_ticket_category', 'severity_code' => 'c_ticket_severity') as $field => $table) {
+				$code = GETPOST($field, 'aZ09');
+				$v[$field] = $this->codeExists($table, $code) ? $code : '';
+			}
+			$v['assign'] = max(0, GETPOSTINT('assign'));
+			$v['notify'] = GETPOSTINT('notify') ? 1 : 0;
+		}
+		if ($type === 'project') {
+			$amount = trim(GETPOST('opp_amount', 'alphanohtml'));
+			$v['opp_amount'] = ($amount !== '' && is_numeric(price2num($amount, 'MT'))) ? (float) price2num($amount, 'MT') : null;
+		}
+		return array('values' => $v, 'errors' => $errors);
+	}
+
+	/**
+	 * @param  string $table Dictionary
+	 * @param  string $code  Code
+	 * @return bool
+	 */
+	private function codeExists($table, $code)
+	{
+		if ($code === '') {
+			return false;
+		}
+		$resql = $this->db->query('SELECT code FROM '.MAIN_DB_PREFIX.$table." WHERE active = 1 AND code = '".$this->db->escape($code)."'");
+		return $resql && $this->db->num_rows($resql) > 0;
+	}
+
+	/**
+	 * Records that look like this one: 'block' stops creation, 'warn' is shown for the user to decide
+	 *
+	 * @param  string              $type   Type
+	 * @param  array<string,mixed> $values Values
+	 * @param  array<string,mixed> $email  msgid, pdfhashes (md5 of the PDF attachments)
+	 * @return array{block:string[],warn:string[]}
+	 */
+	public function duplicates($type, array $values, array $email = array())
+	{
+		global $langs;
+
+		$out = array('block' => array(), 'warn' => array());
+		$link = function ($table, $id, $ref) {
+			return $ref.' (#'.((int) $id).')';
+		};
+		if ($type === 'invoice_supplier' && $values['socid'] > 0) {
+			if (($values['ref_supplier'] ?? '') !== '') {
+				$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.'facture_fourn WHERE fk_soc = '.((int) $values['socid'])." AND ref_supplier = '".$this->db->escape(trim($values['ref_supplier']))."' AND entity IN (".getEntity('supplier_invoice').')';
+				$resql = $this->db->query($sql);
+				if ($resql && ($obj = $this->db->fetch_object($resql))) {
+					$out['block'][] = $langs->trans('ConvomailDupSupplierRef', $values['ref_supplier'], $link('facture_fourn', $obj->rowid, $obj->ref));
+				}
+			}
+			$total = 0;
+			foreach ((array) ($values['lines'] ?? array()) as $l) {
+				$total += (float) $l['amount'];
+			}
+			if ($total != 0 && !empty($values['date'])) {
+				$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.'facture_fourn WHERE fk_soc = '.((int) $values['socid']).' AND ABS(total_ht - '.((float) $total).') < 0.01';
+				$sql .= " AND datef BETWEEN '".$this->db->idate($values['date'] - 7 * 86400)."' AND '".$this->db->idate($values['date'] + 7 * 86400)."' AND entity IN (".getEntity('supplier_invoice').')';
+				$resql = $this->db->query($sql);
+				if ($resql && ($obj = $this->db->fetch_object($resql))) {
+					$out['warn'][] = $langs->trans('ConvomailDupSupplierAmount', $link('facture_fourn', $obj->rowid, $obj->ref));
+				}
+			}
+		}
+		if ($type === 'invoice_supplier' && !empty($email['pdfhashes'])) {
+			$in = array();
+			foreach ($email['pdfhashes'] as $hash) {
+				$in[] = "'".$this->db->escape($hash)."'";
+			}
+			$sql = 'SELECT f.rowid, f.ref FROM '.MAIN_DB_PREFIX.'ecm_files as e JOIN '.MAIN_DB_PREFIX."facture_fourn as f ON e.src_object_type = 'facture_fourn' AND e.src_object_id = f.rowid";
+			$sql .= ' WHERE e.label IN ('.implode(',', $in).') AND f.entity IN ('.getEntity('supplier_invoice').')';
+			$resql = $this->db->query($sql);
+			if ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$out['warn'][] = $langs->trans('ConvomailDupSupplierFile', $link('facture_fourn', $obj->rowid, $obj->ref));
+			}
+		}
+		if ($type === 'commande' && $values['socid'] > 0 && ($values['ref_client'] ?? '') !== '') {
+			$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.'commande WHERE fk_soc = '.((int) $values['socid'])." AND ref_client = '".$this->db->escape(trim($values['ref_client']))."' AND entity IN (".getEntity('commande').')';
+			$resql = $this->db->query($sql);
+			if ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$out['warn'][] = $langs->trans('ConvomailDupOrderRef', $values['ref_client'], $link('commande', $obj->rowid, $obj->ref));
+			}
+		}
+		// Ticket and project keep the Message-ID they were made from (as Email Collector does): one per email
+		if (in_array($type, array('ticket', 'project'), true) && !empty($email['msgid'])) {
+			$table = $type === 'ticket' ? 'ticket' : 'projet';
+			$sql = 'SELECT rowid, ref FROM '.MAIN_DB_PREFIX.$table." WHERE email_msgid = '".$this->db->escape($email['msgid'])."' AND entity IN (".getEntity($type === 'ticket' ? 'ticket' : 'project').')';
+			$resql = $this->db->query($sql);
+			if ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$out['block'][] = $langs->trans('ConvomailDupFromEmail', $link($table, $obj->rowid, $obj->ref));
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Create the draft record
+	 *
+	 * @param  string              $type   Type
+	 * @param  array<string,mixed> $values From fromPost(), checked
+	 * @param  array<string,mixed> $email  msgid, from, replyto, references, date, html (clean body), text (plain body)
+	 * @param  User                $user   User
+	 * @return int                         Record id, <0 on error ($this->errors)
+	 */
+	public function create($type, array $values, array $email, User $user)
+	{
+		if (!self::available($type, $user)) {
+			$this->errors[] = 'ConvomailTargetNotAllowed';
+			return -1;
+		}
+		$this->db->begin();
+		switch ($type) {
+			case 'invoice_supplier':
+				$id = $this->createSupplierInvoice($values, $user);
+				break;
+			case 'commande':
+				$id = $this->createOrder($values, $user);
+				break;
+			case 'ticket':
+				$id = $this->createTicket($values, $email, $user);
+				break;
+			case 'project':
+				$id = $this->createProject($values, $email, $user);
+				break;
+			default:
+				$id = -1;
+		}
+		if ($id <= 0) {
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		return $id;
+	}
+
+	/**
+	 * @param  array<string,mixed> $v    Values
+	 * @param  User                $user User
+	 * @return int
+	 */
+	private function createSupplierInvoice(array $v, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$soc = new Societe($this->db);
+		$soc->fetch($v['socid']);
+
+		$inv = new FactureFournisseur($this->db);
+		$inv->socid = (int) $v['socid'];
+		$inv->ref_supplier = trim($v['ref_supplier']);
+		$inv->type = FactureFournisseur::TYPE_STANDARD;
+		$inv->label = $v['subject'];
+		$inv->date = $v['date'];
+		$inv->fk_project = (int) $v['projectid'];
+		$inv->cond_reglement_id = (int) ($soc->cond_reglement_supplier_id ?? 0);
+		$inv->mode_reglement_id = (int) ($soc->mode_reglement_supplier_id ?? 0);
+		$inv->date_echeance = !empty($v['date_due']) ? $v['date_due'] : $inv->calculate_date_lim_reglement($inv->cond_reglement_id);
+		$id = $inv->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($inv->error), (array) $inv->errors);
+			return -1;
+		}
+		foreach ((array) $v['lines'] as $l) {
+			if ($inv->addline($l['desc'], (float) $l['amount'], $l['vat'], 0, 0, 1, 0, 0, 0, 0, 0, 0, 'HT') < 0) {
+				$this->errors = array_merge(array($inv->error), (array) $inv->errors);
+				return -1;
+			}
+		}
+		$this->object = $inv;
+		return $id;
+	}
+
+	/**
+	 * @param  array<string,mixed> $v    Values
+	 * @param  User                $user User
+	 * @return int
+	 */
+	private function createOrder(array $v, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/commande/class/commande.class.php';
+		$order = new Commande($this->db);
+		$order->socid = (int) $v['socid'];
+		$order->ref_client = $v['ref_client'];
+		$order->date = $v['date'];
+		$order->fk_project = (int) $v['projectid'];
+		$order->note_private = $v['subject'];
+		$id = $order->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($order->error), (array) $order->errors);
+			return -1;
+		}
+		if ($v['contactid'] > 0) {
+			$order->add_contact($v['contactid'], 'CUSTOMER', 'external');
+		}
+		$this->object = $order;
+		return $id;
+	}
+
+	/**
+	 * @param  array<string,mixed> $v     Values
+	 * @param  array<string,mixed> $email Email
+	 * @param  User                $user  User
+	 * @return int
+	 */
+	private function createTicket(array $v, array $email, User $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/ticket/class/ticket.class.php';
+		$ticket = new Ticket($this->db);
+		$ticket->ref = $ticket->getDefaultRef();
+		$ticket->subject = $v['subject'];
+		$ticket->message = (string) $email['html'];
+		$ticket->fk_soc = (int) $v['socid'];
+		$ticket->fk_project = (int) $v['projectid'];
+		$ticket->type_code = $v['type_code'];
+		$ticket->category_code = $v['category_code'];
+		$ticket->severity_code = $v['severity_code'];
+		$ticket->fk_user_assign = (int) $v['assign'];
+		$ticket->origin_email = (string) $email['from'];
+		$ticket->origin_replyto = (string) $email['replyto'];
+		$ticket->origin_references = (string) $email['references'];
+		$ticket->email_msgid = (string) $email['msgid'];
+		$ticket->email_date = (int) $email['date'];
+		$ticket->datec = dol_now();
+		// No mail to the customer unless the user asked for it; the team's own notices (TICKET_NOTIFICATION_EMAIL_TO,
+		// the assignee) go as usual: context['disableticketemail'] would stop those too
+		$ticket->notify_tiers_at_create = (int) $v['notify'];
+		$id = $ticket->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($ticket->error), (array) $ticket->errors);
+			return -1;
+		}
+		if ($v['contactid'] > 0) {
+			$ticket->add_contact($v['contactid'], 'SUPPORTCLI', 'external');
+		}
+		$this->object = $ticket;
+		return $id;
+	}
+
+	/**
+	 * @param  array<string,mixed> $v     Values
+	 * @param  array<string,mixed> $email Email
+	 * @param  User                $user  User
+	 * @return int
+	 */
+	private function createProject(array $v, array $email, User $user)
+	{
+		global $conf;
+
+		require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$project = new Project($this->db);
+		$soc = new Societe($this->db);
+		if ($v['socid'] > 0) {
+			$soc->fetch($v['socid']);
+		}
+		// Next ref from the numbering model, as projet/card.php does
+		$modele = getDolGlobalString('PROJECT_ADDON', 'mod_project_simple');
+		foreach (array_merge(array('/'), (array) $conf->modules_parts['models']) as $reldir) {
+			$file = dol_buildpath($reldir.'core/modules/project/'.$modele.'.php', 0);
+			if (file_exists($file)) {
+				require_once $file;
+				$numbering = new $modele();
+				$project->ref = $numbering->getNextValue($soc, $project);
+				break;
+			}
+		}
+		if (empty($project->ref)) {
+			$this->errors[] = 'No project numbering model';
+			return -1;
+		}
+		$project->title = $v['subject'];
+		$project->description = dol_trunc((string) $email['text'], 5000, 'right', 'UTF-8', 1);
+		$project->socid = (int) $v['socid'];
+		$project->date_start = dol_now();
+		$project->statut = 0;
+		$project->public = 0;
+		$project->usage_task = 1;
+		$project->email_msgid = (string) $email['msgid'];
+		if (getDolGlobalString('PROJECT_USE_OPPORTUNITIES')) {
+			$project->usage_opportunity = 1;
+			$resql = $this->db->query('SELECT rowid FROM '.MAIN_DB_PREFIX."c_lead_status WHERE code = 'PROSP' AND active = 1");
+			$obj = $resql ? $this->db->fetch_object($resql) : null;
+			$project->opp_status = $obj ? (int) $obj->rowid : 0;
+			$project->opp_amount = $v['opp_amount'];
+		}
+		$id = $project->create($user);
+		if ($id <= 0) {
+			$this->errors = array_merge(array($project->error), (array) $project->errors);
+			return -1;
+		}
+		// As projet/card.php: the creator leads it, so a user without "see all projects" still sees it
+		$project->add_contact($user->id, 'PROJECTLEADER', 'internal');
+		$this->object = $project;
+		return $id;
+	}
+}

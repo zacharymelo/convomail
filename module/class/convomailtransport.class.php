@@ -67,6 +67,10 @@ class ConvomailTransport
 	{
 		$originprefix = array('propal' => 'pro', 'commande' => 'ord', 'facture' => 'inv', 'ticket' => 'tic', 'contrat' => 'con');
 
+		// A ticket before its project: replies must reach the ticket (Email Collector matches "tic"), not the project
+		if (($context['origin'] ?? '') === 'ticket' && !empty($context['originid'])) {
+			return 'tic'.((int) $context['originid']);
+		}
 		if (!empty($context['projectid'])) {
 			return 'proj'.((int) $context['projectid']);
 		}

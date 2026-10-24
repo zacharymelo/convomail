@@ -232,3 +232,11 @@
 .cm-dragging-folder .cm-folder-root { display: block; }
 .cm-folder-root.cm-drop { background: var(--cm-selected); border-color: var(--cm-accent); color: inherit; }
 .cm-folder.cm-dragged { opacity: .45; }
+
+/* From this email: file attachments, create a record (record.php) */
+.cm-recordline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 16px 6px; font-size: .92em; }
+.cm-record-email { margin: 0 0 12px; }
+.cm-record-att, .cm-record-target { display: inline-flex; align-items: center; gap: 4px; margin: 2px 0; }
+.cm-record-lines td { padding: 3px 6px; }
+.cm-record-preview { max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--colortopbordertitle1, #d8d8d8); border-radius: 4px; background: var(--colorbackbody, #fff); }
+.cm-record-note { margin: 10px 0; }
