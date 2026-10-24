@@ -632,8 +632,13 @@
 			movingFolder = f.getAttribute('data-name');
 			ev.dataTransfer.effectAllowed = 'move';
 			ev.dataTransfer.setData('text/plain', f.getAttribute('data-label'));
-			app.classList.add('cm-dragging-folder');
-			f.classList.add('cm-dragged');
+			// After the drag has started: Chrome cancels a drag when the page changes during dragstart
+			setTimeout(function () {
+				if (movingFolder) {
+					app.classList.add('cm-dragging-folder');
+					f.classList.add('cm-dragged');
+				}
+			}, 0);
 		});
 		folderBox.addEventListener('dragend', function () {
 			movingFolder = null;
