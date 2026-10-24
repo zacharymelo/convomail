@@ -317,6 +317,7 @@ class ConvomailView
 			$h .= ' data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1)).'"';
 			$h .= ' data-list="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1).'?accountid='.((int) $account->id).'&folder='.urlencode($folder)).'"';
 			$h .= ' data-self="'.dol_escape_htmltag($pageurl).'"';
+			$h .= ' data-new-folder-prompt="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailNewFolderPrompt')).'"';
 		}
 		$h .= '>';
 		// In the reading pane the message scrolls on its own, above the conversation (resizable split, js/convomail.js)
@@ -340,6 +341,9 @@ class ConvomailView
 				if ($f['name'] !== $folder) {
 					$h .= '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag($f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label']).'</option>';
 				}
+			}
+			if ($account->canManage($user)) {
+				$h .= '<option value="__new__">'.dol_escape_htmltag($langs->trans('ConvomailNewFolderInMove')).'</option>';
 			}
 			$h .= '</select>';
 		}

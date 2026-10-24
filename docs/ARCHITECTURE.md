@@ -1,6 +1,6 @@
 # Convomail architecture
 
-How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.9.1**.
+How the module is put together: what each part does, what it stores, and how information moves between Dolibarr, the user's mail server and the agenda. Written for whoever (person or agent) works on it next. State as of **0.10.0**.
 
 - What the module does for users: [README.md](../README.md)
 - What is planned: [ROADMAP.md](ROADMAP.md)
@@ -78,6 +78,7 @@ convomail/
     attachment.php        Streams one MIME part
     ajax/message.php      Reading-pane HTML fragment
     ajax/thread.php       Conversation under a message, and one of its messages opened
+    ajax/folder.php       Folder management: create, rename, delete an empty folder (JSON)
     ajax/action.php       Mailbox actions (JSON)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
@@ -190,8 +191,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailCollector` | Automatic filing through core's Email Collector | `enable()` creates/updates `CONVOMAIL<id>_IN` (INBOX, `isanswer`) and `_OUT` (Sent folder, `isanswer` + `withouttrackingidinmsgid`, `code=SET:AC_EMAIL`), action `recordevent` with `userownerid/authorid=SET:<owner>`; `disable()`, `sync()` (called by `ConvomailAccount::update()` and on shared-mailbox access changes), `remove()` (by `delete()`), `status()`, `runNow()`, `refreshAll()` (on upgrade). Collector label "Convomail: Inbox/Sent replies of <address> (<owner or shared mailbox>)"; the description names the Dolibarr user (or the shared mailbox's users) and what the job does |
 | `ConvomailOAuth` | OAuth sign-in (Google, Microsoft 365) on top of core's phpoauth services and `DoliStorage` | `providers()`, `availableApps()`, `appFor()`, `authorizationUrl()`, `handleCallback()`, `accessToken()` (refresh 5 minutes before expiry), `status()`, `disconnect()`, `mailSettings()` (in-memory settings for `CMailFile`) |
 | `ConvomailMessage` | Link row CRUD | `fetchByMsgid()`, `fetchByTrackKey()` (no entity filter: public URL), `fetchByActioncomm()`, `countForProject()` (tab badge) |
-| `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `findSentFolder`, `findFolderByRole`, `findRelated` |
-| `ConvomailHordeMailboxClient` | IMAP implementation (Horde_Imap_Client). Returns plain arrays, never Horde objects | Summaries carry `uid, msgid, subject, date, from/to/cc/reply_to, in_reply_to, references, seen, answered, flagged, size, has_attachments, snippet`. `fetchMessage()` adds `parts` (`id, type, charset, name, disposition, cid, size`). Fallbacks: In-Reply-To from headers when ENVELOPE omits it; whole small parts when partial fetch returns nothing |
+| `ConvomailMailboxClient` (interface) | What the module needs from a mailbox protocol | `testConnection`, `listFolders`, `listMessages`, `fetchMessage`, `fetchPart`, `setSeen`, `setFlag`, `moveMessages`, `append`, `createFolder`, `renameFolder`, `deleteFolder`, `folderStatus`, `folderNamespace`, `findSentFolder`, `findFolderByRole`, `findRelated` |
+| `ConvomailHordeMailboxClient` | IMAP implementation (Horde_Imap_Client). Returns plain arrays, never Horde objects | Summaries carry `uid, msgid, subject, date, from/to/cc/reply_to, in_reply_to, references, seen, answered, flagged, size, has_attachments, snippet`. `fetchMessage()` adds `parts` (`id, type, charset, name, disposition, cid, size`). Fallbacks: In-Reply-To from headers when ENVELOPE omits it; whole small parts when partial fetch returns nothing. `listFolders()` keeps subscribed folders only (`MBOX_SUBSCRIBED_EXISTS`; Horde always counts INBOX, so INBOX alone = no subscriptions = every folder), plus INBOX and the account's Sent folder. `createFolder()` subscribes and `renameFolder()` moves the subscription only when the server keeps subscriptions (`subscribedNames()`), or the first one would hide every other folder. `folderNamespace()` (personal prefix such as `INBOX.` + separator), `folderStatus()` (messages, subfolders), `deleteFolder()` |
 | `ConvomailThread` | Conversation of a message across Inbox, Sent, Archive | `folders()`, `find()` (rounds of `findRelated()`), `html()`, `bodyHtml()` |
 | `ConvomailRenderer` | Message body to safe HTML | `cleanBody($allowImages, $forStorage)`, `iframeDocument()`, `attachments()`, static `purify()` (HTMLPurifier; `cid:` scheme via `ConvomailHTMLPurifierCidScheme`) |
 | `ConvomailTransport` | Send through the account's SMTP via `CMailFile`, copy to Sent | `send()`, `buildTrackId()`. Private: `overrideSmtpSettings()` / `restoreSmtpSettings()` (in-memory `MAIN_MAIL_*_CONVOMAIL`), `dedupePastedImages()` (core bug), `copyToSent()` |
@@ -352,6 +353,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `user_accounts.php` | GET / POST | `id` (user), `accountid, action=create\|add\|edit\|update\|delete\|confirm_delete\|test\|detectsent\|filing_on\|filing_off\|filing_run` | own (`account->read`) or any (`account->admin`) | Page |
 | `admin/setup.php` | GET / POST | `action=update, CONVOMAIL_ALLOWED_HOSTS` | admin | Page |
 | `ajax/message.php` | GET | `accountid, folder, uid, showimages` | `account->read`; usable account | HTML fragment |
+| `ajax/folder.php` | POST | `token, accountid, action=create\|rename\|delete, name, newname` | `account->read`; usable account; `canManage()`. Never Inbox / role folders / the account's Sent folder; delete only empty without subfolders | JSON |
 | `ajax/thread.php` | GET | `accountid, folder, uid`; `body=1, showimages` for one message | `account->read`; usable account | HTML fragment |
 | `ajax/action.php` | POST + token | `accountid, folder, uids[], action, dest, projectid, socid, contactids` | `account->read`; usable account | JSON |
 | `ajax/template.php` | GET | `id, socid, contactid, projectid` | `message->send`; template public or own | JSON `{subject, body}` |

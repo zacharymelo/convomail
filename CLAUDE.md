@@ -119,6 +119,9 @@ Only when asked:
 - Every endpoint that touches a mailbox goes through `convomail_get_usable_account()`.
 - Writes are POST with a CSRF token; JSON endpoints return `{ok, message, ...}`.
 - Production runs `MAIN_SECURITY_CSRF_WITH_TOKEN=3`: every GET with an `action` (except create, edit, presend… see main.inc.php) needs `&token=`. Links we print carry `newToken()`; URLs core redirects to (`backtopage`) cannot, so they use a flag parameter instead of `action` (e.g. `newthirdparty=1`). Test such flows with level 3 on.
+- Horde's `deleteMailbox()` retries a failed DELETE by flagging every message of the folder deleted and expunging it. `ajax/folder.php` only deletes after `folderStatus()` shows no messages and no subfolders: keep that check first.
+- Folder subscriptions: Convomail lists subscribed folders when the server keeps subscriptions (Horde always reports INBOX, so INBOX alone means none). Subscribe new folders only when it does, or the first subscription hides every other folder.
+- GreenMail can get a folder stuck so that DELETE stalls until the read timeout (seen after several sessions appended to and expunged it). A fresh folder deletes fine; real servers aren't affected.
 - `dol_escape_htmltag($s)` turns line breaks into a literal `\n`: pass `keepn` (`dol_escape_htmltag($s, 0, 1)`) for textareas and multi-line `data-*` attributes, or saving the form back stores the `\n` text.
 - Strings go in `langs/en_US/convomail.lang`. CSS uses Dolibarr theme variables, so dark themes work.
 - Comments explain why, not what. Match the surrounding density.

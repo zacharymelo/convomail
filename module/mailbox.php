@@ -211,6 +211,7 @@ $client->close();
 
 $form = new Form($db);
 
+$canmanagefolders = $account->canManage($user);
 $accountstatic = new ConvomailAccount($db);
 $myaccounts = $accountstatic->fetchAllUsableBy($user, true);
 $options = array();
@@ -233,7 +234,12 @@ print '<div class="cm-app" data-accountid="'.((int) $account->id).'" data-folder
 	.' data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1)).'"'
 	.' data-page-message="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1)).'"'
 	.' data-self="'.dol_escape_htmltag($selfbase.$listparam).'"'
-	.' data-confirm-delete="'.dol_escape_htmltag($langs->trans('ConvomailConfirmDelete')).'">';
+	.' data-confirm-delete="'.dol_escape_htmltag($langs->trans('ConvomailConfirmDelete')).'"'
+	// Folder management (ajax/folder.php): only for whoever manages the account
+	.($canmanagefolders ? ' data-ajax-folder="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/folder.php', 1)).'"'
+		.' data-new-folder-prompt="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailNewFolderPrompt')).'"'
+		.' data-confirm-delete-folder="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailConfirmDeleteFolder')).'"' : '')
+	.'>';
 
 // Left: account, compose, folders
 print '<aside class="cm-folders">';
@@ -247,14 +253,25 @@ print '<nav class="cm-folderlist">';
 $icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
 foreach ($folders as $f) {
 	$label = $f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label'];
-	print '<a href="'.dol_escape_htmltag($_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($f['name'])).'" class="'.($f['name'] === $folder ? 'active' : '').'" title="'.dol_escape_htmltag($f['name']).'">';
+	print '<a href="'.dol_escape_htmltag($_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($f['name'])).'" class="cm-folder'.($f['name'] === $folder ? ' active' : '').'" title="'.dol_escape_htmltag($f['name']).'"';
+	print ' data-name="'.dol_escape_htmltag($f['name']).'" data-label="'.dol_escape_htmltag($f['label']).'">';
 	print '<span class="cm-folder-name">'.img_picto('', $icons[$f['role']] ?? 'fa-folder', 'class="pictofixedwidth"').dol_escape_htmltag($label).'</span>';
+	// The user's own folders can be renamed and deleted (when empty); standard ones keep their role
+	if ($canmanagefolders && $f['role'] === '' && $f['name'] !== (string) $account->sent_folder) {
+		print '<span class="cm-folder-tools">';
+		print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="rename" title="'.dol_escape_htmltag($langs->trans('ConvomailRenameFolder')).'">'.img_picto('', 'fa-pen').'</span>';
+		print '<span role="button" tabindex="0" class="cm-folder-tool" data-cm-folder="delete" title="'.dol_escape_htmltag($langs->trans('ConvomailDeleteFolder')).'">'.img_picto('', 'fa-trash').'</span>';
+		print '</span>';
+	}
 	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts'), true)) {
 		print '<span class="cm-count" data-folder="'.dol_escape_htmltag($f['name']).'">'.((int) $f['unseen']).'</span>';
 	}
 	print '</a>';
 }
 print '</nav>';
+if ($canmanagefolders) {
+	print '<a href="#" class="cm-newfolder" data-cm-folder="create">'.img_picto('', 'fa-folder-plus', 'class="pictofixedwidth"').$langs->trans('ConvomailNewFolder').'</a>';
+}
 print '<a class="cm-refresh" href="'.dol_escape_htmltag($selfbase.'&refresh=1').'">'.img_picto('', 'fa-sync', 'class="pictofixedwidth"').$langs->trans('Refresh').'</a>';
 print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" class="cm-conversation-switch">';
 print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="setconversation">';
@@ -282,6 +299,9 @@ foreach ($folders as $f) {
 	if ($f['name'] !== $folder) {
 		print '<option value="'.dol_escape_htmltag($f['name']).'">'.dol_escape_htmltag($f['role'] !== '' ? $langs->trans('ConvomailFolder'.ucfirst($f['role'])) : $f['label']).'</option>';
 	}
+}
+if ($canmanagefolders) {
+	print '<option value="__new__">'.dol_escape_htmltag($langs->trans('ConvomailNewFolderInMove')).'</option>';
 }
 print '</select>';
 print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-search" data-searching="'.dol_escape_htmltag($langs->trans('ConvomailSearching')).'">';
@@ -333,10 +353,10 @@ foreach ($messages as $m) {
 	$r = $resolved[$m['uid']] ?? null;
 	$classes = 'cm-row'.($m['seen'] ? '' : ' unread').($m['uid'] === $openuid ? ' selected' : '').($m['flagged'] ? ' flagged' : '');
 	$href = $selfbase.$listparam.'&uid='.((int) $m['uid']);
-	print '<div class="'.$classes.'" role="listitem" data-uid="'.((int) $m['uid']).'" data-href="'.dol_escape_htmltag($href).'">';
+	print '<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-href="'.dol_escape_htmltag($href).'">';
 	print '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
 	print '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
-	print '<a class="cm-row-main" href="'.dol_escape_htmltag($href).'">';
+	print '<a class="cm-row-main" draggable="false" href="'.dol_escape_htmltag($href).'">';
 	print '<span class="cm-row-top"><span class="cm-from">'.dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
 	if (!empty($via)) {
 		print ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
