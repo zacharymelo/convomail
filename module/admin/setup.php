@@ -173,7 +173,7 @@ foreach (ConvomailCreator::groups() as $group => $grouplabel) {
 		$moduleoff = !isModEnabled($targettypes[$ctype]['module']);
 		print '<tr class="oddeven"><td>'.$langs->trans('ConvomailCreateMenu').' &rsaquo; '.$langs->trans($grouplabel).' &rsaquo; '.$langs->trans($info['label']).'</td>';
 		print '<td>'.ajax_constantonoff($info['setting']).'</td>';
-		print '<td class="opacitymedium">'.$langs->trans('ConvomailToolCreateDesc').($ctype === 'facture' ? ' '.$langs->trans('ConvomailToolInvoiceDesc') : '').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
+		print '<td class="opacitymedium">'.$langs->trans('ConvomailToolCreateDesc').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
 	}
 }
 

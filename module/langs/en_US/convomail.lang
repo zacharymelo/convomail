@@ -354,7 +354,6 @@ ConvomailPickARecord = Search for the record to file them on, and pick it.
 ConvomailToolsTitle = "From this email" buttons of the reading pane
 ConvomailToolFileDesc = Files the attachments you tick on a record (third party, project, invoice...) or in the Documents module. Turned off, the button is hidden for everyone.
 ConvomailToolCreateDesc = Creates this record as a draft from an email, in a small panel the user checks and submits, with the attachments filed on it. Turned off, it leaves the Create menu for everyone; users still need the right to create the record.
-ConvomailToolInvoiceDesc = Off by default: an invoice usually follows an order or a proposal.
 ConvomailToolModuleOff = Its module is not enabled, so the button does not show anyway.
 ConvomailFileAttachments = File attachments...
 ConvomailCreateSupplierInvoice = Invoice

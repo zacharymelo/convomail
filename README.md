@@ -209,7 +209,7 @@ Under the people of an open message, **From this email:** offers **File attachme
 
   | Group | Kinds |
   |---|---|
-  | **Customer** | Proposal, Order, Invoice (Invoice is off until an admin turns it on: an invoice usually follows an order or a proposal) |
+  | **Customer** | Proposal, Order, Invoice |
   | **Supplier** | Invoice, Quote (recorded as a Dolibarr supplier proposal) |
   | **Other** | Ticket, Project / lead |
 

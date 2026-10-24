@@ -275,7 +275,13 @@ foreach ($folders as $f) {
 	} elseif ($hastree) {
 		print '<span class="cm-folder-toggle cm-folder-toggle-none"></span>';	// keeps names aligned
 	}
-	print img_picto('', $icons[$f['role']] ?? 'fa-folder', 'class="pictofixedwidth"').dol_escape_htmltag(convomail_folder_label($f)).'</span>';
+	print img_picto('', $icons[$f['role']] ?? 'fa-folder', 'class="pictofixedwidth"');
+	if ($depth > 0) {
+		// Phones show the folders in one row, without the tree: there a subfolder shows its path
+		print '<span class="cm-folder-short">'.dol_escape_htmltag(convomail_folder_label($f)).'</span><span class="cm-folder-full">'.dol_escape_htmltag(convomail_folder_label($f, true)).'</span></span>';
+	} else {
+		print dol_escape_htmltag(convomail_folder_label($f)).'</span>';
+	}
 	// The user's own folders can be renamed and deleted (when empty); standard ones keep their role.
 	// Subfolders can be made in the user's folders and in Archive.
 	if ($canmanagefolders && ($editable || $f['role'] === 'archive')) {
