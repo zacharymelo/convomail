@@ -20,6 +20,7 @@
  */
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
 dol_include_once('/convomail/class/convomailrenderer.class.php');
+dol_include_once('/convomail/class/convomailtracker.class.php');
 
 /**
  * Class ConvomailThread
@@ -154,7 +155,7 @@ class ConvomailThread
 	 */
 	public static function html(ConvomailAccount $account, $folder, array $items, array $myemails, array $folders)
 	{
-		global $langs;
+		global $db, $langs;
 
 		if (empty($items)) {
 			return '';
@@ -171,6 +172,7 @@ class ConvomailThread
 
 		$aftercurrent = false;
 		$opened = 0;
+		$opens = ConvomailTracker::opens($db, (int) $account->id, array_column($items, 'msgid'));
 		foreach ($items as $m) {
 			$from = $m['from'][0] ?? array('name' => '', 'email' => '');
 			$mine = in_array(strtolower($from['email']), $myemails, true);
@@ -192,6 +194,9 @@ class ConvomailThread
 			$h .= '</span>';
 			if ($m['folder'] !== $folder) {
 				$h .= '<span class="cm-chip">'.dol_escape_htmltag($labels[$m['folder']] ?? $m['folder']).'</span>';
+			}
+			if (isset($opens[$m['msgid'] ?? ''])) {
+				$h .= ConvomailTracker::openIcon($opens[$m['msgid']]);
 			}
 			$h .= '<span class="cm-conv-date">'.($m['date'] ? dol_print_date($m['date'], 'dayhour', 'tzuserrel') : '').'</span>';
 			$h .= '</div>';

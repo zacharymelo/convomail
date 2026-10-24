@@ -294,6 +294,12 @@
 .cm-rp:has(input[name="target"][value="ecm"]:checked) .cm-rp-row:has(.cm-rp-logit) { display: none; }	/* a Documents folder has no agenda */
 .cm-rp-relink { display: block; margin-top: 2px; }
 .cm-eventlink { color: var(--cm-muted); }
+/* Open tracking: opened (approximate) or not yet, on rows, the message and the conversation */
+.cm-open { display: inline-flex; align-items: center; gap: 1px; font-size: .9em; white-space: nowrap; }
+.cm-open-yes { color: var(--cm-accent); }
+.cm-open-no { color: var(--cm-muted); opacity: .7; }
+.cm-open-count { font-size: .8em; font-weight: 600; }
+.cm-openline { margin: 2px 16px 4px; font-size: .92em; }
 .cm-rp-msgs:not(:empty) { margin-top: 8px; }
 .cm-rp-msgs .error, .cm-rp-msgs .warning { margin: 4px 0; padding: 4px 8px; }
 .cm-rp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }

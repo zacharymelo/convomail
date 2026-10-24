@@ -23,6 +23,7 @@ dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
 dol_include_once('/convomail/class/convomailfiler.class.php');
 dol_include_once('/convomail/class/convomailcreator.class.php');
+dol_include_once('/convomail/class/convomailtracker.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
 
 /**
@@ -467,6 +468,12 @@ class ConvomailView
 				$h .= '<div class="cm-unknownline">'.img_picto('', 'fa-user-plus', 'class="pictofixedwidth opacitymedium"');
 				$h .= $langs->trans('ConvomailNotInDolibarr', dol_escape_htmltag($person['name'] !== '' ? $person['name'] : $person['email'])).$actions.'</div>';
 			}
+		}
+
+		// Sent with the tracking image: whether it was opened (approximate)
+		$open = ConvomailTracker::opens($db, (int) $account->id, array($message['msgid']))[$message['msgid']] ?? null;
+		if ($open) {
+			$h .= '<div class="cm-openline'.($open['count'] > 0 ? ' cm-open-yes' : ' cm-open-no').'" title="'.dol_escape_htmltag($langs->trans('ConvomailOpensApproximate')).'">'.img_picto('', $open['count'] > 0 ? 'fa-eye' : 'fa-eye-slash', 'class="pictofixedwidth"').dol_escape_htmltag(ConvomailTracker::openText($open)).'</div>';
 		}
 
 		// Project line

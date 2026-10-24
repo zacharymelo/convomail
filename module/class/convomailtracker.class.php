@@ -72,6 +72,69 @@ class ConvomailTracker
 	}
 
 	/**
+	 * Open status of tracked messages of an account (only those sent with the tracking image), for the mailbox
+	 * list, the message and the conversation: no agenda event needed. Empty when tracking is switched off.
+	 *
+	 * @param  DoliDB   $db        Database handler
+	 * @param  int      $accountid Account
+	 * @param  string[] $msgids    Message-IDs (without angle brackets)
+	 * @return array<string,array{count:int,first:int,last:int}> By Message-ID
+	 */
+	public static function opens($db, $accountid, array $msgids)
+	{
+		$out = array();
+		$in = array();
+		foreach (array_unique(array_filter(array_map('strval', $msgids))) as $msgid) {
+			$in[] = "'".$db->escape($msgid)."'";
+		}
+		if (!self::isEnabled() || empty($in)) {
+			return $out;
+		}
+		$sql = 'SELECT msgid, nb_open, date_first_open, date_last_open FROM '.MAIN_DB_PREFIX.'convomail_message';
+		$sql .= ' WHERE fk_account = '.((int) $accountid).' AND track_key IS NOT NULL AND msgid IN ('.implode(',', array_slice($in, 0, 500)).')';
+		$resql = $db->query($sql);
+		while ($resql && ($obj = $db->fetch_object($resql))) {
+			$out[$obj->msgid] = array('count' => (int) $obj->nb_open, 'first' => (int) $db->jdate($obj->date_first_open), 'last' => (int) $db->jdate($obj->date_last_open));
+		}
+		return $out;
+	}
+
+	/**
+	 * "Opened 3 times, first 23/10 14:02, last 24/10 09:15" or "Not opened yet"
+	 *
+	 * @param  array{count:int,first:int,last:int} $open opens() entry
+	 * @return string                                   Plain text
+	 */
+	public static function openText(array $open)
+	{
+		global $langs;
+
+		if ($open['count'] <= 0) {
+			return $langs->transnoentitiesnoconv('ConvomailNotOpenedYet');
+		}
+		$first = dol_print_date($open['first'], 'dayhour', 'tzuserrel');
+		if ($open['count'] === 1) {
+			return $langs->transnoentitiesnoconv('ConvomailOpenedOnce', $first);
+		}
+		return $langs->transnoentitiesnoconv('ConvomailOpenedTimes', $open['count'], $first, dol_print_date($open['last'], 'dayhour', 'tzuserrel'));
+	}
+
+	/**
+	 * Small eye icon (opened) or crossed eye (not yet), the details and the "approximate" note in its title
+	 *
+	 * @param  array{count:int,first:int,last:int} $open opens() entry
+	 * @return string                                   HTML
+	 */
+	public static function openIcon(array $open)
+	{
+		global $langs;
+
+		$title = self::openText($open).' — '.$langs->transnoentitiesnoconv('ConvomailOpensApproximate');
+		$opened = $open['count'] > 0;
+		return '<span class="cm-open'.($opened ? ' cm-open-yes' : ' cm-open-no').'" title="'.dol_escape_htmltag($title).'">'.img_picto('', $opened ? 'fa-eye' : 'fa-eye-slash').($opened && $open['count'] > 1 ? '<span class="cm-open-count">'.$open['count'].'</span>' : '').'</span>';
+	}
+
+	/**
 	 * Record that the image of a key was loaded. The first open creates an "Email opened" agenda event
 	 * linked like the sent message; later opens only update the counters.
 	 *

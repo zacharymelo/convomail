@@ -49,6 +49,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Phones | Mailbox header (account and Compose on one line, folders in one sideways row with full paths, search on its own line), icon-only message toolbar, forms with labels above full-width fields | 0.13.1 |
 | From an email | Link to record: log an email on an existing document, or link (or move) its agenda event there, optionally filing its attachments; suggestions from references in the subject and the sender's latest documents; the pane shows the event's record | 0.14.0 |
 | From an email | Suggested and picked records open in a new tab, to check them before linking, filing or creating | 0.14.1 |
+| Open tracking | Opened or not shown in the mailbox: an eye on sent rows (count and times in its tooltip), a line on the open message, the eye in the conversation; no need to open the agenda | 0.15.0 |
 
 **Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
