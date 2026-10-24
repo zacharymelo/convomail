@@ -184,6 +184,21 @@ class ConvomailRecord
 	}
 
 	/**
+	 * A record's name as a link to its card in a new tab, so the user can check it is the right one first
+	 *
+	 * @param  string $type  ConvomailTargets type
+	 * @param  int    $id    Record id
+	 * @param  string $label Name shown
+	 * @return string
+	 */
+	private static function openLink($type, $id, $label)
+	{
+		global $langs;
+
+		return '<a class="cm-rp-open" href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($type, (int) $id)).'" target="_blank" rel="noopener" title="'.dol_escape_htmltag($langs->trans('ConvomailOpenInNewTab')).'">'.dol_escape_htmltag($label).' '.img_picto('', 'fa-external-link-alt', 'class="cm-open-icon"').'</a>';
+	}
+
+	/**
 	 * A third party or record picker (searches ajax/records.php)
 	 *
 	 * @param  string $idname    Name of the hidden id field
@@ -205,6 +220,9 @@ class ConvomailRecord
 			$h .= '<input type="hidden" name="'.dol_escape_htmltag($typename).'" value="" data-cm-pick="type">';
 		}
 		$h .= '<input type="text" class="cm-picker-input" value="'.dol_escape_htmltag($label).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchToPick')).'" autocomplete="off" spellcheck="false">';
+		// The record picked (or pre-selected), to check it in a new tab before linking or creating
+		$url = ($id > 0 && strpos($types, ',') === false) ? ConvomailTargets::cardUrl($types, (int) $id) : '';
+		$h .= '<a class="cm-picker-open" href="'.dol_escape_htmltag($url).'" target="_blank" rel="noopener" title="'.dol_escape_htmltag($langs->trans('ConvomailOpenInNewTab')).'"'.($url === '' ? ' hidden' : '').'>'.img_picto('', 'fa-external-link-alt').'</a>';
 		$h .= '<span class="cm-picker-results" role="listbox"></span></span>';
 		return $h;
 	}
@@ -373,7 +391,7 @@ class ConvomailRecord
 		$choices = '';
 		$first = true;
 		foreach ($this->suggestions($user) as $key => $s) {
-			$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="s'.dol_escape_htmltag($key).'"'.($first ? ' checked' : '').'> '.img_picto('', $typesinfo[$s['type']]['picto'], 'class="pictofixedwidth"').dol_escape_htmltag($s['label']).'</label>';
+			$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="s'.dol_escape_htmltag($key).'"'.($first ? ' checked' : '').'> '.img_picto('', $typesinfo[$s['type']]['picto'], 'class="pictofixedwidth"').self::openLink($s['type'], $s['id'], $s['label']).'</label>';
 			$choices .= '<input type="hidden" name="targettype_s'.dol_escape_htmltag($key).'" value="'.dol_escape_htmltag($s['type']).'"><input type="hidden" name="targetid_s'.dol_escape_htmltag($key).'" value="'.((int) $s['id']).'">';
 			$first = false;
 		}
@@ -522,7 +540,7 @@ class ConvomailRecord
 		if ($event && $event['type'] !== '') {
 			$o = $this->targets->fetchVisible($event['type'], $event['id'], $user);
 			$name = $o ? ConvomailTargets::label($event['type'], $o) : '#'.$event['id'];
-			$now = img_picto('', $typesinfo[$event['type']]['picto'], 'class="pictofixedwidth"').'<a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($event['type'], $event['id'])).'">'.dol_escape_htmltag($name).'</a>';
+			$now = img_picto('', $typesinfo[$event['type']]['picto'], 'class="pictofixedwidth"').self::openLink($event['type'], $event['id'], $name);
 			if (self::canEditEvent($event, $user)) {
 				$now .= '<label class="cm-rp-relink"><input type="checkbox" name="relink" value="1"> '.$langs->trans('ConvomailMoveLink').'</label>';
 			}
@@ -535,7 +553,7 @@ class ConvomailRecord
 			if ($event && $s['type'] === $event['type'] && $s['id'] === $event['id']) {
 				continue;	// where it is already
 			}
-			$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="s'.dol_escape_htmltag($key).'"'.($first ? ' checked' : '').'> '.img_picto('', $typesinfo[$s['type']]['picto'], 'class="pictofixedwidth"').dol_escape_htmltag($s['label']).'</label>';
+			$choices .= '<label class="cm-rp-target"><input type="radio" name="target" value="s'.dol_escape_htmltag($key).'"'.($first ? ' checked' : '').'> '.img_picto('', $typesinfo[$s['type']]['picto'], 'class="pictofixedwidth"').self::openLink($s['type'], $s['id'], $s['label']).'</label>';
 			$choices .= '<input type="hidden" name="targettype_s'.dol_escape_htmltag($key).'" value="'.dol_escape_htmltag($s['type']).'"><input type="hidden" name="targetid_s'.dol_escape_htmltag($key).'" value="'.((int) $s['id']).'">';
 			$first = false;
 		}

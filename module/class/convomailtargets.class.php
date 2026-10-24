@@ -347,6 +347,7 @@ class ConvomailTargets
 					'label' => $label,
 					'name'  => ($type === 'societe') ? (string) $o->name : $label,
 					'picto' => self::types()[$type]['picto'],
+					'url'   => self::cardUrl($type, (int) $o->id),
 				);
 			}
 			if (count($out) >= $limit) {

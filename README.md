@@ -205,7 +205,7 @@ Under the people of an open message, **From this email:** offers **File attachme
   - or a folder of the Documents module.
 
   The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before). You stay in the mailbox.
-- **Link to record...** ties the email to a document that already exists (proposal, order, invoice, supplier document, ticket, contract, intervention): pick a suggestion or search. Suggestions are documents whose reference — yours, or the customer's or supplier's — is in the subject ("PO #4512" finds the order with customer reference 4512), then the sender's latest documents.
+- **Link to record...** ties the email to a document that already exists (proposal, order, invoice, supplier document, ticket, contract, intervention): pick a suggestion or search. Suggestions are documents whose reference — yours, or the customer's or supplier's — is in the subject ("PO #4512" finds the order with customer reference 4512), then the sender's latest documents. Each suggestion's name opens the record in a new tab, so you can check it is the right one before linking; a record picked in the search (and the third party of a Create panel) has the same open icon.
   - Not logged yet: the email is logged on that record, with its third party and project.
   - Logged already: its agenda event is linked there. If it is linked to another record, tick **Move it to the record chosen below** (the event's owner, or a user who may change everyone's events).
   - **Also file its attachments on that record** does both at once.
