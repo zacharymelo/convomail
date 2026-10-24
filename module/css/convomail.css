@@ -224,3 +224,9 @@
 .cm-folder-toggle .fa, .cm-folder-toggle .fas { transition: transform .12s; }
 .cm-folder-collapsed .cm-folder-toggle .fa, .cm-folder-collapsed .cm-folder-toggle .fas { transform: rotate(-90deg); }
 .cm-folder-hidden { display: none !important; }
+
+/* Moving a folder: the top-level zone shows only while a folder is dragged */
+.cm-folder-root { display: none; padding: 6px 8px; border: 1px dashed var(--cm-border); border-radius: 6px; color: var(--cm-muted); font-size: .9em; }
+.cm-dragging-folder .cm-folder-root { display: block; }
+.cm-folder-root.cm-drop { background: var(--cm-selected); border-color: var(--cm-accent); color: inherit; }
+.cm-folder.cm-dragged { opacity: .45; }

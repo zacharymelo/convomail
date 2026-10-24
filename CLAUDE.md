@@ -122,7 +122,7 @@ Only when asked:
 - Horde's `deleteMailbox()` retries a failed DELETE by flagging every message of the folder deleted and expunging it. `ajax/folder.php` only deletes after `folderStatus()` shows no messages and no subfolders: keep that check first.
 - Horde's `getNamespaces()` returns arrays unless called with `array('ob_return' => true)`; the objects are what `folderNamespace()` reads.
 - Folder subscriptions: Convomail lists subscribed folders when the server keeps subscriptions (Horde always reports INBOX, so INBOX alone means none). Subscribe new folders only when it does, or the first subscription hides every other folder.
-- GreenMail can get a folder stuck so that DELETE stalls until the read timeout (seen after several sessions appended to and expunged it, and on a subfolder whose parent was renamed). A fresh folder deletes fine; real servers aren't affected.
+- GreenMail can get a folder stuck so that DELETE stalls until the read timeout (seen after several sessions appended to and expunged it, and on a subfolder whose parent was renamed). GreenMail can't RENAME a folder into another parent either: it drops the connection and loses the folder. Test folder moves on `dev/bigmailbox/` (Dovecot), where they keep subfolders and messages. A fresh folder deletes fine; real servers aren't affected.
 - `dol_escape_htmltag($s)` turns line breaks into a literal `\n`: pass `keepn` (`dol_escape_htmltag($s, 0, 1)`) for textareas and multi-line `data-*` attributes, or saving the form back stores the `\n` text.
 - Strings go in `langs/en_US/convomail.lang`. CSS uses Dolibarr theme variables, so dark themes work.
 - Comments explain why, not what. Match the surrounding density.

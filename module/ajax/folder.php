@@ -12,8 +12,9 @@
  * \ingroup convomail
  * \brief   Folder management of a mailbox (JSON): create, rename, delete an empty folder
  *
- * POST parameters: token, accountid, action (create|rename|delete), name (create: the new folder's name;
- * rename/delete: the folder's full name), newname (rename), parent (create: full name of the folder to create it in)
+ * POST parameters: token, accountid, action (create|rename|move|delete), name (create: the new folder's name;
+ * rename/move/delete: the folder's full name), newname (rename), parent (create, move: full name of the folder to
+ * put it in; '' for move = top level)
  * Who: the account's manager (owner of a personal account, mail accounts admin for a shared mailbox).
  * Inbox, Sent, Drafts, Trash, Junk, Archive and the account's Sent folder are never renamed or deleted.
  */
@@ -152,6 +153,33 @@ switch ($action) {
 			convomail_folder_json(array('ok' => false, 'error' => $client->getError()), 500);
 		}
 		$result = array('ok' => true, 'name' => $full, 'message' => $langs->trans('ConvomailFolderRenamed', $newname));
+		break;
+
+	case 'move':
+		// Into another folder, or to the top level (parent ''): a rename to a new path, subfolders included
+		if ($name === '' || $protected($name)) {
+			convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderProtected')), 400);
+		}
+		$d = $ns['delimiter'];
+		$cut = ($d !== '') ? strrpos($name, $d) : false;
+		$label = ($cut === false) ? $name : substr($name, $cut + 1);
+		if ($parent !== '' && ($parent === $name || ($d !== '' && strpos($parent, $name.$d) === 0))) {
+			convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderIntoItself')), 400);
+		}
+		if ($parent !== '' && $client->folderStatus($parent) === false) {
+			convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderUnknown')), 400);
+		}
+		$full = ($parent === '') ? $ns['prefix'].$label : $parent.$d.$label;
+		if ($full === $name) {
+			convomail_folder_json(array('ok' => true, 'name' => $full, 'message' => ''));
+		}
+		if ($client->folderStatus($full) !== false) {
+			convomail_folder_json(array('ok' => false, 'error' => $langs->trans('ConvomailFolderExists', $label)), 400);
+		}
+		if (!$client->renameFolder($name, $full)) {
+			convomail_folder_json(array('ok' => false, 'error' => $client->getError()), 500);
+		}
+		$result = array('ok' => true, 'name' => $full, 'message' => $langs->trans('ConvomailFolderMoved', $label));
 		break;
 
 	case 'delete':
