@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 DPG Supply - convomail
  *
  * Mailbox behaviour: open a message in the reading pane, actions (read, flag, move, archive, delete,
- * log to project), selection and keyboard shortcuts. Also sizes the sandboxed message iframe; the iframe
+ * log to project), the "From this email" panel, selection and keyboard shortcuts. Also sizes the sandboxed message iframe; the iframe
  * itself never runs scripts.
  */
 (function () {
@@ -163,19 +163,270 @@
 		}
 	});
 
+	/**
+	 * "From this email" panel (ajax/record.php): opens under the buttons of the message, in the reading pane and
+	 * in the full-page view. Native inputs only; the third party and record pickers search ajax/records.php.
+	 */
+	function recordLine(el) {
+		var view = el.closest('.cm-view');
+		return view ? qs('.cm-recordline', view) : null;
+	}
+
+	function closeRecordPanel(view) {
+		var slot = qs('.cm-recordpanel', view);
+		if (slot) {
+			slot.innerHTML = '';
+		}
+		qsa('[data-cm-record]', view).forEach(function (b) { b.classList.remove('cm-active'); });
+	}
+
+	function openRecordPanel(btn) {
+		var view = btn.closest('.cm-view');
+		var line = recordLine(btn);
+		var slot = qs('.cm-recordpanel', view);
+		if (btn.classList.contains('cm-active')) {
+			closeRecordPanel(view);
+			return;
+		}
+		closeRecordPanel(view);
+		btn.classList.add('cm-active');
+		slot.classList.add('loading');
+		var url = line.getAttribute('data-url') + '&action=panel&type=' + encodeURIComponent(btn.getAttribute('data-cm-record'))
+			+ '&token=' + encodeURIComponent(line.getAttribute('data-token'));
+		fetch(url, { credentials: 'same-origin' })
+			.then(function (r) { return r.ok ? r.text() : Promise.reject(new Error(r.status)); })
+			.then(function (html) {
+				slot.classList.remove('loading');
+				if (!btn.classList.contains('cm-active') || !slot.isConnected) {
+					return;	// closed, or another message opened meanwhile
+				}
+				slot.innerHTML = html;
+				var form = qs('form.cm-rp', slot);
+				var submit = qs('.cm-rp-submit', form);
+				if (submit && submit.getAttribute('data-warned')) {
+					form.elements.acceptwarnings.value = '1';	// warnings shown from the start: the button says "anyway"
+				}
+				var first = qsa('.cm-rp-label.fieldrequired', form).map(function (l) {
+					return qs('.cm-rp-value input:not([type="hidden"])', l.closest('.cm-rp-row'));
+				}).filter(function (i) { return i && !i.value; })[0];
+				(first || qs('input:not([type="hidden"]), button', form)).focus({ preventScroll: true });
+				slot.scrollIntoView({ block: 'nearest' });
+			})
+			.catch(function () {
+				slot.classList.remove('loading');
+				btn.classList.remove('cm-active');
+				notify('Error', false);
+			});
+	}
+
+	function recordMessages(form, res) {
+		var box = qs('.cm-rp-msgs', form);
+		var html = '';
+		(res.errors || (res.error ? [res.error] : [])).forEach(function (e) { html += '<div class="error">' + e + '</div>'; });
+		(res.warnings || []).forEach(function (w) { html += '<div class="warning">' + w + '</div>'; });
+		box.innerHTML = html;
+		var submit = qs('.cm-rp-submit', form);
+		var warned = !!(res.warnings && res.warnings.length && !(res.errors && res.errors.length));
+		form.elements.acceptwarnings.value = warned ? '1' : '0';
+		if (submit) {
+			submit.textContent = submit.getAttribute(warned ? 'data-label-anyway' : 'data-label');
+		}
+		box.scrollIntoView({ block: 'nearest' });
+	}
+
+	function submitRecordPanel(form) {
+		var view = form.closest('.cm-view');
+		var line = recordLine(form);
+		var submit = qs('.cm-rp-submit', form);
+		if (!submit || submit.disabled) {
+			return;
+		}
+		var fd = new FormData(form);
+		fd.append('token', line.getAttribute('data-token'));
+		submit.disabled = true;
+		form.classList.add('loading');
+		fetch(line.getAttribute('data-url'), { method: 'POST', body: fd, credentials: 'same-origin' })
+			.then(function (r) { return r.json(); })
+			.then(function (res) {
+				form.classList.remove('loading');
+				if (res.ok && res.url) {
+					window.location.href = res.url;	// the new record's card, to finish it there
+					return;
+				}
+				submit.disabled = false;
+				if (!res.ok) {
+					recordMessages(form, res);
+					return;
+				}
+				notify(res.message + ((res.notes || []).length ? '<br>' + res.notes.join('<br>') : ''), true);
+				closeRecordPanel(view);
+				view.dispatchEvent(new CustomEvent('convomail:reload', { bubbles: true }));
+			})
+			.catch(function () {
+				form.classList.remove('loading');
+				submit.disabled = false;
+				notify('Error', false);
+			});
+	}
+
+	function pickerResults(picker) { return qs('.cm-picker-results', picker); }
+
+	function pickerSearch(input) {
+		var picker = input.closest('.cm-picker');
+		var line = recordLine(input);
+		var box = pickerResults(picker);
+		var q = input.value.trim();
+		if (q.length < 2) {
+			box.innerHTML = '';
+			return;
+		}
+		var url = line.getAttribute('data-search') + '?token=' + encodeURIComponent(line.getAttribute('data-token'))
+			+ '&q=' + encodeURIComponent(q) + '&types=' + encodeURIComponent(picker.getAttribute('data-types'))
+			+ '&role=' + encodeURIComponent(picker.getAttribute('data-role')) + '&write=' + picker.getAttribute('data-write');
+		fetch(url, { credentials: 'same-origin' })
+			.then(function (r) { return r.json(); })
+			.then(function (res) {
+				if (input.value.trim() !== q) {
+					return;	// typed on meanwhile
+				}
+				box.innerHTML = '';
+				(res.results || []).forEach(function (r, i) {
+					var item = document.createElement('button');
+					item.type = 'button';
+					item.className = 'cm-picker-item' + (i === 0 ? ' active' : '');
+					item.setAttribute('role', 'option');
+					item.setAttribute('data-id', r.id);
+					item.setAttribute('data-type', r.type);
+					item.setAttribute('data-name', r.name);
+					item.textContent = r.label;
+					box.appendChild(item);
+				});
+				if (!box.children.length) {
+					var none = document.createElement('span');
+					none.className = 'cm-picker-none opacitymedium';
+					none.textContent = '…';
+					box.appendChild(none);
+				}
+			});
+	}
+
+	function pickerChoose(item) {
+		var picker = item.closest('.cm-picker');
+		qs('[data-cm-pick="id"]', picker).value = item.getAttribute('data-id');
+		var type = qs('[data-cm-pick="type"]', picker);
+		if (type) {
+			type.value = item.getAttribute('data-type');
+		}
+		qs('.cm-picker-input', picker).value = item.getAttribute('data-name');
+		pickerResults(picker).innerHTML = '';
+		checkTarget(picker);
+	}
+
+	// File panel: using a picker or the Documents folder choice selects its radio
+	function checkTarget(el) {
+		var label = el.previousElementSibling;
+		var radio = label && label.classList.contains('cm-rp-target') ? qs('input[type="radio"]', label) : null;
+		if (radio) {
+			radio.checked = true;
+		}
+	}
+
+	document.addEventListener('click', function (ev) {
+		var btn = ev.target.closest('[data-cm-record]');
+		if (btn) {
+			ev.preventDefault();
+			openRecordPanel(btn);
+			return;
+		}
+		if (ev.target.closest('[data-cm-rp-close]')) {
+			ev.preventDefault();
+			closeRecordPanel(ev.target.closest('.cm-view'));
+			return;
+		}
+		var x = ev.target.closest('[data-cm-chip-remove]');
+		if (x) {
+			ev.preventDefault();
+			x.closest('.cm-rp-row').remove();	// the project: none (set on the card)
+			return;
+		}
+		var item = ev.target.closest('.cm-picker-item');
+		if (item) {
+			ev.preventDefault();
+			pickerChoose(item);
+		}
+	});
+	document.addEventListener('submit', function (ev) {
+		if (ev.target.matches && ev.target.matches('form.cm-rp')) {
+			ev.preventDefault();
+			submitRecordPanel(ev.target);
+		}
+	});
+	document.addEventListener('input', function (ev) {
+		var form = ev.target.closest && ev.target.closest('form.cm-rp');
+		if (!form) {
+			return;
+		}
+		// Values changed after a warning: check them again before "anyway"
+		var submit = qs('.cm-rp-submit', form);
+		if (form.elements.acceptwarnings.value === '1' && submit) {
+			form.elements.acceptwarnings.value = '0';
+			submit.textContent = submit.getAttribute('data-label');
+		}
+		if (ev.target.classList.contains('cm-picker-input')) {
+			var picker = ev.target.closest('.cm-picker');
+			qsa('[data-cm-pick]', picker).forEach(function (h) { h.value = ''; });	// typed: nothing chosen yet
+			clearTimeout(ev.target.cmTimer);
+			ev.target.cmTimer = setTimeout(function () { pickerSearch(ev.target); }, 250);
+		}
+	});
+	document.addEventListener('focusin', function (ev) {
+		var t = ev.target;
+		if (t.closest && t.closest('.cm-rp-targets')) {
+			if (t.classList.contains('cm-picker-input')) {
+				checkTarget(t.closest('.cm-picker'));
+			} else if (t.tagName === 'SELECT') {
+				checkTarget(t);
+			}
+		}
+	});
+	document.addEventListener('focusout', function (ev) {
+		if (ev.target.classList && ev.target.classList.contains('cm-picker-input')) {
+			var box = pickerResults(ev.target.closest('.cm-picker'));
+			setTimeout(function () {
+				if (!box.contains(document.activeElement)) {
+					box.innerHTML = '';
+				}
+			}, 200);
+		}
+	});
+	document.addEventListener('keydown', function (ev) {
+		var form = ev.target.closest && ev.target.closest('form.cm-rp');
+		if (!form) {
+			return;
+		}
+		var picker = ev.target.classList.contains('cm-picker-input') ? ev.target.closest('.cm-picker') : null;
+		var items = picker ? qsa('.cm-picker-item', picker) : [];
+		if (items.length && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
+			ev.preventDefault();
+			var i = items.findIndex(function (it) { return it.classList.contains('active'); });
+			i = Math.max(0, Math.min(items.length - 1, i + (ev.key === 'ArrowDown' ? 1 : -1)));
+			items.forEach(function (it, n) { it.classList.toggle('active', n === i); });
+		} else if (items.length && ev.key === 'Enter') {
+			ev.preventDefault();
+			pickerChoose(qs('.cm-picker-item.active', picker) || items[0]);
+		} else if (ev.key === 'Escape') {
+			ev.preventDefault();
+			if (items.length) {
+				pickerResults(picker).innerHTML = '';
+			} else {
+				closeRecordPanel(form.closest('.cm-view'));
+			}
+		}
+	});
+
 	document.addEventListener('DOMContentLoaded', function () {
 		bindFrames(document);
 		loadThread(document);
-
-		// A select that reloads its page with the chosen value (record.php: the type of record to file on)
-		qsa('select[data-cm-reload]').forEach(function (sel) {
-			var go = function () { window.location.href = sel.getAttribute('data-cm-reload') + encodeURIComponent(sel.value); };
-			if (window.jQuery) {
-				jQuery(sel).on('change', go);	// also gets select2's change, which native listeners miss
-			} else {
-				sel.addEventListener('change', go);
-			}
-		});
 
 		var switcher = qs('form.convomail-switcher select');
 		if (switcher) {
@@ -818,6 +1069,8 @@
 				openMessage(currentUid(), true);
 			}
 		});
+		// Attachments filed from the "From this email" panel: show the message again (its log state may have changed)
+		pane.addEventListener('convomail:reload', function () { openMessage(currentUid()); });
 		pane.addEventListener('change', function (ev) {
 			var sel = ev.target.closest('select[data-cm-action="move"]');
 			if (sel && sel.value) {
@@ -828,7 +1081,7 @@
 		// Keyboard shortcuts
 		document.addEventListener('keydown', function (ev) {
 			var t = ev.target;
-			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
+			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize, .cm-rp')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
 				return;
 			}
 			var list = rows();
@@ -998,6 +1251,7 @@
 	 * Full-page message view (phones, direct links): same toolbar, then back to the list
 	 */
 	function bindPageView(view) {
+		view.addEventListener('convomail:reload', function () { window.location.reload(); });
 		view.addEventListener('click', function (ev) {
 			var btn = ev.target.closest('[data-cm-action]');
 			if (btn && btn.tagName !== 'SELECT') {

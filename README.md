@@ -197,23 +197,25 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 
 ## From an email into Dolibarr
 
-Under the people of an open message, **From this email:** offers:
+Under the people of an open message, **From this email:** offers a few buttons. Each opens a small panel right there, above the message, so the email stays in view; Esc or ✕ closes it.
 
-- **File attachments...** Tick the attachments, then pick where they go:
+- **File attachments...** The attachments are chips, all on (click one to leave it out). Then pick where they go:
   - a suggested record: the one the email is already logged on, the record named by Dolibarr's tracking id in what the email answers, its third party, contact or project;
-  - any other record you may add files to (third party, contact, project, proposal, order, invoice, supplier proposal, order or invoice, ticket, contract, intervention);
+  - **Another record:** type part of its reference or name and pick it; the search covers every record you may add files to (third party, contact, project, proposal, order, invoice, supplier proposal, order or invoice, ticket, contract, intervention);
   - or a folder of the Documents module.
 
-  The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before).
-- **Supplier invoice**, **Customer order**, **Ticket**, **Project / lead**: a short form, pre-filled from the email, then a draft is created with the ticked attachments filed on it and the email logged on it. Dolibarr then opens the record for you to finish.
-  - **Supplier invoice:** supplier from the sender's address when it is a supplier, the invoice number from the subject, dates, and the amounts per VAT rate (one line each). Refused if this supplier already has an invoice with that number; warned if one has the same amount within a week, or if the PDF is already filed on a supplier invoice.
-  - **Customer order:** the customer and their purchase order number (customer reference) from the subject; the PO is attached and the contact added. Lines are added on the order.
-  - **Ticket:** subject, the email's text as the message, type, category and severity (dictionary defaults), assignee. Replies thread with the ticket. The customer is only sent the "ticket created" email if you tick it.
-  - **Project / lead:** title, the email's text as description, opportunity amount when opportunities are on. You become its project leader.
+  The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before). You stay in the mailbox.
+- **Supplier invoice**, **Customer order**, **Ticket**, **Project / lead**: only the few fields a draft needs, pre-filled from the email. **Create and open** creates the draft with the ticked attachments filed on it and the email logged on it, then opens it in Dolibarr, where you finish it.
+  - **Supplier invoice:** the supplier (from the sender's address when it is a supplier), their invoice number (from the subject), the date, and optionally the amount without VAT with its rate (one line). Due date from the supplier's terms; other lines on the invoice. Refused if this supplier already has an invoice with that number; warned if one has the same amount within a week, or if the PDF is already filed on a supplier invoice.
+  - **Customer order:** the customer and their purchase order number (customer reference, from the subject), dated by the email; the PO is attached and the contact added. Products are added on the order.
+  - **Ticket:** third party and subject; the email's text is the message, type, category and severity are the dictionary defaults, and the assignee is set on the ticket. Replies thread with the ticket. The customer is only emailed that the ticket is open if you tick it.
+  - **Project / lead:** third party and title; the email's text is the description. You become its project leader; amounts and dates are set on the project.
+
+  The project the email belongs to shows as a chip on the invoice, order and ticket panels (✕ to leave it out). Warnings show next to the button, which then reads **Create anyway and open**.
 
   A record created from an email is created only once: the same email can't make a second ticket, project, invoice or order of that kind.
 
-**Safety.** Nothing is created or filed without a user submitting the form: emails come from outside. The text of the email is read again from the mail server, never taken from the form. Every attachment is checked like an upload: only the parts the message lists, size limits, no executable or script files (core's list, and SVG), the antivirus and core's "no JavaScript in a PDF" check, a clean name, and never over an existing file. Each record needs the user's right to add files to it, and the user must be able to open it.
+**Safety.** Nothing is created or filed without a user submitting the panel: emails come from outside. The text of the email is read again from the mail server, never taken from the form. Every attachment is checked like an upload: only the parts the message lists, size limits, no executable or script files (core's list, and SVG), the antivirus and core's "no JavaScript in a PDF" check, a clean name, and never over an existing file. Each record needs the user's right to add files to it, and the user must be able to open it; the third parties and records the pickers find are checked the same way.
 
 **Setup.** Each button can be turned off under **Setup → "From this email" buttons**, to keep the reading pane uncluttered. Buttons also follow the modules enabled and each user's rights.
 

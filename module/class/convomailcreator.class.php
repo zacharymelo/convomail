@@ -12,12 +12,13 @@
  * \ingroup convomail
  * \brief   Creates a draft record from an email: supplier invoice, customer order, ticket, project/lead
  *
- * Always after a user reviewed the values (record.php), never on its own: emails come from outside, and nothing
+ * Always after a user reviewed the values (the reading pane panel, ConvomailRecord), never on its own: emails come from outside, and nothing
  * they contain decides alone what is created. The third party is the one the user picks; the email only
  * pre-selects it when its sender is a known contact or third party.
  */
 dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
+dol_include_once('/convomail/class/convomailtargets.class.php');
 
 /**
  * Class ConvomailCreator
@@ -44,15 +45,15 @@ class ConvomailCreator
 	/**
 	 * Record types that can be created from an email, with their ConvomailTargets type and picto
 	 *
-	 * @return array<string,array{label:string,picto:string,setting:string}>
+	 * @return array<string,array{label:string,title:string,picto:string,setting:string}>
 	 */
 	public static function types()
 	{
 		return array(
-			'invoice_supplier' => array('label' => 'ConvomailCreateSupplierInvoice', 'picto' => 'supplier_invoice', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_INVOICE'),
-			'commande'         => array('label' => 'ConvomailCreateOrder', 'picto' => 'order', 'setting' => 'CONVOMAIL_TOOL_ORDER'),
-			'ticket'           => array('label' => 'ConvomailCreateTicket', 'picto' => 'ticket', 'setting' => 'CONVOMAIL_TOOL_TICKET'),
-			'project'          => array('label' => 'ConvomailCreateProject', 'picto' => 'project', 'setting' => 'CONVOMAIL_TOOL_PROJECT'),
+			'invoice_supplier' => array('label' => 'ConvomailCreateSupplierInvoice', 'title' => 'ConvomailNewSupplierInvoice', 'picto' => 'supplier_invoice', 'setting' => 'CONVOMAIL_TOOL_SUPPLIER_INVOICE'),
+			'commande'         => array('label' => 'ConvomailCreateOrder', 'title' => 'ConvomailNewOrder', 'picto' => 'order', 'setting' => 'CONVOMAIL_TOOL_ORDER'),
+			'ticket'           => array('label' => 'ConvomailCreateTicket', 'title' => 'ConvomailNewTicket', 'picto' => 'ticket', 'setting' => 'CONVOMAIL_TOOL_TICKET'),
+			'project'          => array('label' => 'ConvomailCreateProject', 'title' => 'ConvomailNewProject', 'picto' => 'project', 'setting' => 'CONVOMAIL_TOOL_PROJECT'),
 		);
 	}
 
@@ -186,7 +187,22 @@ class ConvomailCreator
 	}
 
 	/**
-	 * Read and check the posted form; the email's own text is added by the caller on the server
+	 * A posted date field (Y-m-d, from <input type="date">), noon in the user's time zone; 0 if none
+	 *
+	 * @param  string $name Field
+	 * @return int
+	 */
+	private static function postDate($name)
+	{
+		if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', GETPOST($name, 'alphanohtml'), $m) || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+			return 0;
+		}
+		return (int) dol_mktime(12, 0, 0, (int) $m[2], (int) $m[3], (int) $m[1], 'tzuserrel');
+	}
+
+	/**
+	 * Read and check the posted panel: the few fields it asks; the rest gets defaults and is finished on the card.
+	 * The email's own text is added by the caller on the server.
 	 *
 	 * @param  string $type Type
 	 * @return array{values:array<string,mixed>,errors:string[]}
@@ -201,7 +217,7 @@ class ConvomailCreator
 			'contactid' => GETPOSTINT('contactid'),
 			'projectid' => max(0, GETPOSTINT('projectid')),
 			'subject'   => dol_trunc(trim(GETPOST('subject', 'alphanohtml')), 255, 'right', 'UTF-8', 1),
-			'date'      => dol_mktime(12, 0, 0, GETPOSTINT('datemonth'), GETPOSTINT('dateday'), GETPOSTINT('dateyear')),
+			'date'      => self::postDate('date'),
 		);
 		if ($v['subject'] === '') {
 			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'project' ? 'Label' : 'Subject'));
@@ -209,7 +225,8 @@ class ConvomailCreator
 		if ($type !== 'ticket' && $v['socid'] <= 0 && !($type === 'project' && !getDolGlobalString('PROJECT_THIRDPARTY_REQUIRED'))) {
 			$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv($type === 'invoice_supplier' ? 'Supplier' : 'Customer'));
 		}
-		if ($type === 'invoice_supplier' || $type === 'commande') {
+		// An order is dated by the email (set by the caller)
+		if ($type === 'invoice_supplier') {
 			if (empty($v['date'])) {
 				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('Date'));
 			} elseif ($v['date'] > dol_now() + 400 * 86400 || $v['date'] < dol_now() - 5 * 366 * 86400) {
@@ -224,60 +241,34 @@ class ConvomailCreator
 			if ($v['ref_supplier'] === '') {
 				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('RefSupplier'));
 			}
-			$due = dol_mktime(12, 0, 0, GETPOSTINT('duemonth'), GETPOSTINT('dueday'), GETPOSTINT('dueyear'));
-			$v['date_due'] = $due ?: 0;
+			// Due date from the supplier's terms; one optional line (amount excl. tax and its VAT rate), more on the card
+			$v['date_due'] = 0;
 			$v['lines'] = array();
-			$descs = GETPOST('line_desc', 'array');
-			$amounts = GETPOST('line_amount', 'array');
-			$vats = GETPOST('line_vat', 'array');
-			foreach (array_slice(array_keys((array) $amounts), 0, 20) as $i) {
-				$amount = trim((string) ($amounts[$i] ?? ''));
-				if ($amount === '') {
-					continue;
+			$amount = trim(GETPOST('amount', 'alphanohtml'));
+			if ($amount !== '') {
+				$num = price2num($amount, 'MU');
+				if (!is_numeric($num)) {
+					$errors[] = $langs->trans('ConvomailBadAmount', dol_escape_htmltag($amount));
+				} else {
+					$v['lines'][] = array('desc' => $v['subject'], 'amount' => (float) $num, 'vat' => (string) GETPOST('vat', 'alphanohtml'));
 				}
-				$amount = price2num($amount, 'MU');
-				if (!is_numeric($amount)) {
-					$errors[] = $langs->trans('ConvomailBadAmount', dol_escape_htmltag((string) $amounts[$i]));
-					continue;
-				}
-				$vat = (string) ($vats[$i] ?? '0');
-				$v['lines'][] = array(
-					'desc'   => dol_trunc(trim(dol_string_nohtmltag((string) ($descs[$i] ?? ''))), 500, 'right', 'UTF-8', 1) ?: $v['subject'],
-					'amount' => (float) $amount,
-					'vat'    => $vat,
-				);
 			}
 		}
 		if ($type === 'commande') {
 			$v['ref_client'] = dol_trunc(trim(GETPOST('ref_client', 'alphanohtml')), 255, 'right', 'UTF-8', 1);
 		}
 		if ($type === 'ticket') {
-			foreach (array('type_code' => 'c_ticket_type', 'category_code' => 'c_ticket_category', 'severity_code' => 'c_ticket_severity') as $field => $table) {
-				$code = GETPOST($field, 'aZ09');
-				$v[$field] = $this->codeExists($table, $code) ? $code : '';
-			}
-			$v['assign'] = max(0, GETPOSTINT('assign'));
+			// Type, category, severity and assignee: the dictionaries' defaults, changed on the card
+			$v['type_code'] = $this->defaultCode('c_ticket_type');
+			$v['category_code'] = $this->defaultCode('c_ticket_category');
+			$v['severity_code'] = $this->defaultCode('c_ticket_severity');
+			$v['assign'] = 0;
 			$v['notify'] = GETPOSTINT('notify') ? 1 : 0;
 		}
 		if ($type === 'project') {
-			$amount = trim(GETPOST('opp_amount', 'alphanohtml'));
-			$v['opp_amount'] = ($amount !== '' && is_numeric(price2num($amount, 'MT'))) ? (float) price2num($amount, 'MT') : null;
+			$v['opp_amount'] = null;	// on the card
 		}
 		return array('values' => $v, 'errors' => $errors);
-	}
-
-	/**
-	 * @param  string $table Dictionary
-	 * @param  string $code  Code
-	 * @return bool
-	 */
-	private function codeExists($table, $code)
-	{
-		if ($code === '') {
-			return false;
-		}
-		$resql = $this->db->query('SELECT code FROM '.MAIN_DB_PREFIX.$table." WHERE active = 1 AND code = '".$this->db->escape($code)."'");
-		return $resql && $this->db->num_rows($resql) > 0;
 	}
 
 	/**
@@ -294,7 +285,8 @@ class ConvomailCreator
 
 		$out = array('block' => array(), 'warn' => array());
 		$link = function ($table, $id, $ref) {
-			return $ref.' (#'.((int) $id).')';
+			$types = array('facture_fourn' => 'invoice_supplier', 'commande' => 'commande', 'ticket' => 'ticket', 'projet' => 'project');
+			return '<a href="'.dol_escape_htmltag(ConvomailTargets::cardUrl($types[$table], (int) $id)).'">'.dol_escape_htmltag($ref).'</a>';
 		};
 		if ($type === 'invoice_supplier' && $values['socid'] > 0) {
 			if (($values['ref_supplier'] ?? '') !== '') {
