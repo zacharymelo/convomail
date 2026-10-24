@@ -197,7 +197,7 @@ Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying T
 
 ## From an email into Dolibarr
 
-Under the people of an open message, **From this email:** offers **File attachments...** and a **Create ▾** menu. Each opens a small panel right there, above the message, so the email stays in view; Esc or ✕ closes it.
+Under the people of an open message, **From this email:** offers **File attachments...**, **Link to record...** and a **Create ▾** menu. Each opens a small panel right there, above the message, so the email stays in view; Esc or ✕ closes it.
 
 - **File attachments...** The attachments are chips, all on (click one to leave it out). Then pick where they go:
   - a suggested record: the one the email is already logged on, the record named by Dolibarr's tracking id in what the email answers, its third party, contact or project;
@@ -205,6 +205,12 @@ Under the people of an open message, **From this email:** offers **File attachme
   - or a folder of the Documents module.
 
   The files land in the record's own **Linked files**, indexed like an upload. **Also log the email on this record** files the email on its agenda too (or links the event when it was logged before). You stay in the mailbox.
+- **Link to record...** ties the email to a document that already exists (proposal, order, invoice, supplier document, ticket, contract, intervention): pick a suggestion or search. Suggestions are documents whose reference — yours, or the customer's or supplier's — is in the subject ("PO #4512" finds the order with customer reference 4512), then the sender's latest documents.
+  - Not logged yet: the email is logged on that record, with its third party and project.
+  - Logged already: its agenda event is linked there. If it is linked to another record, tick **Move it to the record chosen below** (the event's owner, or a user who may change everyone's events).
+  - **Also file its attachments on that record** does both at once.
+
+  The pane then shows "Logged in the agenda · on Invoice FA-12". An email has one record; Log to... still sets its third party, contacts and project.
 - **Create ▾** groups what an email can become by who it is from:
 
   | Group | Kinds |
@@ -227,7 +233,7 @@ Under the people of an open message, **From this email:** offers **File attachme
 
 **Safety.** Nothing is created or filed without a user submitting the panel: emails come from outside. The text of the email is read again from the mail server, never taken from the form. Every attachment is checked like an upload: only the parts the message lists, size limits, no executable or script files (core's list, and SVG), the antivirus and core's "no JavaScript in a PDF" check, a clean name, and never over an existing file. Each record needs the user's right to add files to it, and the user must be able to open it; the third parties and records the pickers find are checked the same way.
 
-**Setup.** Each button can be turned off under **Setup → "From this email" buttons**, to keep the reading pane uncluttered. Buttons also follow the modules enabled and each user's rights.
+**Setup.** File attachments, Link to record and each Create kind can be turned off under **Setup → "From this email" buttons**, to keep the reading pane uncluttered. Buttons also follow the modules enabled and each user's rights.
 
 ## Email on projects
 

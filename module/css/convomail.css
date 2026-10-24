@@ -292,6 +292,8 @@
 .cm-rp-target { display: inline-flex; align-items: center; gap: 4px; }
 .cm-rp-targets > .cm-picker, .cm-rp-targets > select { margin-left: 22px; max-width: calc(100% - 22px); }
 .cm-rp:has(input[name="target"][value="ecm"]:checked) .cm-rp-row:has(.cm-rp-logit) { display: none; }	/* a Documents folder has no agenda */
+.cm-rp-relink { display: block; margin-top: 2px; }
+.cm-eventlink { color: var(--cm-muted); }
 .cm-rp-msgs:not(:empty) { margin-top: 8px; }
 .cm-rp-msgs .error, .cm-rp-msgs .warning { margin: 4px 0; padding: 4px 8px; }
 .cm-rp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }

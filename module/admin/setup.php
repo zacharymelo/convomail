@@ -163,6 +163,9 @@ print '<tr class="liste_titre"><td colspan="3">'.$langs->trans('ConvomailToolsTi
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailFileAttachments').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_TOOL_FILE').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailToolFileDesc').'</td></tr>';
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailLinkToRecord').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_TOOL_LINK').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailToolLinkDesc').'</td></tr>';
 // The Create menu, by group (who the email is from)
 $targettypes = ConvomailTargets::types();
 foreach (ConvomailCreator::groups() as $group => $grouplabel) {

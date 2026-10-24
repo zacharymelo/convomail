@@ -16,6 +16,7 @@
  * POST action=create&type=… (token)  Create the draft, file the ticked attachments, log the email; JSON with the
  *                                    record's card to open ({ok, url}) or what to fix ({ok:false, errors|warnings})
  * POST action=file (token)           File the ticked attachments; JSON {ok, message, notes}
+ * POST action=link (token)           Log the email on a record, or link its event there (type=link for the panel)
  * Parameters: accountid, folder, uid; parts[]; the fields of ConvomailCreator::fromPost().
  */
 
@@ -73,17 +74,18 @@ $action    = GETPOST('action', 'aZ09');
 $type      = GETPOST('type', 'aZ09');
 
 $post = ($_SERVER['REQUEST_METHOD'] === 'POST');
-if (($post && !in_array($action, array('create', 'file'), true)) || (!$post && $action !== 'panel')) {
+if (($post && !in_array($action, array('create', 'file', 'link'), true)) || (!$post && $action !== 'panel')) {
 	convomail_json(array('ok' => false, 'error' => 'Bad request'), 400);
 }
-if ($action === 'file') {
-	$type = 'file';
+if ($action === 'file' || $action === 'link') {
+	$type = $action;
 }
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read') || !empty($user->socid)) {
 	convomail_json(array('ok' => false, 'error' => 'Forbidden'), 403);
 }
 // Each tool can be turned off in the setup (ConvomailCreator::available() checks the creation ones)
-if ($type === 'file' ? !getDolGlobalInt('CONVOMAIL_TOOL_FILE') : !ConvomailCreator::available($type, $user)) {
+$tools = array('file' => 'CONVOMAIL_TOOL_FILE', 'link' => 'CONVOMAIL_TOOL_LINK');
+if (isset($tools[$type]) ? !getDolGlobalInt($tools[$type]) || ($type === 'link' && !isModEnabled('agenda')) : !ConvomailCreator::available($type, $user)) {
 	convomail_json(array('ok' => false, 'error' => 'Forbidden'), 403);
 }
 $account = convomail_get_usable_account($db, $user, $accountid);
@@ -108,7 +110,13 @@ if ($action === 'panel') {
 	exit;
 }
 
-$result = ($action === 'create') ? $record->create($type, $user) : $record->file($user);
+if ($action === 'create') {
+	$result = $record->create($type, $user);
+} elseif ($action === 'link') {
+	$result = $record->link($user);
+} else {
+	$result = $record->file($user);
+}
 $record->close();
 if ($result['ok'] && $action === 'create') {
 	// Shown on the record's card, which the browser opens next
