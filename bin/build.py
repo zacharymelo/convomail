@@ -93,6 +93,10 @@ def main():
         sys.exit(1)
 
     version = sys.argv[1]
+    # Dolibarr's module upload only accepts module_name-<digits and dots>.zip (admin/modules.php)
+    if not re.fullmatch(r'[0-9][0-9.]*', version):
+        print(f'ERROR: {version} is not installable: use digits and dots only (e.g. 0.12.90 for a dev build)')
+        sys.exit(1)
     print(f'\n=== Building v{version} ===\n')
 
     print('1. Updating version strings in source files...')

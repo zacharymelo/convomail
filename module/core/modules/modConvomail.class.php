@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '0.13.0-dev.1';
+		$this->version = '0.12.90';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -291,8 +291,8 @@ class modConvomail extends DolibarrModules
 			global $conf, $user;
 
 			// The "From this email" tools (0.13.0) start on for installs made before them; only once, since a
-			// switch turned off is a missing constant and must stay off ('0.13.0-dev' so 0.13.0-dev.N counts as having them)
-			if (version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), '0.13.0-dev', '<')) {
+			// switch turned off is a missing constant and must stay off (0.12.90 is the first version that has them, the 0.13 dev builds)
+			if (version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), '0.12.90', '<')) {
 				foreach ($this->const as $c) {
 					if (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 && !getDolGlobalString($c[0])) {
 						dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
