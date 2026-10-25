@@ -15,7 +15,9 @@
  * The only Convomail class that knows the invoice reading component (ConvomailInvoiceReader and its
  * classes): it turns the reader's hints into the panel's values, notes and badges. Off unless the
  * admin turns on CONVOMAIL_INVOICE_READ, and even then nothing is read until the user clicks
- * "Fill from the invoice". The supplier is never taken from the document, only checked against it.
+ * "Fill from the invoice". With CONVOMAIL_INVOICE_AI also on, a PDF without e-invoice data can be
+ * read by core's AI module, again only on a click ("Read with AI"). The supplier is never taken from
+ * the document, only checked against it.
  */
 
 /**
@@ -25,6 +27,9 @@ class ConvomailInvoiceFill
 {
 	/** Admin setting, off by default */
 	const SETTING = 'CONVOMAIL_INVOICE_READ';
+
+	/** Admin setting for reading the PDF text with core's AI module, off by default; needs SETTING */
+	const AI_SETTING = 'CONVOMAIL_INVOICE_AI';
 
 	/** Largest attachment read, in bytes (the PDF reader's own cap) */
 	const MAX_BYTES = 10485760;
@@ -66,47 +71,125 @@ class ConvomailInvoiceFill
 	}
 
 	/**
+	 * @return bool True when the admin also turned on reading with the AI, and core's AI module is on
+	 */
+	public static function aiEnabled()
+	{
+		return self::enabled() && getDolGlobalInt(self::AI_SETTING) > 0 && isModEnabled('ai');
+	}
+
+	/**
 	 * Read the files and fill the panel's values
 	 *
-	 * 'sources' maps each filled field (ref_supplier, date, date_due, lines) to the short name of where
-	 * it came from, for the badges. 'notes' are plain-text messages (escape them), 'level' warning or info.
+	 * $mode 'data' reads e-invoice data only; 'ai' does the same and, when there is none but a PDF has
+	 * text, has the AI read that text. 'sources' maps each filled field (ref_supplier, date, date_due,
+	 * lines) to the short name of where it came from, for the badges. 'notes' are plain-text messages
+	 * (escape them), 'level' warning or info. 'aioffer' is true when the AI could read what the data
+	 * reading could not.
 	 *
 	 * @param  array<int,array{name:string,content:string,mimetype?:string}> $files  Attachments
 	 * @param  array<string,mixed>                                            $values Panel values (ConvomailCreator::defaults())
-	 * @return array{values:array<string,mixed>,sources:array<string,string>,origin:string,notes:array<int,array{level:string,text:string}>}
+	 * @param  string                                                         $mode   'data' or 'ai'
+	 * @return array{values:array<string,mixed>,sources:array<string,string>,origin:string,notes:array<int,array{level:string,text:string}>,aioffer:bool}
 	 */
-	public function fill(array $files, array $values)
+	public function fill(array $files, array $values, $mode = 'data')
 	{
-		global $conf, $langs, $mysoc;
+		global $langs, $mysoc;
 
 		require_once __DIR__.'/convomailinvoicereader.class.php';
 		$langs->load('convomail@convomail');
 
-		$out = array('values' => $values, 'sources' => array(), 'origin' => '', 'notes' => array());
+		$out = array('values' => $values, 'sources' => array(), 'origin' => '', 'notes' => array(), 'aioffer' => false);
+		$ai = self::aiEnabled();
 		$reader = new ConvomailInvoiceReader($this->db);
-		$read = $reader->read($files, (string) $mysoc->country_code, 0);
+		// The PDF text is only needed when the AI may read it
+		$read = $reader->read($files, (string) $mysoc->country_code, $ai ? 3 : 0);
+
+		if ($read['hints'] !== null) {
+			$embedded = array('factur-x.xml' => 'Factur-X', 'zugferd-invoice.xml' => 'ZUGFeRD', 'xrechnung.xml' => 'XRechnung');
+			$short = $read['source'] === 'facturx' ? ($embedded[$read['embedded']] ?? 'Factur-X') : $langs->transnoentitiesnoconv('ConvomailReadEInvoice');
+			return $this->apply($out, $read['hints'], $short, $langs->transnoentitiesnoconv('ConvomailReadOrigin', $short, $read['filename']), $read['problems']);
+		}
+		$problems = $read['problems'];
+		if ($ai && $read['source'] === 'pdftext') {
+			if ($mode !== 'ai') {
+				$out['aioffer'] = true;
+				$out['notes'][] = array('level' => 'info', 'text' => $langs->transnoentitiesnoconv('ConvomailReadNothingTryAi', $read['filename']));
+				return $out;
+			}
+			$airead = $this->cachedAiRead($reader, $read['text']);
+			if ($airead['ok']) {
+				$short = $langs->transnoentitiesnoconv('ConvomailReadAi');
+				$out['notes'][] = array('level' => 'warning', 'text' => $langs->transnoentitiesnoconv('ConvomailReadAiCheck'));
+				return $this->apply($out, $airead['hints'], $short, $langs->transnoentitiesnoconv('ConvomailReadAiOrigin', $read['filename']), $airead['problems']);
+			}
+			foreach ($airead['problems'] as $problem) {
+				$out['notes'][] = array('level' => 'warning', 'text' => self::problemText($problem));
+			}
+			$out['notes'][] = array('level' => 'info', 'text' => $langs->transnoentitiesnoconv('ConvomailReadAiFailed'));
+			return $out;
+		}
+		foreach ($problems as $problem) {
+			$out['notes'][] = array('level' => 'warning', 'text' => self::problemText($problem));
+		}
+		$out['notes'][] = array('level' => 'info', 'text' => $langs->transnoentitiesnoconv('ConvomailReadNothing'));
+		return $out;
+	}
+
+	/**
+	 * The AI reading of a text, kept a week so that reopening the panel does not pay for a second request
+	 *
+	 * Only successful readings are kept (the checked values, never the text), under a hash of the text.
+	 *
+	 * @param  ConvomailInvoiceReader $reader Reader
+	 * @param  string                 $text   PDF text
+	 * @return array{ok:bool,hints:?array,problems:array,masked:bool}
+	 */
+	private function cachedAiRead($reader, $text)
+	{
+		global $conf, $mysoc;
+
+		$dir = $conf->convomail->dir_temp.'/aiinvoice';
+		$file = $dir.'/'.hash('sha256', $conf->entity.'|'.$mysoc->country_code.'|'.$text).'.json';
+		if (is_readable($file) && filemtime($file) > dol_now() - 7 * 86400) {
+			$cached = json_decode((string) file_get_contents($file), true);
+			if (is_array($cached) && !empty($cached['ok']) && is_array($cached['hints'])) {
+				return $cached;
+			}
+		}
+		$result = $reader->readWithAi($text, (string) $mysoc->country_code);
+		if ($result['ok']) {
+			dol_mkdir($dir);
+			@file_put_contents($file, json_encode($result));
+			dolChmod($file);
+		}
+		return $result;
+	}
+
+	/**
+	 * Put hints into the panel's values: number, dates, one line per VAT rate; supplier only checked
+	 *
+	 * @param  array<string,mixed> $out      Result being built
+	 * @param  array<string,mixed> $h        Hints (ConvomailEInvoice::parse() shape)
+	 * @param  string              $short    Source shown on the badges
+	 * @param  string              $origin   Source in a sentence
+	 * @param  array               $problems Reader problems
+	 * @return array<string,mixed>
+	 */
+	private function apply(array $out, array $h, $short, $origin, array $problems)
+	{
+		global $conf, $langs;
+
 		$note = function ($level, $text) use (&$out) {
 			$out['notes'][] = array('level' => $level, 'text' => $text);
 		};
-		if ($read['hints'] === null) {
-			foreach ($read['problems'] as $problem) {
-				$note('warning', ConvomailInvoiceReader::problemText($problem, $langs));
-			}
-			$note('info', $langs->transnoentitiesnoconv('ConvomailReadNothing'));
-			return $out;
-		}
-
-		$h = $read['hints'];
-		$embedded = array('factur-x.xml' => 'Factur-X', 'zugferd-invoice.xml' => 'ZUGFeRD', 'xrechnung.xml' => 'XRechnung');
-		$short = $read['source'] === 'facturx' ? ($embedded[$read['embedded']] ?? 'Factur-X') : $langs->transnoentitiesnoconv('ConvomailReadEInvoice');
-		$out['origin'] = $langs->transnoentitiesnoconv('ConvomailReadOrigin', $short, $read['filename']);
-
+		$out['origin'] = $origin;
 		if ($h['type'] === 'creditnote') {
 			$note('warning', $langs->transnoentitiesnoconv('ConvomailReadCreditNote', $h['number']));
 			return $out;
 		}
 
-		$v = $values;
+		$v = $out['values'];
 		if ($h['number'] !== '') {
 			$v['ref_supplier'] = dol_trunc($h['number'], 180, 'right', 'UTF-8', 1);
 			$out['sources']['ref_supplier'] = $short;
@@ -145,8 +228,8 @@ class ConvomailInvoiceFill
 		}
 
 		$this->checkSupplier($v, $h, $note);
-		foreach ($read['problems'] as $problem) {
-			$note('warning', ConvomailInvoiceReader::problemText($problem, $langs));
+		foreach ($problems as $problem) {
+			$note('warning', self::problemText($problem));
 		}
 		$out['values'] = $v;
 		return $out;
@@ -183,8 +266,33 @@ class ConvomailInvoiceFill
 		if ($known === '') {
 			$note('info', $langs->transnoentitiesnoconv('ConvomailReadVatNoneRecorded', (string) $obj->nom, $h['seller_vat']));
 		} elseif ($known !== $h['seller_vat']) {
-			$note('warning', $langs->transnoentitiesnoconv('ConvomailReadVatDiffers', $h['seller_vat'], $seller, (string) $obj->nom, $known));
+			if ($h['seller_name'] !== '') {
+				$note('warning', $langs->transnoentitiesnoconv('ConvomailReadVatDiffers', $h['seller_vat'], $h['seller_name'], (string) $obj->nom, $known));
+			} else {
+				$note('warning', $langs->transnoentitiesnoconv('ConvomailReadVatDiffersNoName', $h['seller_vat'], (string) $obj->nom, $known));
+			}
 		}
+	}
+
+	/**
+	 * A reader problem in the user's words: field codes become the panel's labels
+	 *
+	 * @param  array{code:string,args:array} $problem Problem
+	 * @return string
+	 */
+	private static function problemText(array $problem)
+	{
+		global $langs;
+
+		$labels = array('number' => 'ConvomailSupplierNumber', 'date' => 'DateInvoice', 'duedate' => 'ConvomailDueDate', 'currency' => 'Currency',
+			'seller_name' => 'Supplier', 'seller_vat' => 'VATIntra', 'total_ht' => 'AmountHT', 'total_vat' => 'AmountVAT', 'total_ttc' => 'AmountTTC',
+			'vatlines' => 'VAT', 'type' => 'Type');
+		foreach ((array) ($problem['args'] ?? array()) as $i => $arg) {
+			if (is_string($arg) && isset($labels[$arg])) {
+				$problem['args'][$i] = $langs->transnoentitiesnoconv($labels[$arg]);
+			}
+		}
+		return ConvomailInvoiceReader::problemText($problem, $langs);
 	}
 
 	/**

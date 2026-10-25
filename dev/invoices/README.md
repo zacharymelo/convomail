@@ -34,3 +34,19 @@ python3 dev/invoices/seed_mail.py
 
 `suppliers.php` creates **Fournitures Dupont SARL** (`factures@dupont.test`, the fixtures' VAT number) and **Medisupply BV** (`billing@medisupply.test`, a different VAT number from its UBL invoice). `seed_mail.py` sends five emails to `sales@convomail.test`: a Factur-X PDF from Dupont (everything filled, VAT matches), a UBL XML from Medisupply (filled, VAT warning), a Factur-X PDF from an unknown sender (filled, supplier left to pick, seller named), a plain PDF (nothing found), a CII credit note (refused). Turn on *Fill from the invoice* in Convomail setup, then Create › Supplier › Invoice on each.
 
+## Read with AI without a provider
+
+`mock_ai.php` is an OpenAI-style endpoint that keeps the last request in `/tmp/cm-ai-mock/last.json` and answers according to `/tmp/cm-ai-mock/mode` (`good`, `fenced`, `hostile`, `prose`, `error`, `http500`, `tokens`). `ai_setup.php` enables core's AI module and points it at the mock (service *custom*, `http://127.0.0.1:8099/v1/`). Dev stack only:
+
+```bash
+docker exec -u www-data convomail-dolibarr-1 php /tmp/cm-invoices/ai_setup.php
+```
+
+```bash
+docker exec -d -u www-data convomail-dolibarr-1 php -S 127.0.0.1:8099 /tmp/cm-invoices/mock_ai.php
+```
+
+On Dolibarr 25 and later, core refuses local AI endpoints unless `conf.php` has `$dolibarr_ai_allow_local_endpoints = 2;` (dev stacks only).
+
+Then turn on both *Fill from the invoice* and *Read with AI* in Convomail setup and open the scan email's supplier invoice panel. Readings are cached in `<documents>/convomail/temp/aiinvoice/`: delete them to call the mock again.
+

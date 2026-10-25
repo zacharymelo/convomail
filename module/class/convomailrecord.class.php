@@ -339,14 +339,16 @@ class ConvomailRecord
 		if (array_key_exists('ref_supplier', $v) && GETPOST('carry_ref', 'alphanohtml') !== '') {
 			$v['ref_supplier'] = dol_trunc(trim(GETPOST('carry_ref', 'alphanohtml')), 180, 'right', 'UTF-8', 1);
 		}
-		// Fill from the invoice: only when the admin turned it on and the user clicked the button (readinvoice=1)
+		// Fill from the invoice: only when the admin turned it on and the user clicked the button (readinvoice=1,
+		// or 2 for Read with AI when the admin turned that on too)
 		$readable = false;
 		$read = null;
 		if ($type === 'invoice_supplier' && getDolGlobalInt('CONVOMAIL_INVOICE_READ')) {
 			dol_include_once('/convomail/class/convomailinvoicefill.class.php');
 			$readable = !empty($this->invoiceAttachments());
-			if ($readable && GETPOSTINT('readinvoice')) {
-				$read = (new ConvomailInvoiceFill($this->db))->fill($this->invoiceFiles(), $v);
+			$readmode = GETPOSTINT('readinvoice');
+			if ($readable && $readmode > 0) {
+				$read = (new ConvomailInvoiceFill($this->db))->fill($this->invoiceFiles(), $v, ($readmode === 2 && ConvomailInvoiceFill::aiEnabled()) ? 'ai' : 'data');
 				$v = $read['values'];
 			}
 		}
@@ -419,6 +421,10 @@ class ConvomailRecord
 			}
 			foreach ($read['notes'] as $note) {
 				$h .= '<div class="'.($note['level'] === 'warning' ? 'warning' : 'info').'">'.dol_escape_htmltag($note['text']).'</div>';
+			}
+			if (!empty($read['aioffer'])) {
+				$h .= '<div class="cm-rp-readai"><button type="button" class="button smallpaddingimp" data-cm-invoice-read="2">'.img_picto('', 'ai', 'class="pictofixedwidth"').$langs->trans('ConvomailReadAiButton').'</button>';
+				$h .= ' <span class="classfortooltip" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadAiButtonHelp')).'">'.img_help(0, '').'</span></div>';
 			}
 			$h .= '</div>';
 		}

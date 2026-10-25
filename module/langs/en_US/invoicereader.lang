@@ -1,8 +1,10 @@
 # Copyright (C) 2026 DPG Supply
 
 # Invoice reading component (class/convomaileinvoice, convomailpdfembedded, convomailinvoiceai, convomailinvoicereader)
-# Problems found while reading an invoice. Arguments are field names or line numbers, never text from the document.
+# Problems found while reading an invoice. Arguments are field names, line numbers or an AI service's error message, never text from the document.
 InvoiceReaderAiError = The AI service returned an error.
+InvoiceReaderAiOff = The AI module is not enabled.
+InvoiceReaderAiErrorDetail = The AI service returned an error: %s
 InvoiceReaderAiTooLong = The AI answer is too long.
 InvoiceReaderAiNotJson = The AI answer could not be read.
 InvoiceReaderFieldIgnored = An unexpected field (%s) was ignored.

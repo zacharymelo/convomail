@@ -163,6 +163,18 @@ check('prompt lists every key', count(array_filter(ConvomailInvoiceAi::KEYS, fun
 check('prompt markers differ per call', ConvomailInvoiceAi::prompt('x') !== ConvomailInvoiceAi::prompt('x'));
 check('prompt caps the text', strlen(ConvomailInvoiceAi::prompt(str_repeat('a', 50000))) < 25000);
 
+print "== ConvomailInvoiceAi::scrub\n";
+$plain = ConvomailPdfEmbedded::text(fixture('plain.pdf'));
+$scrubbed = ConvomailInvoiceAi::scrub($plain);
+check('IBAN with spaces removed', strpos($scrubbed, '[IBAN]') !== false && strpos($scrubbed, '7890 189') === false && strpos($scrubbed, 'FR76') === false, $scrubbed);
+check('VAT number, invoice number, amounts and rates kept', strpos($scrubbed, 'FR12345678901') !== false && strpos($scrubbed, 'FA-2026-0042') !== false
+	&& strpos($scrubbed, '331,00') !== false && strpos($scrubbed, '5,5 %') !== false, $scrubbed);
+$sample = "Contact: billing@dupont.test, Tél. : +33 4 72 00 00 00\nBIC: AGRIFRPP882 - IBAN DE89370400440532013000\nAccount number 12345678, sort code 20-00-00\nNL VAT NL123456789B01 Total 1 234,56 EUR";
+$out = ConvomailInvoiceAi::scrub($sample);
+check('email, labelled phone, BIC, compact IBAN and account numbers removed', strpos($out, '@') === false && strpos($out, '72 00') === false
+	&& strpos($out, 'AGRIFRPP') === false && strpos($out, 'DE89') === false && substr_count($out, '[ACCOUNT]') === 2 && strpos($out, '20-00-00') === false, $out);
+check('14-character VAT number and amounts kept', strpos($out, 'NL123456789B01') !== false && strpos($out, '1 234,56') !== false, $out);
+
 print "== ConvomailInvoiceAi::validate (country FR)\n";
 $ai = new ConvomailInvoiceAi($db);
 $good = array(
@@ -282,6 +294,14 @@ check('surviving PrivacyGuard placeholders are problems, not values', $r['ok'] &
 	&& count(array_filter($r['problems'], function ($p) {
 		return in_array($p['code'], array('InvoiceReaderFieldPlaceholder', 'InvoiceReaderLinePlaceholder'), true);
 	})) === 5, $r);
+$masked25 = $good;
+$masked25['number'] = '[[REF_135ba]]';
+$masked25['seller_vat'] = 'TAXID_2c0de';
+$masked25['seller_name'] = '[[NAME_3f00d]] SARL';
+$r = $ai->validate(json_encode($masked25), 'FR');
+check('Dolibarr 25 placeholders (salted, NAME) are problems too', $r['values']['number'] === '' && $r['values']['seller_vat'] === '' && $r['values']['seller_name'] === ''
+	&& hasProblem($r['problems'], 'InvoiceReaderFieldPlaceholder', 'number') && hasProblem($r['problems'], 'InvoiceReaderFieldPlaceholder', 'seller_vat')
+	&& hasProblem($r['problems'], 'InvoiceReaderFieldPlaceholder', 'seller_name'), $r);
 $legit = $good;
 $legit['number'] = 'INV_2026-REF7';
 $r = $ai->validate(json_encode($legit), 'FR');

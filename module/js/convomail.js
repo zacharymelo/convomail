@@ -390,12 +390,12 @@
 			openRecordPanel(form.closest('.cm-view'), kind.getAttribute('data-cm-kind'), carry);
 			return;
 		}
-		// Fill from the invoice: the same panel again, read on the server; keeps the supplier and number typed so far
+		// Fill from the invoice (1) or Read with AI (2): the same panel again, read on the server; keeps the supplier and number typed so far
 		var read = ev.target.closest('[data-cm-invoice-read]');
 		if (read) {
 			ev.preventDefault();
 			var rform = read.closest('form.cm-rp');
-			var rcarry = '&readinvoice=1&carry_socid=' + encodeURIComponent(rform.elements.socid ? rform.elements.socid.value : '')
+			var rcarry = '&readinvoice=' + (read.getAttribute('data-cm-invoice-read') === '2' ? '2' : '1') + '&carry_socid=' + encodeURIComponent(rform.elements.socid ? rform.elements.socid.value : '')
 				+ '&carry_ref=' + encodeURIComponent(rform.elements.ref_supplier ? rform.elements.ref_supplier.value : '');
 			openRecordPanel(rform.closest('.cm-view'), rform.getAttribute('data-type'), rcarry);
 			return;

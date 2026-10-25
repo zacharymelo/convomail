@@ -40,8 +40,11 @@ class ConvomailInvoiceAi
 	/** Largest absolute amount accepted */
 	const MAX_AMOUNT = 100000000000;
 
-	/** A PrivacyGuard placeholder ([[REF_1]], or REF_1 once the AI stripped the brackets) left after unmasking */
-	const MASK_TOKEN = '/\[\[\s*[A-Z]+_\d+\s*\]\]|\b(?:REF|IBAN|SWIFT|BANKACCT|CC|EMAIL|VAT|TAXID|PHONE|ADDR|ZIP)_\d+\b/';
+	/**
+	 * A PrivacyGuard placeholder left after unmasking: [[REF_1]] (24.0), [[REF_1a2b3]] (25, a salt after the
+	 * number), or the same without brackets when the AI stripped them
+	 */
+	const MASK_TOKEN = '/\[\[\s*[A-Z]+_\d[0-9a-f]*\s*\]\]|\b(?:REF|IBAN|SWIFT|BANKACCT|CC|EMAIL|VAT|TAXID|PHONE|ADDR|ZIP|NAME)_\d[0-9a-f]*\b/';
 
 	/** Keys of the answer, in the order asked */
 	const KEYS = array('type', 'number', 'date', 'duedate', 'currency', 'seller_name', 'seller_vat', 'total_ht', 'total_vat', 'total_ttc', 'vatlines');
@@ -102,6 +105,30 @@ class ConvomailInvoiceAi
 		$prompt .= "When a value is not in the text, use \"\" for text and null for numbers; never guess. Do not return bank details.\n";
 		$prompt .= "<<<".$marker."\n".$text."\n".$marker.">>>\n";
 		return $prompt;
+	}
+
+	/**
+	 * Remove from an invoice text what reading it never needs, before it is sent to an AI service
+	 *
+	 * Bank details (IBAN, BIC, account numbers after their label), email addresses and phone numbers
+	 * after their label become placeholders. Amounts, rates, dates, the invoice number and VAT numbers
+	 * stay: they are what the AI is asked to read. An IBAN is told from a VAT number by its length
+	 * (15 characters and more; VAT numbers have at most 14).
+	 *
+	 * @param  string $text Plain text
+	 * @return string
+	 */
+	public static function scrub($text)
+	{
+		$text = (string) $text;
+		$text = (string) preg_replace_callback('/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,40}\b/', function ($m) {
+			return strlen(str_replace(' ', '', $m[0])) >= 15 ? '[IBAN]' : $m[0];
+		}, $text);
+		$text = (string) preg_replace('/\b(BIC|SWIFT)(\b[^\n\w]{0,5})[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/iu', '$1$2[BIC]', $text);
+		$text = (string) preg_replace('/\b(account|acct|a\/c|compte|konto|kontonummer|rib|sort\s*code|routing|aba|cuenta|conto)\b([^\n\d]{0,25})\d[\d \-\/.]{4,40}\d/iu', '$1$2[ACCOUNT]', $text);
+		$text = (string) preg_replace('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/iu', '[EMAIL]', $text);
+		$text = (string) preg_replace('/\b(tel|tél|phone|telephone|téléphone|telefon|fax|mobile|portable|gsm)\b([.:\s]{0,4})\+?[\d(][\d .\-()\/]{5,24}\d/iu', '$1$2[PHONE]', $text);
+		return $text;
 	}
 
 	/**

@@ -9,6 +9,8 @@ docker exec "$C" mkdir -p /tmp/cm-invoices
 docker cp generate.php "$C":/tmp/cm-invoices/generate.php
 docker cp test.php "$C":/tmp/cm-invoices/test.php
 docker cp suppliers.php "$C":/tmp/cm-invoices/suppliers.php
+docker cp mock_ai.php "$C":/tmp/cm-invoices/mock_ai.php
+docker cp ai_setup.php "$C":/tmp/cm-invoices/ai_setup.php
 docker exec "$C" chown -R www-data /tmp/cm-invoices
 docker exec -u www-data "$C" php /tmp/cm-invoices/generate.php /tmp/cm-invoices/out
 rm -rf out

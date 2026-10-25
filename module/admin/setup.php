@@ -184,6 +184,9 @@ $supplierlabel = ConvomailCreator::types()['invoice_supplier']['label'];
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailCreateMenu').' &rsaquo; '.$langs->trans(ConvomailCreator::groups()['supplier']).' &rsaquo; '.$langs->trans($supplierlabel).' &rsaquo; '.$langs->trans('ConvomailInvoiceReadSetting').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_INVOICE_READ').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailInvoiceReadSettingDesc').'</td></tr>';
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailCreateMenu').' &rsaquo; '.$langs->trans(ConvomailCreator::groups()['supplier']).' &rsaquo; '.$langs->trans($supplierlabel).' &rsaquo; '.$langs->trans('ConvomailInvoiceAiSetting').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_INVOICE_AI').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailInvoiceAiSettingDesc').(!isModEnabled('ai') ? ' '.$langs->trans('ConvomailInvoiceAiNeedsModule') : '').'</td></tr>';
 
 // Debug mode (always last)
 print '<tr class="oddeven"><td>'.$langs->trans('DebugMode').'</td>';
