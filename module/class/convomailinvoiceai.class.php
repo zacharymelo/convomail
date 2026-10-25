@@ -15,10 +15,13 @@
  * The invoice text comes from an email and may carry prompt-injection instructions, so the AI
  * answer is treated as hostile: anything that is not a JSON object fails, only whitelisted keys
  * are kept, each one typed and bounded, and the amounts are checked against the VAT dictionary.
- * Problems are fixed messages that never echo the answer. This class does not call the AI.
+ * Problems are translation codes (langs/en_US/invoicereader.lang) whose arguments never echo the
+ * answer: field names and line numbers only. This class does not call the AI.
+ *
+ * Part of the invoice reading component (see docs/ARCHITECTURE.md): no Convomail dependency.
  */
 
-dol_include_once('/convomail/class/convomaileinvoice.class.php');
+require_once __DIR__.'/convomaileinvoice.class.php';
 
 /**
  * Class ConvomailInvoiceAi
@@ -112,7 +115,7 @@ class ConvomailInvoiceAi
 	 *
 	 * @param  string|array $raw         Answer of Ai::generateContent
 	 * @param  string       $countrycode ISO country code (or llx_c_country rowid) whose VAT rates apply
-	 * @return array{ok:bool,values:array,problems:string[]}
+	 * @return array{ok:bool,values:array,problems:array<int,array{code:string,args:array}>}
 	 */
 	public function validate($raw, $countrycode)
 	{
@@ -134,40 +137,40 @@ class ConvomailInvoiceAi
 		};
 
 		if (!is_string($raw)) {
-			return $fail('The AI service returned an error.');
+			return $fail(self::problem('InvoiceReaderAiError'));
 		}
 		$raw = trim($raw);
 		if (strlen($raw) > self::MAX_ANSWER) {
-			return $fail('The AI answer is too long.');
+			return $fail(self::problem('InvoiceReaderAiTooLong'));
 		}
 		if (preg_match('/^```[a-zA-Z]*\s*(.*?)\s*```$/s', $raw, $m)) {
 			$raw = trim($m[1]);
 		}
 		if ($raw === '' || $raw[0] !== '{' || substr($raw, -1) !== '}') {
-			return $fail('The AI answer is not JSON.');
+			return $fail(self::problem('InvoiceReaderAiNotJson'));
 		}
 		$data = json_decode($raw, true, 4, JSON_BIGINT_AS_STRING);
 		if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
-			return $fail('The AI answer is not JSON.');
+			return $fail(self::problem('InvoiceReaderAiNotJson'));
 		}
 
 		$problems = array();
 		foreach (array_keys($data) as $key) {
 			if (!in_array($key, self::KEYS, true)) {
-				$problems[] = 'Unexpected field ignored'.(preg_match('/^[a-z0-9_]{1,32}$/', (string) $key) ? ': '.$key : '').'.';
+				$problems[] = preg_match('/^[a-z0-9_]{1,32}$/', (string) $key) ? self::problem('InvoiceReaderFieldIgnored', (string) $key) : self::problem('InvoiceReaderUnnamedFieldIgnored');
 			}
 		}
 
 		foreach (self::KEYS as $key) {
 			if (isset($data[$key]) && is_string($data[$key]) && preg_match(self::MASK_TOKEN, $data[$key])) {
-				$problems[] = 'Field '.$key.' rejected: it holds a privacy placeholder, not a value.';
+				$problems[] = self::problem('InvoiceReaderFieldPlaceholder', $key);
 				unset($data[$key]);
 			}
 		}
 		if (isset($data['vatlines']) && is_array($data['vatlines'])) {
 			foreach ($data['vatlines'] as $i => $line) {
 				if (is_array($line) && preg_grep(self::MASK_TOKEN, array_filter($line, 'is_string'))) {
-					$problems[] = 'VAT line '.((int) $i + 1).' rejected: it holds a privacy placeholder, not a value.';
+					$problems[] = self::problem('InvoiceReaderLinePlaceholder', (int) $i + 1);
 					unset($data['vatlines'][$i]);
 				}
 			}
@@ -178,7 +181,7 @@ class ConvomailInvoiceAi
 			return array_key_exists($key, $data) ? $data[$key] : null;
 		};
 		$reject = function ($key) use (&$problems) {
-			$problems[] = 'Field '.$key.' rejected: not a valid value.';
+			$problems[] = self::problem('InvoiceReaderFieldRejected', $key);
 		};
 
 		$v = $get('type');
@@ -211,13 +214,13 @@ class ConvomailInvoiceAi
 			if ($date === '') {
 				$reject($key);
 			} elseif (!self::dateInRange($date)) {
-				$problems[] = 'Field '.$key.' rejected: more than 2 years away from today.';
+				$problems[] = self::problem('InvoiceReaderDateOutOfRange', $key);
 			} else {
 				$values[$key] = $date;
 			}
 		}
 		if ($values['date'] !== '' && $values['duedate'] !== '' && $values['duedate'] < $values['date']) {
-			$problems[] = 'The due date is before the invoice date.';
+			$problems[] = self::problem('InvoiceReaderDueBeforeDate');
 		}
 
 		$v = $get('currency');
@@ -270,23 +273,23 @@ class ConvomailInvoiceAi
 				$reject('vatlines');
 			} else {
 				if (count($v) > self::MAX_LINES) {
-					$problems[] = 'Only the first '.self::MAX_LINES.' VAT lines were kept.';
+					$problems[] = self::problem('InvoiceReaderTooManyLines', self::MAX_LINES);
 					$v = array_slice($v, 0, self::MAX_LINES);
 				}
 				foreach ($v as $i => $line) {
 					$n = $i + 1;
 					if (!is_array($line)) {
-						$problems[] = 'VAT line '.$n.' rejected: not an object.';
+						$problems[] = self::problem('InvoiceReaderLineRejected', $n);
 						continue;
 					}
 					if (array_diff(array_keys($line), array('rate', 'net', 'vat'))) {
-						$problems[] = 'VAT line '.$n.': unexpected fields ignored.';
+						$problems[] = self::problem('InvoiceReaderLineFieldsIgnored', $n);
 					}
 					$rate = array_key_exists('rate', $line) ? self::number($line['rate']) : null;
 					$net = array_key_exists('net', $line) ? self::number($line['net']) : null;
 					$vat = array_key_exists('vat', $line) ? self::number($line['vat']) : null;
 					if ($rate === null || $rate < 0 || $rate > 100 || $net === null || $vat === null) {
-						$problems[] = 'VAT line '.$n.' rejected: rate, net and vat must be numbers.';
+						$problems[] = self::problem('InvoiceReaderLineRejected', $n);
 						continue;
 					}
 					$values['vatlines'][] = array('rate' => $rate, 'net' => $net, 'vat' => $vat);
@@ -304,7 +307,7 @@ class ConvomailInvoiceAi
 	 * Works on validate() values and on ConvomailEInvoice::parse() hints alike.
 	 *
 	 * @param  array    $values Values with total_ht, total_vat, total_ttc and vatlines
-	 * @return string[]         Problems
+	 * @return array<int,array{code:string,args:array}> Problems
 	 */
 	public static function checkAmounts(array $values)
 	{
@@ -321,7 +324,7 @@ class ConvomailInvoiceAi
 			$sumnet += $line['net'];
 			$sumvat += $line['vat'];
 			if (!self::near($line['net'] * $line['rate'] / 100, $line['vat'], max(0.05, abs($line['net']) * 0.001))) {
-				$problems[] = 'VAT line '.($i + 1).': the VAT amount does not match net × rate.';
+				$problems[] = self::problem('InvoiceReaderLineVatMismatch', $i + 1);
 			}
 		}
 		$tolerance = 0.05 + 0.01 * count($lines);
@@ -329,18 +332,18 @@ class ConvomailInvoiceAi
 		$tva = isset($values['total_vat']) ? $values['total_vat'] : null;
 		$ttc = isset($values['total_ttc']) ? $values['total_ttc'] : null;
 		if ($complete && $ht !== null && !self::near($sumnet, $ht, $tolerance)) {
-			$problems[] = 'The VAT lines do not add up to the total without VAT.';
+			$problems[] = self::problem('InvoiceReaderLinesNetMismatch');
 		}
 		if ($complete && $tva !== null && !self::near($sumvat, $tva, $tolerance)) {
-			$problems[] = 'The VAT lines do not add up to the total VAT.';
+			$problems[] = self::problem('InvoiceReaderLinesVatMismatch');
 		}
 		if ($ttc !== null) {
 			if ($ht !== null && $tva !== null) {
 				if (!self::near($ht + $tva, $ttc, $tolerance)) {
-					$problems[] = 'Total without VAT plus VAT does not equal the total.';
+					$problems[] = self::problem('InvoiceReaderTotalMismatch');
 				}
 			} elseif ($complete && !self::near($sumnet + $sumvat, $ttc, $tolerance)) {
-				$problems[] = 'The VAT lines do not add up to the total.';
+				$problems[] = self::problem('InvoiceReaderLinesTotalMismatch');
 			}
 		}
 		return $problems;
@@ -351,7 +354,7 @@ class ConvomailInvoiceAi
 	 *
 	 * @param  array      $vatlines    Lines with a 'rate'
 	 * @param  string|int $countrycode ISO country code or llx_c_country rowid
-	 * @return string[]                Problems
+	 * @return array<int,array{code:string,args:array}> Problems
 	 */
 	public function checkRates(array $vatlines, $countrycode)
 	{
@@ -376,7 +379,7 @@ class ConvomailInvoiceAi
 			$this->db->free($resql);
 		}
 		if (empty($rates)) {
-			$problems[] = 'No VAT rates are known for the company country; rates were not checked.';
+			$problems[] = self::problem('InvoiceReaderNoRates');
 			return $problems;
 		}
 		foreach ($vatlines as $i => $line) {
@@ -391,7 +394,7 @@ class ConvomailInvoiceAi
 				}
 			}
 			if (!$known) {
-				$problems[] = 'VAT line '.($i + 1).': the rate is not in the VAT dictionary of the country.';
+				$problems[] = self::problem('InvoiceReaderRateUnknown', $i + 1);
 			}
 		}
 		return $problems;
@@ -428,6 +431,16 @@ class ConvomailInvoiceAi
 			return null;
 		}
 		return (is_finite($number) && abs($number) <= self::MAX_AMOUNT) ? round($number, 6) : null;
+	}
+
+	/**
+	 * @param  string     $code    Translation code
+	 * @param  string|int ...$args Field names or line numbers, never values read from a document
+	 * @return array{code:string,args:array}
+	 */
+	public static function problem($code, ...$args)
+	{
+		return array('code' => $code, 'args' => $args);
 	}
 
 	/**

@@ -19,3 +19,18 @@ dev/invoices/run.sh
 | `facturx-badxml.pdf` | Embedded `factur-x.xml` carrying an XXE: refused, falls back to the PDF text |
 | `encrypted.pdf`, `truncated.pdf`, `not-a-pdf.pdf` | Unreadable PDFs end in "nothing found" |
 | `plain.pdf`, `injection.pdf` | Text extraction; prompt-injection text only ever reaches the AI as delimited data |
+
+## The panel by hand
+
+With the dev stack up and `run.sh` run once:
+
+```bash
+docker exec -u www-data convomail-dolibarr-1 php /tmp/cm-invoices/suppliers.php
+```
+
+```bash
+python3 dev/invoices/seed_mail.py
+```
+
+`suppliers.php` creates **Fournitures Dupont SARL** (`factures@dupont.test`, the fixtures' VAT number) and **Medisupply BV** (`billing@medisupply.test`, a different VAT number from its UBL invoice). `seed_mail.py` sends five emails to `sales@convomail.test`: a Factur-X PDF from Dupont (everything filled, VAT matches), a UBL XML from Medisupply (filled, VAT warning), a Factur-X PDF from an unknown sender (filled, supplier left to pick, seller named), a plain PDF (nothing found), a CII credit note (refused). Turn on *Fill from the invoice* in Convomail setup, then Create › Supplier › Invoice on each.
+

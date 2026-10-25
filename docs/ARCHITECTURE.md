@@ -201,6 +201,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailLogger` | Write agenda events + link rows | `logSent()`, `logReceived()`, `fetchReplyTarget()` |
 | `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `recordOpen()` (first open creates `AC_CONVOMAIL_OPENED`); `opens()` (count, first and last open of tracked messages by account + Message-ID: one query for a list page or a conversation; empty while tracking is off), `openText()`, `openIcon()` — shown on mailbox rows, the message and the conversation |
 | `ConvomailView` | Shared server-side views and filing | `render()` (reading pane / full page), `logMessage()` (filing used by all paths), `defaultLinks()`, `projectThreads()`, `projectBadge()`, `myEmails()`, `msgid()` |
+| `ConvomailInvoiceFill` | The only door to the invoice reading component (6.13) | `enabled()`, `isCandidate()`, `fill()` |
+| Invoice reading component: `ConvomailEInvoice`, `ConvomailPdfEmbedded`, `ConvomailInvoiceAi`, `ConvomailInvoiceReader` | Reads invoice data from attachments; depends on core only (6.13) | `parse()`, `find()` / `text()` / `extract()`, `prompt()` / `validate()` / `checkAmounts()` / `checkRates()`, `read()` / `problemText()` |
 | `ActionsConvomail` | Hooks | `getElementProperties`, `addMoreActionsButtons` (**Reply** on email events; third party, contact and project cards keep only core's **Send email**, see ROADMAP), `formObjectOptions` (receipt status on the event card) |
 
 ## 6. Flows
@@ -348,6 +350,13 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 - **Menu** — `ConvomailView::createMenu()`: the available kinds by group, the sender's side first (a known supplier that is not a customer: Supplier first). A panel's kind switch (`data-cm-kind`) reloads it as another kind of its group with `carry_socid` / `carry_ref` (checked again: role and visibility).
 - **Flow** — the reading pane's File button and menu items (`data-cm-record`) fetch the panel (`ajax/record.php` GET `action=panel`, token) into `.cm-recordpanel` under them, in the mailbox pane and the full-page view. Submitting POSTs it: create answers the card's URL (the browser goes there; the result is a flash message on the card), or errors / warnings shown in the panel (warnings turn the button into "anyway", which any change resets); file answers a message, then the message is shown again. The panel uses native inputs only (scripts in HTML put in the page by script don't run): pickers search `ajax/records.php`.
 
+### 6.13 Reading supplier invoices (off by default)
+- **A component of its own, kept apart so it can leave.** `ConvomailEInvoice` (CII / UBL XML: DOCTYPE refused, `LIBXML_NONET` only, 2 MB), `ConvomailPdfEmbedded` (smalot/pdfparser: the `Filespec` named `factur-x.xml`, `zugferd-invoice.xml` or `xrechnung.xml`, and PDF text; 10 MB, memory and time budget, decode limit, encrypted PDFs skipped), `ConvomailInvoiceAi` (prompt and answer check for a later AI step; does not call the AI) and `ConvomailInvoiceReader` (tries an XML attachment, then XML embedded in a PDF, else returns the PDF text), with `langs/en_US/invoicereader.lang`. They include each other with `__DIR__`, find `vendor/` and their lang file relative to their own folder, return hints and problem codes (`{code, args}`, args never text from the document), and use Dolibarr core only. Nothing in them knows Convomail, so they can move to their own module or to core unchanged but for the class prefix.
+- **One seam.** `ConvomailInvoiceFill` is the only Convomail class that loads the component: `enabled()`, `isCandidate()` (an XML or PDF attachment up to 10 MB), `fill()` (hints → the panel's values, the fields' sources for the badges, notes). `ConvomailRecord` includes it only when `CONVOMAIL_INVOICE_READ` is on, and calls `fill()` only for `readinvoice=1`.
+- **Flow.** Setting on: the supplier invoice panel shows **Fill from the invoice** when the email has a candidate attachment. The button reloads the panel (`action=panel&readinvoice=1`, with `carry_socid` and `carry_ref`), and the server reads the attachments (`ConvomailRecord::partData()`, fetched once per request and shared with the duplicate MD5s). Filled: supplier number, invoice date, due date, and one amount line per VAT rate (`nblines`, `amount_N`, `vat_N`; up to 10), each with a badge naming the source (Factur-X, ZUGFeRD, XRechnung, e-invoice). Setting off: the button is absent and `readinvoice=1` is ignored; the panel is as before.
+- **Rules.** The supplier is never taken from the document: the one pre-selected from the sender stays, with a warning when its `tva_intra` differs from the invoice's VAT number (an info note when it has none); with no supplier, a note names the seller. A credit note (type code 381/396 or UBL `CreditNote`) fills nothing. Amounts are filled only in the company currency. VAT rates are checked against the seller's country when the e-invoice gives it (else the company's), amounts for net × rate ≈ VAT and lines ≈ totals; failed checks are warnings. Bank details are never read.
+- **Tests.** `dev/invoices/` (CLI checks of the component, fixtures made with core TCPDF, hostile files; seed emails and suppliers for the panel).
+
 ## 7. Pages and endpoints
 
 | Path | Method | Parameters | Access | Output |
@@ -405,6 +414,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
   | `CONVOMAIL_OPEN_TRACKING` | 0 | Open tracking available |
   | `CONVOMAIL_OAUTH_GOOGLE_APP`, `CONVOMAIL_OAUTH_MICROSOFT_APP` | empty | Core OAuth app used for each provider; empty = provider not offered |
+  | `CONVOMAIL_INVOICE_READ` | 0 (unset) | **Fill from the invoice** on the supplier invoice panel (6.13) |
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php`, and records an IMAP protocol trace per user in `<documents>/convomail/temp/imap-trace-<user id>.log` (`?mode=imaptrace`) |
 
 - **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. For OAuth accounts also `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL` and `OAUTH_<TYPE>-convomail<id>_ID/_SECRET/_TENANT/_SCOPE/_URLCALLBACK`. They are never written to `llx_const`.
@@ -432,6 +442,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 |---|---|---|
 | `bytestream/horde-imap-client` 2.34 (+ Horde Mime, Mail, Util…), LGPL-2.1 | `module/vendor` | IMAP, MIME structure, charset conversion |
 | `ezyang/htmlpurifier` 4.19, LGPL-2.1-or-later | `module/vendor` | Cleaning incoming HTML |
+| `smalot/pdfparser` 2.13.1 (+ symfony/polyfill-mbstring), LGPL-3.0 | `module/vendor` | Reading PDFs for invoice data (6.13), loaded only when an invoice is read |
 | Core `CMailFile` + bundled Swift Mailer | Dolibarr | Sending, Message-ID, inline images, read receipt header |
 | Core FCKeditor module (CKEditor 4) | Dolibarr | Rich-text compose |
 | Core Email Collector | Dolibarr (optional) | Uses the same trackid scheme; can file replies automatically on the server side |

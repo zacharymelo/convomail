@@ -65,6 +65,9 @@ class ConvomailRecord
 	/** @var ConvomailTargets */
 	public $targets;
 
+	/** @var array<string,?string> Attachment bytes by part id (partData()) */
+	private $partcache = array();
+
 	/**
 	 * @param DoliDB           $db      Database handler
 	 * @param ConvomailAccount $account Account the user may use
@@ -256,6 +259,24 @@ class ConvomailRecord
 	}
 
 	/**
+	 * Badge on a field filled from the invoice, naming where it came from
+	 *
+	 * @param  array<string,mixed>|null $read  ConvomailInvoiceFill::fill() result, null when not read
+	 * @param  string                   $field Field
+	 * @return string
+	 */
+	private static function readBadge($read, $field)
+	{
+		global $langs;
+
+		if (empty($read['sources'][$field])) {
+			return '';
+		}
+		$help = $langs->transnoentitiesnoconv('ConvomailReadBadgeHelp', $read['origin']);
+		return ' <span class="cm-readbadge classfortooltip" title="'.dol_escape_htmltag($help).'">'.img_picto('', 'fa-check', 'class="pictofixedwidth"').dol_escape_htmltag($read['sources'][$field]).'</span>';
+	}
+
+	/**
 	 * Footer: messages, the button, what is finished on the card
 	 *
 	 * @param  string   $button Button label key
@@ -315,6 +336,20 @@ class ConvomailRecord
 		if (array_key_exists('ref_client', $v) && GETPOST('carry_ref', 'alphanohtml') !== '') {
 			$v['ref_client'] = dol_trunc(trim(GETPOST('carry_ref', 'alphanohtml')), 255, 'right', 'UTF-8', 1);
 		}
+		if (array_key_exists('ref_supplier', $v) && GETPOST('carry_ref', 'alphanohtml') !== '') {
+			$v['ref_supplier'] = dol_trunc(trim(GETPOST('carry_ref', 'alphanohtml')), 180, 'right', 'UTF-8', 1);
+		}
+		// Fill from the invoice: only when the admin turned it on and the user clicked the button (readinvoice=1)
+		$readable = false;
+		$read = null;
+		if ($type === 'invoice_supplier' && getDolGlobalInt('CONVOMAIL_INVOICE_READ')) {
+			dol_include_once('/convomail/class/convomailinvoicefill.class.php');
+			$readable = !empty($this->invoiceAttachments());
+			if ($readable && GETPOSTINT('readinvoice')) {
+				$read = (new ConvomailInvoiceFill($this->db))->fill($this->invoiceFiles(), $v);
+				$v = $read['values'];
+			}
+		}
 		$dups = $this->creator->duplicates($type, $v, array('pdfhashes' => $type === 'invoice_supplier' ? $this->pdfHashes(array_map('strval', array_column($this->attachments, 'id'))) : array()));
 		$socname = '';
 		if ($v['socid'] > 0) {
@@ -328,18 +363,29 @@ class ConvomailRecord
 		$date = '<input type="date" name="date" value="'.dol_print_date($v['date'], '%Y-%m-%d', 'tzuserrel').'" class="maxwidth150">';
 		if ($type === 'invoice_supplier') {
 			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier'), true);
-			$h .= self::row($langs->trans('ConvomailSupplierNumber'), '<input type="text" name="ref_supplier" class="minwidth150" maxlength="180" value="'.dol_escape_htmltag($v['ref_supplier']).'">', true, $langs->transnoentitiesnoconv('ConvomailSupplierNumberHelp'));
-			$h .= self::row($langs->trans('DateInvoice'), $date, true);
+			if ($readable && $read === null) {
+				$button = '<button type="button" class="button smallpaddingimp" data-cm-invoice-read="1">'.img_picto('', 'fa-file-invoice', 'class="pictofixedwidth"').$langs->trans('ConvomailReadButton').'</button>';
+				$h .= self::row('', $button, false, $langs->transnoentitiesnoconv('ConvomailReadButtonHelp'));
+			}
+			$h .= self::row($langs->trans('ConvomailSupplierNumber').self::readBadge($read, 'ref_supplier'), '<input type="text" name="ref_supplier" class="minwidth150" maxlength="180" value="'.dol_escape_htmltag($v['ref_supplier']).'">', true, $langs->transnoentitiesnoconv('ConvomailSupplierNumberHelp'));
+			$h .= self::row($langs->trans('DateInvoice').self::readBadge($read, 'date'), $date, true);
+			if (!empty($v['date_due'])) {
+				$h .= self::row($langs->trans('ConvomailDueDate').self::readBadge($read, 'date_due'), '<input type="date" name="date_due" value="'.dol_print_date($v['date_due'], '%Y-%m-%d', 'tzuserrel').'" class="maxwidth150">');
+			}
 			$supplier = null;
 			if ($v['socid'] > 0) {
 				$supplier = new Societe($this->db);
 				$supplier->fetch($v['socid']);
 			}
 			$form = new Form($this->db);
-			$line = $v['lines'][0] ?? array('amount' => '', 'vat' => '');
-			$amount = '<input type="text" name="amount" class="width75 right" inputmode="decimal" value="'.dol_escape_htmltag($line['amount'] === '' ? '' : price((float) $line['amount'])).'">';
-			$amount .= ' &nbsp; '.$langs->trans('VAT').' '.$form->load_tva('vat', $line['vat'] === '' ? -1 : $line['vat'], $supplier ?: $mysoc, $mysoc);
-			$h .= self::row($langs->trans('AmountHT'), $amount, false, $langs->transnoentitiesnoconv('ConvomailAmountHelp'));
+			// One amount and VAT rate per line: one line by default, one per VAT rate when filled from the invoice
+			$lines = !empty($v['lines']) ? array_values($v['lines']) : array(array('amount' => '', 'vat' => ''));
+			$h .= '<input type="hidden" name="nblines" value="'.count($lines).'">';
+			foreach ($lines as $i => $line) {
+				$amount = '<input type="text" name="amount_'.$i.'" class="width75 right" inputmode="decimal" value="'.dol_escape_htmltag($line['amount'] === '' ? '' : price((float) $line['amount'])).'">';
+				$amount .= ' &nbsp; '.$langs->trans('VAT').' '.$form->load_tva('vat_'.$i, $line['vat'] === '' ? -1 : $line['vat'], $supplier ?: $mysoc, $mysoc);
+				$h .= self::row($i === 0 ? $langs->trans('AmountHT').self::readBadge($read, 'lines') : '', $amount, false, $i === 0 ? $langs->transnoentitiesnoconv('ConvomailAmountHelp') : '');
+			}
 		} elseif ($role === 'customer') {
 			// Proposal, order, invoice: the customer and their reference
 			$refhelp = array('propal' => 'ConvomailRefCustomerProposalHelp', 'commande' => 'ConvomailRefCustomerHelp', 'facture' => 'ConvomailRefCustomerInvoiceHelp');
@@ -366,6 +412,16 @@ class ConvomailRecord
 		}
 		$h .= $this->chips();
 		$h .= '</div>';
+		if ($read !== null) {
+			$h .= '<div class="cm-rp-read">';
+			if (!empty($read['sources'])) {
+				$h .= '<div class="info">'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadFilled', $read['origin'])).'</div>';
+			}
+			foreach ($read['notes'] as $note) {
+				$h .= '<div class="'.($note['level'] === 'warning' ? 'warning' : 'info').'">'.dol_escape_htmltag($note['text']).'</div>';
+			}
+			$h .= '</div>';
+		}
 
 		$hints = array(
 			'propal' => 'ConvomailHintProposal', 'commande' => 'ConvomailHintOrder', 'facture' => 'ConvomailHintInvoice',
@@ -867,12 +923,54 @@ class ConvomailRecord
 		foreach ($this->attachments as $att) {
 			$ispdf = ($att['type'] === 'application/pdf' || preg_match('/\.pdf$/i', $att['name']));
 			if ($ispdf && in_array((string) $att['id'], $parts, true) && (int) $att['size'] <= ConvomailFiler::maxSize()) {
-				$content = $this->client->fetchPart($this->folder, $this->uid, $att['id']);
-				if ($content !== false) {
-					$hashes[] = md5($content['data']);
+				$data = $this->partData($att['id']);
+				if ($data !== null) {
+					$hashes[] = md5($data);
 				}
 			}
 		}
 		return $hashes;
+	}
+
+	/**
+	 * Attachments that may hold invoice data (ConvomailInvoiceFill loaded)
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function invoiceAttachments()
+	{
+		return array_values(array_filter($this->attachments, array('ConvomailInvoiceFill', 'isCandidate')));
+	}
+
+	/**
+	 * Names and bytes of those attachments, for the invoice reader
+	 *
+	 * @return array<int,array{name:string,content:string,mimetype:string}>
+	 */
+	private function invoiceFiles()
+	{
+		$files = array();
+		foreach ($this->invoiceAttachments() as $att) {
+			$data = $this->partData($att['id']);
+			if ($data !== null) {
+				$files[] = array('name' => (string) $att['name'], 'content' => $data, 'mimetype' => (string) $att['type']);
+			}
+		}
+		return $files;
+	}
+
+	/**
+	 * Bytes of an attachment, fetched from the mail server once per request
+	 *
+	 * @param  string      $id Part id
+	 * @return string|null
+	 */
+	private function partData($id)
+	{
+		if (!array_key_exists((string) $id, $this->partcache)) {
+			$content = $this->client->fetchPart($this->folder, $this->uid, $id);
+			$this->partcache[(string) $id] = ($content !== false) ? (string) $content['data'] : null;
+		}
+		return $this->partcache[(string) $id];
 	}
 }

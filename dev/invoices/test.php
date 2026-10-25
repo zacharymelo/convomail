@@ -55,21 +55,22 @@ function fixture($name)
 	return $data;
 }
 /**
- * @param  string[] $problems Problems
- * @param  string   $needle   Substring
+ * @param  array<int,array{code:string,args:array}> $problems Problems
+ * @param  string                                   $code     Code
+ * @param  mixed                                    ...$args  Arguments it must have (none: any)
  * @return bool
  */
-function hasProblem($problems, $needle)
+function hasProblem($problems, $code, ...$args)
 {
 	foreach ($problems as $p) {
-		if (strpos($p, $needle) !== false) {
+		if ($p['code'] === $code && (!$args || $p['args'] === $args)) {
 			return true;
 		}
 	}
 	return false;
 }
 
-$hintkeys = array('syntax', 'type', 'typecode', 'number', 'date', 'duedate', 'currency', 'seller_name', 'seller_vat', 'total_ht', 'total_vat', 'total_ttc', 'vatlines');
+$hintkeys = array('syntax', 'type', 'typecode', 'number', 'date', 'duedate', 'currency', 'seller_name', 'seller_vat', 'seller_country', 'total_ht', 'total_vat', 'total_ttc', 'vatlines');
 $issue = date('Y-m-d', strtotime('-5 days'));
 $due = date('Y-m-d', strtotime('+25 days'));
 
@@ -81,7 +82,7 @@ check('CII: syntax/type', $h && $h['syntax'] === 'cii' && $h['type'] === 'invoic
 check('CII: number BT-1', $h && $h['number'] === 'FA-2026-0042', $h['number'] ?? null);
 check('CII: dates BT-2/BT-9 from format 102', $h && $h['date'] === $issue && $h['duedate'] === $due, array($h['date'] ?? null, $h['duedate'] ?? null));
 check('CII: currency BT-5', $h && $h['currency'] === 'EUR');
-check('CII: seller name and VAT ID BT-31 (schemeID VA, normalised)', $h && $h['seller_name'] === 'Fournitures Dupont SARL' && $h['seller_vat'] === 'FR12345678901', $h);
+check('CII: seller name and VAT ID BT-31 (schemeID VA, normalised)', $h && $h['seller_name'] === 'Fournitures Dupont SARL' && $h['seller_vat'] === 'FR12345678901' && $h['seller_country'] === 'FR', $h);
 check('CII: totals BT-109/110/112, BT-110 in invoice currency', $h && $h['total_ht'] === 300.0 && $h['total_vat'] === 31.0 && $h['total_ttc'] === 331.0, $h);
 check('CII: VAT breakdown BG-23', $h && $h['vatlines'] === array(
 	array('rate' => 20.0, 'net' => 100.0, 'vat' => 20.0, 'category' => 'S'),
@@ -100,7 +101,7 @@ check('CII hostile strings: single line, no angle brackets, no control/format ch
 $h = ConvomailEInvoice::parse(fixture('ubl.xml'));
 check('UBL invoice parsed', is_array($h), ConvomailEInvoice::$error);
 check('UBL: fields', $h && $h['syntax'] === 'ubl' && $h['type'] === 'invoice' && $h['number'] === 'INV-2026-1001' && $h['date'] === $issue
-	&& $h['duedate'] === $due && $h['currency'] === 'EUR' && $h['seller_name'] === 'Medisupply BV' && $h['seller_vat'] === 'BE0123456749', $h);
+	&& $h['duedate'] === $due && $h['currency'] === 'EUR' && $h['seller_name'] === 'Medisupply BV' && $h['seller_vat'] === 'BE0123456749' && $h['seller_country'] === 'BE', $h);
 check('UBL: totals and breakdown', $h && $h['total_ht'] === 1000.0 && $h['total_vat'] === 210.0 && $h['total_ttc'] === 1210.0
 	&& $h['vatlines'] === array(array('rate' => 21.0, 'net' => 1000.0, 'vat' => 210.0, 'category' => 'S')), $h);
 check('UBL: bank account not in hints', $h && strpos(json_encode($h), 'BE71096') === false);
@@ -184,8 +185,8 @@ check('fence without language accepted', $r['ok'] && $r['values']['currency'] ==
 $extra = $good + array('iban' => 'FR7699999999999999999999999', 'supplier_id' => 1, 'socid' => 5, '<script>' => 'x');
 $r = $ai->validate(json_encode($extra), 'FR');
 check('extra keys dropped', $r['ok'] && array_keys($r['values']) === ConvomailInvoiceAi::KEYS && strpos(json_encode($r), 'FR7699') === false, $r);
-check('extra keys reported, hostile key name not echoed', hasProblem($r['problems'], 'ignored: iban') && hasProblem($r['problems'], 'ignored: supplier_id')
-	&& !hasProblem($r['problems'], 'script') && count($r['problems']) === 4, $r['problems']);
+check('extra keys reported, hostile key name not echoed', hasProblem($r['problems'], 'InvoiceReaderFieldIgnored', 'iban') && hasProblem($r['problems'], 'InvoiceReaderFieldIgnored', 'supplier_id')
+	&& hasProblem($r['problems'], 'InvoiceReaderUnnamedFieldIgnored') && strpos(json_encode($r['problems']), 'script') === false && count($r['problems']) === 4, $r['problems']);
 
 $wrong = array(
 	'type' => 'bill', 'number' => array('FA'), 'date' => '23/10/2026', 'duedate' => true, 'currency' => 'ZZZ',
@@ -198,7 +199,7 @@ $empty = array('type' => '', 'number' => '', 'date' => '', 'duedate' => '', 'cur
 check('wrong types: every field rejected', $r['ok'] && $r['values'] === $empty, $r['values']);
 check('wrong types: one problem per field', count($r['problems']) === 11, $r['problems']);
 $r = $ai->validate(json_encode(array('vatlines' => array(array('rate' => 'abc', 'net' => 1, 'vat' => 1), 'x', array('rate' => 150, 'net' => 1, 'vat' => 1), array('rate' => 20, 'net' => 10, 'vat' => 2, 'note' => 'hi')))), 'FR');
-check('bad VAT lines rejected, good one kept with a note', $r['ok'] && count($r['values']['vatlines']) === 1 && hasProblem($r['problems'], 'VAT line 4: unexpected'), $r);
+check('bad VAT lines rejected, good one kept with a note', $r['ok'] && count($r['values']['vatlines']) === 1 && hasProblem($r['problems'], 'InvoiceReaderLineFieldsIgnored', 4), $r);
 
 $html = $good;
 $html['seller_name'] = '<script>alert(document.cookie)</script>';
@@ -230,33 +231,33 @@ $dates = $good;
 $dates['date'] = date('Y-m-d', strtotime('-5 years'));
 $dates['duedate'] = date('Y-m-d', strtotime('+3 years'));
 $r = $ai->validate(json_encode($dates), 'FR');
-check('dates over 2 years away rejected', $r['values']['date'] === '' && $r['values']['duedate'] === '' && hasProblem($r['problems'], 'more than 2 years'), $r);
+check('dates over 2 years away rejected', $r['values']['date'] === '' && $r['values']['duedate'] === '' && hasProblem($r['problems'], 'InvoiceReaderDateOutOfRange', 'date'), $r);
 $dates['date'] = '2026-02-30';
 $r = $ai->validate(json_encode($dates), 'FR');
 check('impossible date rejected', $r['values']['date'] === '');
 $dates = $good;
 $dates['duedate'] = date('Y-m-d', strtotime('-30 days'));
 $r = $ai->validate(json_encode($dates), 'FR');
-check('due date before issue date reported', hasProblem($r['problems'], 'due date is before'), $r['problems']);
+check('due date before issue date reported', hasProblem($r['problems'], 'InvoiceReaderDueBeforeDate'), $r['problems']);
 
 $rate = $good;
 $rate['vatlines'][0] = array('rate' => 19, 'net' => 100, 'vat' => 19);
 $rate['total_vat'] = 30;
 $rate['total_ttc'] = 330;
 $r = $ai->validate(json_encode($rate), 'FR');
-check('rate unknown in FR reported', hasProblem($r['problems'], 'VAT line 1: the rate is not in the VAT dictionary') && count($r['problems']) === 1, $r['problems']);
+check('rate unknown in FR reported', hasProblem($r['problems'], 'InvoiceReaderRateUnknown', 1) && count($r['problems']) === 1, $r['problems']);
 $r = $ai->validate(json_encode($rate), 'DE');
-check('19 % accepted for DE', !hasProblem($r['problems'], 'VAT line 1: the rate') && hasProblem($r['problems'], 'VAT line 2: the rate'), $r['problems']);
+check('19 % accepted for DE', !hasProblem($r['problems'], 'InvoiceReaderRateUnknown', 1) && hasProblem($r['problems'], 'InvoiceReaderRateUnknown', 2), $r['problems']);
 $r = $ai->validate(json_encode($good), 'QQ');
-check('unknown country: rates not checked, said so', hasProblem($r['problems'], 'No VAT rates are known'), $r['problems']);
+check('unknown country: rates not checked, said so', hasProblem($r['problems'], 'InvoiceReaderNoRates'), $r['problems']);
 
 $math = $good;
 $math['vatlines'][0]['vat'] = 25;
 $math['total_ttc'] = 999999;
 $r = $ai->validate(json_encode($math), 'FR');
-check('net × rate mismatch reported', hasProblem($r['problems'], 'VAT line 1: the VAT amount does not match'), $r['problems']);
-check('lines vs total VAT mismatch reported', hasProblem($r['problems'], 'do not add up to the total VAT'), $r['problems']);
-check('net + VAT ≠ total reported', hasProblem($r['problems'], 'does not equal the total'), $r['problems']);
+check('net × rate mismatch reported', hasProblem($r['problems'], 'InvoiceReaderLineVatMismatch', 1), $r['problems']);
+check('lines vs total VAT mismatch reported', hasProblem($r['problems'], 'InvoiceReaderLinesVatMismatch'), $r['problems']);
+check('net + VAT ≠ total reported', hasProblem($r['problems'], 'InvoiceReaderTotalMismatch'), $r['problems']);
 $round = $good;
 $round['vatlines'] = array(array('rate' => 5.5, 'net' => 33.33, 'vat' => 1.83));
 $round['total_ht'] = 33.33;
@@ -268,7 +269,7 @@ check('rounding within tolerance accepted', $r['problems'] === array(), $r['prob
 $many = $good;
 $many['vatlines'] = array_fill(0, 25, array('rate' => 20, 'net' => 1, 'vat' => 0.2));
 $r = $ai->validate(json_encode($many), 'FR');
-check('VAT lines capped at 20', count($r['values']['vatlines']) === 20 && hasProblem($r['problems'], 'first 20'), count($r['values']['vatlines']));
+check('VAT lines capped at 20', count($r['values']['vatlines']) === 20 && hasProblem($r['problems'], 'InvoiceReaderTooManyLines', 20), count($r['values']['vatlines']));
 $masked = $good;
 $masked['number'] = '[[REF_1]]';
 $masked['seller_vat'] = 'VAT_2';
@@ -279,7 +280,7 @@ $r = $ai->validate(json_encode($masked), 'FR');
 check('surviving PrivacyGuard placeholders are problems, not values', $r['ok'] && $r['values']['number'] === '' && $r['values']['seller_vat'] === ''
 	&& $r['values']['seller_name'] === '' && $r['values']['total_ttc'] === null && count($r['values']['vatlines']) === 1
 	&& count(array_filter($r['problems'], function ($p) {
-		return strpos($p, 'privacy placeholder') !== false;
+		return in_array($p['code'], array('InvoiceReaderFieldPlaceholder', 'InvoiceReaderLinePlaceholder'), true);
 	})) === 5, $r);
 $legit = $good;
 $legit['number'] = 'INV_2026-REF7';
@@ -304,17 +305,30 @@ check('plain PDF gives text for the AI step', $r['source'] === 'pdftext' && $r['
 $r = $reader->read(array($a('facturx-badxml.pdf')), 'FR');
 check('broken embedded XML falls back to the PDF text', $r['source'] === 'pdftext' && strpos($r['text'], 'FA-2026-0042') !== false, $r['source']);
 $r = $reader->read(array($a('encrypted.pdf')), 'FR');
-check('encrypted PDF: nothing, problem reported', $r['source'] === '' && hasProblem($r['problems'], 'encrypted'), $r);
+check('encrypted PDF: nothing, problem reported', $r['source'] === '' && hasProblem($r['problems'], 'InvoiceReaderEncryptedPdf'), $r);
 $r = $reader->read(array($a('ubl.xml')), 'FR');
-check('UBL with 21 % checked against FR rates', $r['source'] === 'xml' && hasProblem($r['problems'], 'VAT line 1: the rate'), $r['problems']);
-$r = $reader->read(array($a('ubl.xml')), 'BE');
-check('UBL with 21 % fine for BE', $r['source'] === 'xml' && $r['problems'] === array(), $r['problems']);
+check('Belgian UBL with 21 % checked against the seller country (BE), not ours', $r['source'] === 'xml' && $r['problems'] === array(), $r['problems']);
+$nocountry = array('name' => 'ubl.xml', 'content' => preg_replace('#<cac:PostalAddress>.*?</cac:PostalAddress>#s', '', fixture('ubl.xml')));
+$r = $reader->read(array($nocountry), 'FR');
+check('UBL without seller country: checked against the given country', $r['source'] === 'xml' && hasProblem($r['problems'], 'InvoiceReaderRateUnknown', 1), $r['problems']);
+$r = $reader->read(array($nocountry), 'BE');
+check('UBL without seller country, given BE: fine', $r['source'] === 'xml' && $r['problems'] === array(), $r['problems']);
 $r = $reader->read(array(array('name' => '../../etc/passwd.xml', 'content' => fixture('cii.xml'))));
 check('attachment name reduced to a basename', $r['filename'] === 'passwd.xml', $r['filename']);
 $r = $reader->read(array());
 check('no attachments: nothing', $r['source'] === '' && $r['hints'] === null && $r['text'] === '');
 $r = $reader->read(array($a('not-a-pdf.pdf'), $a('not-invoice.xml'), array('name' => 'image.png', 'content' => "\x89PNG")));
 check('unreadable attachments: nothing', $r['source'] === '' && $r['hints'] === null);
+
+print "== problem texts\n";
+$langs->setDefaultLang('en_US');
+$text = ConvomailInvoiceReader::problemText(ConvomailInvoiceAi::problem('InvoiceReaderRateUnknown', 2), $langs);
+check('problemText() translates with arguments', $text === "VAT line 2: the rate is not one of your country's VAT rates.", $text);
+preg_match_all("/'(InvoiceReader[A-Za-z]+)'/", file_get_contents(DOL_DOCUMENT_ROOT.'/custom/convomail/class/convomailinvoiceai.class.php').file_get_contents(DOL_DOCUMENT_ROOT.'/custom/convomail/class/convomailinvoicereader.class.php'), $codes);
+$missing = array_filter(array_unique($codes[1]), function ($c) use ($langs) {
+	return $langs->transnoentitiesnoconv($c) === $c;
+});
+check('every problem code has a translation', count($codes[1]) > 15 && empty($missing), array_values($missing));
 
 print "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);

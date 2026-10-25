@@ -275,16 +275,24 @@ class ConvomailCreator
 			if ($v['ref_supplier'] === '') {
 				$errors[] = $langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('RefSupplier'));
 			}
-			// Due date from the supplier's terms; one optional line (amount excl. tax and its VAT rate), more on the card
-			$v['date_due'] = 0;
+			// Due date: the one filled from the invoice, else from the supplier's terms
+			$v['date_due'] = self::postDate('date_due');
+			if ($v['date_due'] && $v['date'] && $v['date_due'] < $v['date']) {
+				$errors[] = $langs->trans('ConvomailDueBeforeInvoice');
+			}
+			// Optional lines (amount excl. tax and its VAT rate): one, or one per VAT rate filled from the invoice; more on the card
 			$v['lines'] = array();
-			$amount = trim(GETPOST('amount', 'alphanohtml'));
-			if ($amount !== '') {
+			$nblines = min(max(GETPOSTINT('nblines'), 1), 10);
+			for ($i = 0; $i < $nblines; $i++) {
+				$amount = trim(GETPOST('amount_'.$i, 'alphanohtml'));
+				if ($amount === '') {
+					continue;
+				}
 				$num = price2num($amount, 'MU');
 				if (!is_numeric($num)) {
 					$errors[] = $langs->trans('ConvomailBadAmount', dol_escape_htmltag($amount));
 				} else {
-					$v['lines'][] = array('desc' => $v['subject'], 'amount' => (float) $num, 'vat' => (string) GETPOST('vat', 'alphanohtml'));
+					$v['lines'][] = array('desc' => $v['subject'], 'amount' => (float) $num, 'vat' => (string) GETPOST('vat_'.$i, 'alphanohtml'));
 				}
 			}
 		}

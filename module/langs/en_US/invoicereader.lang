@@ -1,0 +1,26 @@
+# Copyright (C) 2026 DPG Supply
+
+# Invoice reading component (class/convomaileinvoice, convomailpdfembedded, convomailinvoiceai, convomailinvoicereader)
+# Problems found while reading an invoice. Arguments are field names or line numbers, never text from the document.
+InvoiceReaderAiError = The AI service returned an error.
+InvoiceReaderAiTooLong = The AI answer is too long.
+InvoiceReaderAiNotJson = The AI answer could not be read.
+InvoiceReaderFieldIgnored = An unexpected field (%s) was ignored.
+InvoiceReaderUnnamedFieldIgnored = An unexpected field was ignored.
+InvoiceReaderFieldRejected = The value read for %s was not used: it is not valid.
+InvoiceReaderFieldPlaceholder = The value read for %s was not used: it is a privacy placeholder.
+InvoiceReaderDateOutOfRange = The date read for %s was not used: it is more than 2 years away.
+InvoiceReaderDueBeforeDate = The due date is before the invoice date.
+InvoiceReaderTooManyLines = Only the first %s VAT lines were kept.
+InvoiceReaderLineRejected = VAT line %s was not used: it is not valid.
+InvoiceReaderLinePlaceholder = VAT line %s was not used: it holds a privacy placeholder.
+InvoiceReaderLineFieldsIgnored = VAT line %s had unexpected fields, ignored.
+InvoiceReaderLineVatMismatch = VAT line %s: the VAT amount does not match the amount times the rate.
+InvoiceReaderLinesNetMismatch = The VAT lines do not add up to the total without VAT.
+InvoiceReaderLinesVatMismatch = The VAT lines do not add up to the total VAT.
+InvoiceReaderTotalMismatch = The total without VAT plus the VAT does not equal the total.
+InvoiceReaderLinesTotalMismatch = The VAT lines do not add up to the total.
+InvoiceReaderNoRates = No VAT rates are known for your company's country: the rates were not checked.
+InvoiceReaderRateUnknown = VAT line %s: the rate is not one of your country's VAT rates.
+InvoiceReaderEncryptedPdf = A PDF is password-protected and could not be read.
+InvoiceReaderCurrencyUnknown = The invoice's currency is not in the currency dictionary.

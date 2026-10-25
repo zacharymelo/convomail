@@ -16,6 +16,8 @@
  * parser never loads a DTD, never substitutes entities and never touches the network. The result
  * is a set of hints for a form the user reviews; it never picks or creates a supplier and bank
  * details are not read at all.
+ *
+ * Part of the invoice reading component (see docs/ARCHITECTURE.md): no Convomail dependency.
  */
 
 /**
@@ -47,7 +49,7 @@ class ConvomailEInvoice
 	 * trimmed, single-line and bounded. 'vatlines' is the VAT breakdown (BG-23).
 	 *
 	 * @param  string $xml Raw XML
-	 * @return array{syntax:string,type:string,typecode:string,number:string,date:string,duedate:string,currency:string,seller_name:string,seller_vat:string,total_ht:?float,total_vat:?float,total_ttc:?float,vatlines:array<int,array{rate:?float,net:?float,vat:?float,category:string}>}|null Null when not a readable e-invoice (see $error)
+	 * @return array{syntax:string,type:string,typecode:string,number:string,date:string,duedate:string,currency:string,seller_name:string,seller_vat:string,seller_country:string,total_ht:?float,total_vat:?float,total_ttc:?float,vatlines:array<int,array{rate:?float,net:?float,vat:?float,category:string}>}|null Null when not a readable e-invoice (see $error)
 	 */
 	public static function parse($xml)
 	{
@@ -152,6 +154,7 @@ class ConvomailEInvoice
 		$hints['currency'] = $currency;
 		$hints['seller_name'] = self::text(self::value($xp, $seller.'/ram:Name'), 255);
 		$hints['seller_vat'] = self::vatId(self::value($xp, $seller."/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']"));
+		$hints['seller_country'] = self::country(self::value($xp, $seller.'/ram:PostalTradeAddress/ram:CountryID'));
 		$hints['total_ht'] = self::amount(self::value($xp, $sum.'/ram:TaxBasisTotalAmount'));
 		$hints['total_vat'] = self::amount(self::inCurrency($xp, $sum.'/ram:TaxTotalAmount', $currency));
 		$hints['total_ttc'] = self::amount(self::value($xp, $sum.'/ram:GrandTotalAmount'));
@@ -202,6 +205,7 @@ class ConvomailEInvoice
 		}
 		$hints['seller_name'] = self::text($name, 255);
 		$hints['seller_vat'] = self::vatId(self::value($xp, $party."/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID"));
+		$hints['seller_country'] = self::country(self::value($xp, $party.'/cac:PostalAddress/cac:Country/cbc:IdentificationCode'));
 		$hints['total_ht'] = self::amount(self::value($xp, $sum.'/cbc:TaxExclusiveAmount'));
 		$hints['total_vat'] = self::amount(self::inCurrency($xp, $root.'/cac:TaxTotal/cbc:TaxAmount', $currency));
 		$hints['total_ttc'] = self::amount(self::value($xp, $sum.'/cbc:TaxInclusiveAmount'));
@@ -237,6 +241,7 @@ class ConvomailEInvoice
 			'currency' => '',
 			'seller_name' => '',
 			'seller_vat' => '',
+			'seller_country' => '',
 			'total_ht' => null,
 			'total_vat' => null,
 			'total_ttc' => null,
@@ -320,6 +325,16 @@ class ConvomailEInvoice
 	{
 		$value = strtoupper(trim((string) $value));
 		return preg_match('/^[A-Z]{3}$/', $value) ? $value : '';
+	}
+
+	/**
+	 * @param  string $value Raw ISO 3166-1 alpha-2 code
+	 * @return string        Two capital letters, or ''
+	 */
+	private static function country($value)
+	{
+		$value = strtoupper(trim((string) $value));
+		return preg_match('/^[A-Z]{2}$/', $value) ? $value : '';
 	}
 
 	/**

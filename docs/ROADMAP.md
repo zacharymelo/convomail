@@ -59,9 +59,11 @@ Users leave Dolibarr to send email from another client, and the link between a c
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
 
 ### Reading supplier invoices (next)
-- Fill the supplier invoice panel from the invoice: e-invoice XML attached (CII/UBL), Factur-X/ZUGFeRD embedded in the PDF, else the PDF's text through Dolibarr's AI module when the admin turns it on. The readers are written (`ConvomailEInvoice`, `ConvomailPdfEmbedded`, `ConvomailInvoiceAi`, `ConvomailInvoiceReader`) but not wired in.
-- Filled fields get a "check" badge naming where they came from; the user still submits. The supplier is never taken from the document: it is pre-selected only when the sender's address and the VAT number agree.
+- **Built, not released: e-invoice data.** Setting *Fill from the invoice* (off by default); when on, a button on the supplier invoice panel reads the XML attached (CII/UBL) or embedded in the PDF (Factur-X, ZUGFeRD, XRechnung) on the server and fills the number, dates and one line per VAT rate, each with a badge naming its source. Nothing is read before the click. The supplier is never taken from the document: the one from the sender stays, with a warning when the VAT numbers differ. Credit notes and other currencies are not filled. See ARCHITECTURE 6.13.
+- **Next: the PDF's text through Dolibarr's AI module**, a second setting (off by default, shown only when core's AI module is set up) and a second button, offered when no e-invoice data was found. The text is masked with core's `PrivacyGuard` where it exists (Dolibarr 24+) before it leaves the server, and the answer goes through `ConvomailInvoiceAi::validate()` after unmasking. To check on Dolibarr 24.
+- **Kept apart to be moved later.** The readers depend on Dolibarr core only and Convomail reaches them through `ConvomailInvoiceFill` alone, so they can become their own module, or a core contribution (core reads no e-invoices), without touching the panel.
 - No OCR: a scanned invoice has no text, so it is typed by hand.
+- To test: e-invoices made by other software (only TCPDF and hand-made PDFs so far), Dolibarr 20 and 24.
 
 ### 4. Sales features
 - "Awaiting reply" / "Replied" state per thread, with columns on third party and project lists.

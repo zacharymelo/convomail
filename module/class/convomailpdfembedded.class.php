@@ -15,9 +15,11 @@
  * Uses the vendored smalot/pdfparser (LGPL-3.0). The PDF comes from an email, so parsing runs
  * under a size cap, a memory and time budget and a decode limit per stream, and any failure ends
  * in "nothing found" rather than an error page. Encrypted PDFs are not read.
+ *
+ * Part of the invoice reading component (see docs/ARCHITECTURE.md): no Convomail dependency.
  */
 
-dol_include_once('/convomail/class/convomaileinvoice.class.php');
+require_once __DIR__.'/convomaileinvoice.class.php';
 
 /**
  * Class ConvomailPdfEmbedded
@@ -147,7 +149,7 @@ class ConvomailPdfEmbedded
 		if (class_exists('\Smalot\PdfParser\Parser', true)) {
 			return true;
 		}
-		$autoload = dol_buildpath('/convomail/vendor/autoload.php', 0);
+		$autoload = __DIR__.'/../vendor/autoload.php';
 		if (is_readable($autoload)) {
 			require_once $autoload;
 		}

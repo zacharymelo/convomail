@@ -179,6 +179,11 @@ foreach (ConvomailCreator::groups() as $group => $grouplabel) {
 		print '<td class="opacitymedium">'.$langs->trans('ConvomailToolCreateDesc').($moduleoff ? ' '.$langs->trans('ConvomailToolModuleOff') : '').'</td></tr>';
 	}
 }
+// Reading the attached invoice: off unless turned on here, and then only when a user clicks "Fill from the invoice"
+$supplierlabel = ConvomailCreator::types()['invoice_supplier']['label'];
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailCreateMenu').' &rsaquo; '.$langs->trans(ConvomailCreator::groups()['supplier']).' &rsaquo; '.$langs->trans($supplierlabel).' &rsaquo; '.$langs->trans('ConvomailInvoiceReadSetting').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_INVOICE_READ').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailInvoiceReadSettingDesc').'</td></tr>';
 
 // Debug mode (always last)
 print '<tr class="oddeven"><td>'.$langs->trans('DebugMode').'</td>';

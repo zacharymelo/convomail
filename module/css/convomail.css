@@ -302,6 +302,9 @@
 .cm-openline { margin: 2px 16px 4px; font-size: .92em; }
 .cm-rp-msgs:not(:empty) { margin-top: 8px; }
 .cm-rp-msgs .error, .cm-rp-msgs .warning { margin: 4px 0; padding: 4px 8px; }
+.cm-rp-read { margin-top: 8px; }
+.cm-rp-read .info, .cm-rp-read .warning { margin: 4px 0; padding: 4px 8px; }
+.cm-readbadge { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px solid var(--cm-border); border-radius: 8px; font-size: 0.85em; font-weight: normal; white-space: nowrap; }
 .cm-rp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
 .cm-rp-foot .button { margin: 0; }
 .cm-rp-hint { font-size: .9em; }

@@ -44,6 +44,7 @@ function cii($typecode, $number, $seller = 'Fournitures Dupont SARL')
 		<ram:ApplicableHeaderTradeAgreement>
 			<ram:SellerTradeParty>
 				<ram:Name>'.$seller.'</ram:Name>
+				<ram:PostalTradeAddress><ram:PostcodeCode>69000</ram:PostcodeCode><ram:CityName>Lyon</ram:CityName><ram:CountryID>FR</ram:CountryID></ram:PostalTradeAddress>
 				<ram:SpecifiedTaxRegistration><ram:ID schemeID="FC">12/345/67890</ram:ID></ram:SpecifiedTaxRegistration>
 				<ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">FR 12 345678901</ram:ID></ram:SpecifiedTaxRegistration>
 			</ram:SellerTradeParty>
@@ -112,6 +113,7 @@ function ubl($creditnote)
 	<cac:AccountingSupplierParty>
 		<cac:Party>
 			<cac:PartyName><cbc:Name>Medisupply</cbc:Name></cac:PartyName>
+			<cac:PostalAddress><cbc:CityName>Gent</cbc:CityName><cac:Country><cbc:IdentificationCode>BE</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
 			<cac:PartyTaxScheme>
 				<cbc:CompanyID>BE0123456749</cbc:CompanyID>
 				<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
