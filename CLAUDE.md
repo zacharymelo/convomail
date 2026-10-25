@@ -51,6 +51,11 @@ Only when asked:
 
 ## Dolibarr gotchas we have hit
 
+**Older Dolibarr (the module declares 20+)**
+- Before using a core function, check it exists in Dolibarr 20 (`git show 20.0.0:htdocs/...` in `~/Desktop/dolibarr-upstream`). Newer ones go behind `function_exists()` with a fallback: `getExecutableContent()` and the AI lists `getListForAIRephraseStyle()` / `getListForAISummarize()` are 22+.
+- Check a change on an older version with `dev/compat/` (`DOLI_VERSION=20`, port 8120; see dev/README.md).
+- Dolibarr 20's jnotify shows HTML as text: mailbox notices are plain text.
+
 **Optional modules**
 - Document Browser (`docbrowser`, repo `../doli-docbrowser`, mounted in the dev stack) is used only when `isModEnabled('docbrowser')` and its class loads. Never make Convomail depend on it. Its keys are re-checked on send with `DocBrowserService::resolve()`; never accept a path from the form.
 - CKEditor's content filter (ACF) keeps only what the toolbar can make: compose passes extra allowed content to `DolEditor::Create()` (blockquote with its border, `white-space`/`word-wrap` on div, the `convomail-signature` / `convomail-quote` classes, after core's own extras). The send path still drops the classes, so code that looks for the signature or quote also matches the "-- " line and the quote intro text (`convomail_insert_before_signature()`, `splitBody()` in `js/convomail-compose.js`). CKEditor also writes a line break after each `<br>`: stored/quoted plain text uses `<br>` without `pre-wrap` (`cleanBody(…, true)`), or each break shows twice. `$intro` is plain text (`transnoentitiesnoconv`), escaped once where it goes into HTML.

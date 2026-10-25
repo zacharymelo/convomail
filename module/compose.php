@@ -654,9 +654,12 @@ if ($trackingavailable) {
 }
 print '</td></tr>';
 
-// AI writing tools of core's AI module (provider and prompts from its setup), on the text above the signature and quote
+// AI writing tools of core's AI module (provider and prompts from its setup), on the text above the signature and quote.
+// Its rephrase styles and summary lengths exist since Dolibarr 22: no AI tools before
 if (isModEnabled('ai') && $editorishtml) {
 	require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
+}
+if (isModEnabled('ai') && $editorishtml && function_exists('getListForAIRephraseStyle') && function_exists('getListForAISummarize')) {
 	require_once DOL_DOCUMENT_ROOT.'/core/class/html.formadmin.class.php';
 	$langs->load('other');
 	if ($quotedhtml === '' && ($srcmessage || $replyevent)) {

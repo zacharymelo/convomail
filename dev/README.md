@@ -85,6 +85,19 @@ Open the Mailbox. Expected result:
 - the thread and code messages show a PJ-OXY-001 badge and are filed automatically on the first view;
 - Dana's new message shows "Suggested" and is not filed.
 
+## Check an older Dolibarr
+
+The module declares Dolibarr 20+. `dev/compat/docker-compose.yml` runs another Dolibarr version next to the dev stack, with the module mounted and the dev GreenMail reached through the host:
+
+```bash
+DOLI_VERSION=20 docker compose -p convomail20 -f dev/compat/docker-compose.yml up -d
+```
+
+- http://localhost:8120 (admin / admin; `DOLI_PORT` to change the port). Enable **Convomail** in the UI.
+- In the Dolibarr container: enable the record modules (`activateModule('modProjet')`, `modFournisseur`, `modCommande`, `modPropale`, `modFacture`, `modTicket`, `modECM`, `modSupplierProposal`), set the company country (VAT rates need it), allow `host.docker.internal` in Convomail setup, run `fixtures.php`.
+- Add a mail account with IMAP `host.docker.internal` 3143 and SMTP `host.docker.internal` 3025, no encryption, a login of its own (GreenMail makes the mailbox), and copy test messages into it over IMAP.
+- Remove it with `docker compose -p convomail20 -f dev/compat/docker-compose.yml down -v`.
+
 ## Run the checks
 
 ```bash

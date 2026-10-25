@@ -1,0 +1,39 @@
+# Older Dolibarr for compatibility checks (the module declares Dolibarr 20+).
+#   DOLI_VERSION=20 docker compose -p convomail20 -f dev/compat/docker-compose.yml up -d    -> http://localhost:8120
+# Uses the dev stack's GreenMail through the host (host.docker.internal:3143 / 3025).
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MYSQL_ROOT_PASSWORD: dolibarr_root
+      MYSQL_DATABASE: dolibarr
+      MYSQL_USER: dolibarr
+      MYSQL_PASSWORD: dolibarr
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  dolibarr:
+    image: dolibarr/dolibarr:${DOLI_VERSION:-20}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DOLI_PORT:-8120}:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DOLI_DB_HOST: db
+      DOLI_DB_NAME: dolibarr
+      DOLI_DB_USER: dolibarr
+      DOLI_DB_PASSWORD: dolibarr
+      DOLI_ADMIN_LOGIN: admin
+      DOLI_ADMIN_PASSWORD: admin
+      DOLI_URL_ROOT: "http://localhost:${DOLI_PORT:-8120}"
+      DOLI_INIT_DEMO: 0
+      WWW_USER_ID: 1000
+      WWW_GROUP_ID: 1000
+    volumes:
+      - ../../module:/var/www/html/custom/convomail

@@ -439,9 +439,10 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 ## 11. Known limits
 
 - **IMAP only.** Sign-in is by password, or OAuth with Google or Microsoft 365. OAuth was tested against a local Dovecot with a token check, not yet against Google or Microsoft themselves. Other OAuth providers aren't offered.
-- **No background sync.** Filing replies needs someone to open the mailbox page that lists them.
+- **No sync of its own.** Replies are filed when a mailbox page lists them, or in the background through core's Email Collector (*Log replies automatically*, 6.10).
 - **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's. The default header search took 0.1–0.3 s on 20,000 messages (Dovecot without full-text index); a search in the message text about 4 s there, and much more on a remote server with large messages.
 - **Session lock:** mailbox, message, reading pane and attachment requests call `convomail_release_session()` before talking to the mail server, so a slow server never blocks the user's other Dolibarr pages. Session writes after that point are not saved; pending notices are moved out first so they show once.
-- **Drafts aren't saved**, there are no shared or team mailboxes, and nothing is permanently deleted (emptying Trash is left to the mail client).
-- **Tested only** on Dolibarr 23.0 with PHP 8.2 and GreenMail. Not yet tested on real Gmail / Microsoft 365, other Dolibarr versions (the user's production runs 24), or the dark theme.
+- **Drafts aren't saved**, and nothing is permanently deleted (emptying Trash is left to the mail client).
+- **Tested** on Dolibarr 23.0 with PHP 8.2 and GreenMail, and on Dolibarr 20.0 (install, mailbox, compose, File / Create panels) with `dev/compat/`. Not yet tested on real Gmail / Microsoft 365, Dolibarr 21, 22 or 24 (the user's production runs 24), or the dark theme.
+- **Older Dolibarr:** core functions newer than 20 are used only behind `function_exists()`: `getExecutableContent()` (22; `ConvomailFiler::executableExtensions()` has a copy of its list) and `getListForAIRephraseStyle()` / `getListForAISummarize()` (22; no AI writing tools before). Dolibarr 20's notices show HTML as text, so `notify()` in `js/convomail.js` shows plain text.
 - **Test-server quirks:** GreenMail omits In-Reply-To from ENVELOPE, returns nothing for partial fetches, doesn't search Latin-1 bodies, refuses grouped search criteria, and matches FROM / TO / CC against whole addresses only (so "dana" finds nothing there; real servers match any part). The client works around the first two and the grouping.

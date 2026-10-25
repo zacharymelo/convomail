@@ -98,6 +98,8 @@
 		if (!text) {
 			return;
 		}
+		// Plain text: older Dolibarr (20) shows the notice's HTML as tags. Parsed apart from the page (nothing loads or runs)
+		text = new DOMParser().parseFromString(String(text).replace(/<br\s*\/?>/gi, ' '), 'text/html').body.textContent.trim();
 		if (window.jQuery && jQuery.jnotify) {
 			jQuery.jnotify(text, ok ? 'ok' : 'error', ok ? 3000 : true);
 		} else if (!ok) {

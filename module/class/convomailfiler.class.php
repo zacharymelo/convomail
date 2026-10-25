@@ -17,8 +17,8 @@
  * - only parts the reading pane lists as attachments (ConvomailRenderer::attachments()), by part id: names, types
  *   and sizes posted by the browser are never used;
  * - size caps per file and in total (CONVOMAIL_FILE_MAX_SIZE, MB), checked on the structure and after decoding;
- * - a clean file name, no executable or script extension (core's list or MAIN_FILE_EXTENSION_UPLOAD_RESTRICTION,
- *   plus svg), the antivirus and the "no JavaScript in a PDF" check of dolCheckVirus();
+ * - a clean file name, no executable or script extension (core's list, or its copy before Dolibarr 22, or
+ *   MAIN_FILE_EXTENSION_UPLOAD_RESTRICTION, plus svg), the antivirus and the "no JavaScript in a PDF" check of dolCheckVirus();
  * - moved with dol_move(), indexed in llx_ecm_files against the record, never over an existing file.
  */
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
@@ -159,7 +159,7 @@ class ConvomailFiler
 	 */
 	public static function refusedExtension($name)
 	{
-		$list = getDolGlobalString('MAIN_FILE_EXTENSION_UPLOAD_RESTRICTION', implode(',', getExecutableContent()));
+		$list = getDolGlobalString('MAIN_FILE_EXTENSION_UPLOAD_RESTRICTION', implode(',', self::executableExtensions()));
 		$extensions = array_filter(array_map('trim', explode(',', $list.',svg,svgz,xhtml')));
 		foreach ($extensions as $ext) {
 			if (preg_match('/\.'.preg_quote($ext, '/').'$/i', $name)) {
@@ -167,6 +167,20 @@ class ConvomailFiler
 			}
 		}
 		return isAFileWithExecutableContent($name);
+	}
+
+	/**
+	 * Core's list of executable and script extensions; getExecutableContent() only exists since Dolibarr 22, so
+	 * older versions get the same list (as of Dolibarr 23)
+	 *
+	 * @return string[]
+	 */
+	public static function executableExtensions()
+	{
+		if (function_exists('getExecutableContent')) {
+			return getExecutableContent();
+		}
+		return array('htm', 'html', 'shtml', 'js', 'phar', 'php', 'php3', 'php4', 'php5', 'phtml', 'pht', 'pl', 'py', 'cgi', 'ksh', 'sh', 'bash', 'bat', 'cmd', 'wpk', 'exe', 'dmg', 'appimage');
 	}
 
 	/**

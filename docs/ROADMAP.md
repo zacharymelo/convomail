@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.12.1)
+## Where it stands (0.15.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -50,8 +50,9 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | From an email | Link to record: log an email on an existing document, or link (or move) its agenda event there, optionally filing its attachments; suggestions from references in the subject and the sender's latest documents; the pane shows the event's record | 0.14.0 |
 | From an email | Suggested and picked records open in a new tab, to check them before linking, filing or creating | 0.14.1 |
 | Open tracking | Opened or not shown in the mailbox: an eye on sent rows (count and times in its tooltip), a line on the open message, the eye in the conversation; no need to open the agenda | 0.15.0 |
+| Compatibility | Dolibarr 20 and 21: attachment checks use a copy of core's executable list where `getExecutableContent()` is missing (22+), and the AI writing tools only show where core has their lists (22+); mailbox notices are plain text (Dolibarr 20 showed their HTML). Checked on a Dolibarr 20 stack (`dev/compat/`) | 0.15.1 |
 
-**Tested:** Dolibarr 23.0, PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
+**Tested:** Dolibarr 23.0 (everything) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. See [Test debt](#test-debt).
 
 ## Next
 
@@ -121,12 +122,12 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 | Question | Options | Notes |
 |---|---|---|
 | Auto-filing scope | Replies only (core's isanswer filter, now) vs anything from a known contact | Privacy: personal mail from a contact would land on the agenda; core has no "known contact" filter |
-| Distribution | DoliStore listing vs GitHub releases only | The repo is private |
+| Distribution | DoliStore listing vs GitHub releases only | The repo is public on GitHub, with releases there |
 
 ## Test debt
 
 Not yet verified. Do these before telling users it works there:
-- **Dolibarr 24** (the owner's production) and `develop`.
+- **Dolibarr 24** (the owner's production) and `develop`; **21 and 22** (20 and 23 are checked; `dev/compat/` runs any version with `DOLI_VERSION`).
 - **Real servers:** Gmail and Microsoft 365, with app passwords and with OAuth (consent, refresh at their token endpoints, Google app verification, Exchange Authenticated SMTP), Sent folder detection, `server_saves_sent`, SPECIAL-USE folders, search. OAuth is verified only against a local Dovecot with a token check (`dev/oauth/`).
 - **The owner's "other" IMAP server:** deleting an open email fails with "Mail server closed the connection unexpectedly". Not reproduced on GreenMail or Dovecot; capture `ajax/debug.php?mode=imaptrace` there.
 - **Dark theme** and the Eldy / Md themes in narrow windows.

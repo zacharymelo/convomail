@@ -2,7 +2,7 @@
 
 Convomail lets each Dolibarr user send email from inside Dolibarr through their own mailbox. Every message is logged on the agenda of the customer, contact and project it belongs to. Users stop leaving Dolibarr to write email in another client, and the conversation history stays where the sales work happens.
 
-**Status:** version 0.12.1: send and log, read receipts, a three-pane mailbox with conversations, AI writing tools, email on projects (Emails tab, suggestions, replies logged automatically through Dolibarr's Email Collector), rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), and shared mailboxes. Tested on Dolibarr 23.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers.
+**Status:** version 0.15.1. Send and log, a three-pane mailbox with folders and conversations, email on projects, turning emails into Dolibarr records (file attachments, link to an existing document, create a proposal, order, invoice, supplier invoice or quote, ticket or project), read receipts and open status, AI writing tools, rich-text compose with signature and templates, sign-in with Google or Microsoft 365 (OAuth), shared mailboxes, and a phone layout. Tested on Dolibarr 23.0 and 20.0 with PHP 8.2 against GreenMail and Dovecot test servers, including OAuth sign-in against a local token check. Not yet tested against real Gmail or Microsoft 365 servers, or on Dolibarr 24.
 
 ![Convomail mailbox](docs/mailbox.jpg)
 
@@ -18,6 +18,7 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - [Sign in with Google or Microsoft 365](#sign-in-with-google-or-microsoft-365)
 - [Using it](#using-it)
 - [The mailbox](#the-mailbox)
+- [From an email into Dolibarr](#from-an-email-into-dolibarr)
 - [Email on projects](#email-on-projects)
 - [Composing](#composing)
 - [Which email account is used](#which-email-account-is-used)
@@ -44,8 +45,9 @@ Convomail lets each Dolibarr user send email from inside Dolibarr through their 
 - **Logged to the agenda.** Each sent message becomes a "Send Email" (`AC_EMAIL`) event with subject, body, recipients and attachments.
   - It is linked to the third party, every recipient who is a known contact, the project and the originating document.
   - It appears on the existing conversation views of third parties, contacts and projects.
-- **Read receipts and open tracking.** Ask for a standard read receipt on any message. Optionally (off by default) track opens with an invisible image; the first open adds an "Email opened" event to the timeline.
-- **A mailbox inside Dolibarr.** A **Mailbox** tab in the top menu opens a three-pane mailbox (folders, messages, reading pane) with the usual actions and keyboard shortcuts.
+- **Read receipts and open tracking.** Ask for a standard read receipt on any message. Optionally (off by default) track opens with an invisible image: the mailbox shows which sent emails were opened, how often and when, and the first open adds an "Email opened" event to the timeline.
+- **A mailbox inside Dolibarr.** A **Mailbox** tab in the top menu opens a three-pane mailbox (folders, messages, reading pane) with the usual actions and keyboard shortcuts, folder management (new, rename, move, delete, drag and drop), and the conversation under each message. It has a phone layout too.
+- **From an email into Dolibarr.** From an open message: file its attachments on any record or in the Documents module, link it to an existing proposal, order, invoice or ticket (with suggestions from references in the subject), or create a draft record from it in a small panel: customer proposal, order or invoice, supplier invoice or quote, ticket, project. Nothing is created without a user submitting it.
 - **Email on projects.** Each project gets an **Emails** tab with its threads. The mailbox shows which project a message belongs to, files replies to project threads automatically, and logs any message to a project in one click.
 - **Rich-text compose.** Formatting, your signature, Dolibarr email templates, pasted images, and the project's contacts one click away.
 
@@ -69,9 +71,9 @@ Compose page ──> ConvomailTransport ──> user's SMTP server ──> recip
 
 | Item | Version |
 |---|---|
-| Dolibarr | 20.0 or later (tested on 23.0) |
+| Dolibarr | 20.0 or later (tested on 20.0 and 23.0). The AI writing tools need Dolibarr 22 or later; older versions just don't show them |
 | PHP | 8.1 or later |
-| Core modules | Third parties, Agenda, FCKeditor (enabled automatically with Convomail); Projects optional |
+| Core modules | Third parties, Agenda, FCKeditor (enabled automatically with Convomail). Optional: Projects, Documents (ECM), and the modules of the records you create from emails (Proposals, Orders, Invoices, Suppliers, Supplier proposals, Tickets) |
 | Mail account | IMAP and SMTP access with a password or app password, or sign-in with Google or Microsoft 365 (OAuth, see [below](#sign-in-with-google-or-microsoft-365)). |
 
 ## Installation
@@ -107,7 +109,9 @@ Go to **Home → Setup → Modules → Convomail → Setup** (or **Home → Setu
 | File replies to project threads automatically | On by default. See [Email on projects](#email-on-projects). |
 | Add the user's signature | On by default. Inserts the signature from the user card when composing. |
 | Request read receipts by default | Ticks "Request a read receipt" on the compose page. Users can untick it per message. |
+| Messages per mailbox page | 25 by default; each user can pick 10, 25, 50 or 100 in the mailbox. |
 | Open tracking | Off by default. Adds an invisible image to sent messages and logs opens. See [Read receipts and open tracking](#read-receipts-and-open-tracking) before enabling. |
+| "From this email" buttons | File attachments, Link to record, and each kind of the Create menu; all on by default. Turn off what your team doesn't use. See [From an email into Dolibarr](#from-an-email-into-dolibarr). |
 | Debug Mode | Enables `/custom/convomail/ajax/debug.php` for admins. While it is on, each user's exchanges with their mail server are also recorded (passwords masked, but message text included), and `ajax/debug.php?mode=imaptrace` shows your last 8 requests. Turn it off when done. |
 
 The same page has **Sign in with Google / Microsoft 365**: see [the next section](#sign-in-with-google-or-microsoft-365).
@@ -165,7 +169,8 @@ Notes:
 - **People not in Dolibarr:** when the sender (or, for mail you sent, the main recipient) isn't a contact or third party, the reading pane says so. **Create third party** opens Dolibarr's own new third party form, prefilled with a company name guessed from the email domain and its website, or with the person's name for Gmail, Outlook.com and similar addresses. After saving you come back to the message, with **Add as a contact** and **Log this email** ticked. If a third party already uses that email domain, **Add as contact of …** is offered instead, so the company isn't created twice. The buttons follow the rights to create third parties and contacts.
 - **Search:** searches the sender, recipients and subject, and every word must match ("dana quote"). It's fast even on large folders, because mail servers answer it from their header cache. Tick **In text** to search the message text too. That is much slower on most servers, which then read every message, and it waits up to two minutes. When nothing matches, a link offers the text search. Results are kept for a few minutes while the folder doesn't change, so moving through the pages of results is instant. A search never blocks the rest of Dolibarr while the mail server works.
 - **Resizable:** drag the lines between the columns to change their widths, and the line above the conversation to change its height. Arrow keys work on a focused line, double-click puts it back, and the sizes are kept in your browser.
-- **Right:** the message you click opens in the reading pane without leaving the list. Its conversation (see below) stays at the bottom of the pane while the message scrolls above it. The address bar follows, so reloading or sharing the link opens the same message. On a phone the list opens messages on their own page instead.
+- **Right:** the message you click opens in the reading pane without leaving the list. Its conversation (see below) stays at the bottom of the pane while the message scrolls above it. The address bar follows, so reloading or sharing the link opens the same message.
+- **On a phone:** the account and **Compose email** share one line, the folders are one row you scroll sideways (subfolders show their path), and search has its own line. A message opens on its own page, with a row of icons for Reply, Reply all, Forward, Archive, Delete, Flag and Unread; forms put their labels above full-width fields.
 
 **Actions**, on the selected rows (tick several) or the open message:
 
@@ -366,6 +371,7 @@ The event label differs ("Reception of Email - From …" from the collector, the
 | `llx_convomail_message` | One row per sent or logged message: account, direction, folder and UID, Message-ID, In-Reply-To, agenda event id, read receipt flag, open-tracking key, open count and dates |
 | `llx_actioncomm` (core) | The agenda event for each message: subject, body, recipients, links |
 | Agenda documents directory | Copies of attachments, under the event id |
+| Documents of records | Attachments filed from emails, in the record's own documents folder (or a Documents module folder), indexed in `llx_ecm_files` like an upload |
 
 Disabling the module removes menus and rights but keeps all data.
 
@@ -374,6 +380,8 @@ Disabling the module removes menus and rights but keeps all data.
 Mail accounts, logged messages and settings are kept when you disable, re-enable or upgrade Convomail. Disabling only removes its menus and permission definitions; the users' permissions are restored when it is enabled again. Since 0.5.2, deploying new files is enough: Convomail upgrades its tables on the first page that uses them, even if you don't disable and re-enable it. Before 0.5.2, new files on old tables made accounts look missing ("no mail account yet") until the module was disabled and enabled again; no data was lost.
 
 Passwords of mail accounts are encrypted with the instance key in Dolibarr's `conf.php` (`$dolibarr_main_instance_unique_id`). If Dolibarr itself is reinstalled with a new `conf.php`, keep that value, or users must re-enter their mail passwords (OAuth accounts must reconnect).
+
+**From 0.6.x or later:** deploy the new zip and open any Convomail page. Nothing to disable or re-enable. New "From this email" buttons are switched on once when you upgrade; a button an admin switched off stays off.
 
 **From 0.5.x to 0.6.x:** deploy the new zip. On the first page that uses mail accounts, Convomail adds its new table, the *Shared mail accounts* menu and the token refresh job by itself.
 
@@ -417,6 +425,9 @@ Convomail is built as a module first, with the aim of proposing webmail for Doli
 | 2c. Projects and webmail | Three-pane mailbox, actions and shortcuts, project Emails tab, project detection and automatic filing, rich-text compose with signature, templates, pasted images and project contacts | **Done (0.4.0)** |
 | 2b. OAuth | Sign in with Google and Microsoft 365 instead of passwords | **Done (0.5.0)** |
 | 3. Logging replies automatically, shared mailboxes | Replies logged automatically through core's Email Collector, shared mailboxes with per-user access, admin dashboard | **Done (0.6.0)** |
+| Webmail | Conversations, AI writing tools, resizable panes, folder management and folder tree, drag and drop | **Done (0.7.0 – 0.12.1)** |
+| From an email | File attachments on records, create records from an email (grouped Create menu), link to an existing record, open status in the mailbox, phone layout | **Done (0.13.0 – 0.15.0)** |
+| Reading supplier invoices | Fill the supplier invoice panel from e-invoice data (Factur-X, UBL, CII) or the PDF text through the AI module | Next |
 | 4. Sales features | Awaiting-reply columns, follow-up nudges, last message on opportunity cards, response-time reports | Planned |
 
 [UPSTREAM.md](UPSTREAM.md) lists the small core changes the module works around, which come before proposing it upstream.
@@ -434,6 +445,7 @@ docker run --rm -v "$PWD/module":/app -w /app composer:2 install --no-dev
   - Add `greenmail` to *Allowed mail servers* in the setup.
 - **Release zip:** `python3 bin/build.py <version>`. It sets the version, installs the libraries and builds `bin/module_convomail-<version>.zip`.
 - **Fixtures and checks:** [dev/README.md](dev/README.md).
+- **Older Dolibarr:** `DOLI_VERSION=20 docker compose -p convomail20 -f dev/compat/docker-compose.yml up -d` runs Dolibarr 20 on http://localhost:8120 with the module mounted, for compatibility checks (see [dev/README.md](dev/README.md#check-an-older-dolibarr)).
 - **How it is built:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (data model, flows, endpoints, security), [docs/ROADMAP.md](docs/ROADMAP.md) (plan and open decisions), [CLAUDE.md](CLAUDE.md) (guide for contributors and agents).
 
 ## Repository layout
@@ -441,14 +453,15 @@ docker run --rm -v "$PWD/module":/app -w /app composer:2 install --no-dev
 ```
 CLAUDE.md, AGENTS.md      Contributor and agent guide
 docs/                     Architecture, roadmap, screenshots
-dev/                      Fixtures, seed scripts, end-to-end check
+dev/                      Fixtures, seed scripts, end-to-end check, Dolibarr 20 stack (compat/), invoice fixtures (invoices/)
 docker-compose.yml        Dev stack: Dolibarr, MariaDB, GreenMail
 bin/build.py              Release build
 UPSTREAM.md               Core changes to propose
 patches/                  Optional core patch (Email setup tab) and the held upstream PR draft
 module/                   Module source (installed as custom/convomail)
   core/modules/           Module descriptor
-  class/                  Account, message, IMAP client, renderer, transport, matcher, logger, tracker, hooks
+  class/                  Account, message, IMAP client, renderer, transport, matcher, logger, tracker, hooks;
+                          "From this email": targets, filer, creator, record (panels); invoice readers (e-invoice, PDF, AI)
   sql/                    Tables and indexes
   admin/setup.php         Setup page
   user_accounts.php       Mail accounts tab on the user card
@@ -457,7 +470,8 @@ module/                   Module source (installed as custom/convomail)
   mailbox.php             Three-pane mailbox; files replies to project threads
   project_emails.php      Emails tab of a project
   message.php             One message on its own page (phones, links) and the full Log to… form
-  ajax/                   Reading pane, actions, templates, project contacts, address suggestions, diagnostics
+  ajax/                   Reading pane, actions, conversation, folders, templates, project contacts, address suggestions,
+                          "From this email" panels (record.php) and their record search (records.php), diagnostics
   attachment.php          Attachment download / inline image
   compose.php             Compose, reply, forward, send
   ajax/debug.php          Diagnostics (admin + debug mode)
@@ -468,4 +482,4 @@ module/                   Module source (installed as custom/convomail)
 
 ## Licence
 
-GPL-3.0-or-later, see [LICENSE](LICENSE). Bundles [bytestream/horde-imap-client](https://packagist.org/packages/bytestream/horde-imap-client) and its Horde dependencies (LGPL-2.1), and [HTMLPurifier](https://github.com/ezyang/htmlpurifier) (LGPL-2.1-or-later).
+GPL-3.0-or-later, see [LICENSE](LICENSE). Bundles [bytestream/horde-imap-client](https://packagist.org/packages/bytestream/horde-imap-client) and its Horde dependencies (LGPL-2.1), [HTMLPurifier](https://github.com/ezyang/htmlpurifier) (LGPL-2.1-or-later), and [smalot/pdfparser](https://github.com/smalot/pdfparser) (LGPL-3.0).
