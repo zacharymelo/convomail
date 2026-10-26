@@ -919,6 +919,79 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * UIDs of a folder, newest first: all of them, or those matching a search. For the Combined Inbox, which
+	 * fetches the envelopes of the ones it shows (envelopes()) and keeps the list a minute.
+	 *
+	 * @param  string                                $folder     Folder
+	 * @param  string                                $searchText Search text ('' for all)
+	 * @param  bool                                  $searchBody Also search the message text
+	 * @return array{uids:int[],maxuid:int}|false              maxuid: the newest UID of the folder, -1 on a search
+	 */
+	public function folderUids($folder, $searchText = '', $searchBody = false)
+	{
+		try {
+			$imap = $this->connect();
+			$searchText = trim($searchText);
+			if ($searchText === '') {
+				$uids = self::newestFirst($imap->search($folder)['match']);
+			} else {
+				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
+			}
+			$uids = array_map('intval', $uids);
+			return array('uids' => $uids, 'maxuid' => ($searchText === '') ? ($uids ? max($uids) : 0) : -1);
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
+	 * Summaries of some messages without their text (envelope, flags, structure, threading headers; no snippet),
+	 * each with "arrival", the time the server received it, which follows the UID order
+	 *
+	 * @param  string                               $folder Folder
+	 * @param  int[]                                $uids   UIDs
+	 * @return array<int,array<string,mixed>>|false         By UID
+	 */
+	public function envelopes($folder, array $uids)
+	{
+		$out = array();
+		if (empty($uids)) {
+			return $out;
+		}
+		try {
+			$imap = $this->connect();
+			$fetchquery = new Horde_Imap_Client_Fetch_Query();
+			$fetchquery->envelope();
+			$fetchquery->flags();
+			$fetchquery->size();
+			$fetchquery->structure();
+			$fetchquery->imapDate();
+			$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
+			$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($uids)));
+			foreach ($uids as $uid) {
+				$data = $fetched[$uid];
+				if ($data) {
+					$m = self::summary($uid, $data);
+					try {
+						$m['arrival'] = $data->getImapDate()->getTimestamp();
+					} catch (Exception $e) {
+						$m['arrival'] = 0;
+					}
+					if ($m['arrival'] <= 0) {
+						$m['arrival'] = (int) $m['date'];
+					}
+					$out[(int) $uid] = $m;
+				}
+			}
+			return $out;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
 	 * Unread messages of a folder, newest first, without their text: the unread count (STATUS) and the summaries
 	 * (envelope, flags) of the newest $limit unread ones, for the top-bar indicator
 	 *

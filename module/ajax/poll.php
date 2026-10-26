@@ -13,6 +13,8 @@
  * \brief   New-mail check of the mailbox page: what arrived in the shown folder, and the unread counts
  *
  * GET accountid, folder, since (highest UID the page knows, -1 when unknown).
+ * Combined Inbox: GET view=combined, since[<mailbox id>] (as above, per mailbox). JSON {ok, accounts: {id: {ok, new,
+ * newest, uidvalidity, unseen (Inbox count)} or {ok: false, error, halt}}}; {ok: false, error, halt} when all failed.
  * JSON {ok, new, newest, uidvalidity, unseen: {folder: count}} or {ok: false, error, halt}. One IMAP STATUS
  * round trip (plus a search limited to the new UIDs when there are some); nothing is fetched or marked read.
  * halt asks the page to stop checking (a sign-in to renew, an account no longer usable).
@@ -71,6 +73,45 @@ $since     = (int) GETPOST('since', 'int');
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read') || !empty($user->socid)) {
 	convomail_poll_json(array('ok' => false, 'error' => $langs->transnoentitiesnoconv('ConvomailPollForbidden'), 'halt' => true), 403);
+}
+
+// Combined Inbox: the Inbox of each of its mailboxes, each answering on its own (one that fails leaves the others)
+if (GETPOST('view', 'aZ09') === 'combined') {
+	dol_include_once('/convomail/class/convomailcombined.class.php');
+	convomail_release_session();
+	$sinces = array();
+	foreach ((array) GETPOST('since', 'array') as $id => $uid) {
+		$sinces[(int) $id] = (int) $uid;
+	}
+	$answers = array();
+	$failed = 0;
+	$halts = 0;
+	$firsterror = '';
+	foreach ((new ConvomailCombined($db))->mailboxes($user) as $id => $acc) {
+		if (!isset($sinces[$id])) {
+			continue;
+		}
+		$client = new ConvomailHordeMailboxClient($acc);
+		$client->setTimeout(15);
+		$poll = $client->pollFolder(ConvomailCombined::FOLDER, max(-1, $sinces[$id]), array());
+		$error = $client->getError();
+		$client->close();
+		if ($poll === false) {
+			$halt = ($error === $langs->trans('ConvomailOAuthReconnect', $acc->email));
+			$label = (string) ($acc->label ?: $acc->email);
+			$answers[$id] = array('ok' => false, 'error' => $label.': '.($error !== '' ? $error : 'Error'), 'halt' => $halt);
+			$failed++;
+			$halts += $halt ? 1 : 0;
+			$firsterror = $firsterror !== '' ? $firsterror : $answers[$id]['error'];
+			continue;
+		}
+		$answers[$id] = array('ok' => true, 'new' => (int) $poll['new'], 'newest' => (int) $poll['newest'], 'uidvalidity' => (string) $poll['uidvalidity'],
+			'unseen' => (int) ($poll['unseen'][ConvomailCombined::FOLDER] ?? 0));
+	}
+	if ($answers && $failed === count($answers)) {
+		convomail_poll_json(array('ok' => false, 'error' => $firsterror, 'halt' => $halts === $failed));
+	}
+	convomail_poll_json(array('ok' => true, 'accounts' => (object) $answers));
 }
 $account = convomail_get_usable_account($db, $user, $accountid);
 if (!$account || $folder === '') {

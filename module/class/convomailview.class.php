@@ -353,6 +353,134 @@ class ConvomailView
 	}
 
 	/**
+	 * File replies to project threads on their project, from a page of the list: at most $max, so the page stays
+	 * quick (CONVOMAIL_AUTOFILE_REPLIES, on by default; Inbox and Sent only)
+	 *
+	 * @param  DoliDB                                $db       Database handler
+	 * @param  User                                  $user     User
+	 * @param  ConvomailAccount                      $account  Mailbox
+	 * @param  ConvomailHordeMailboxClient           $client   Its connection
+	 * @param  string                                $folder   Folder listed
+	 * @param  array<int,array<string,mixed>>        $messages Rows of the page
+	 * @param  array<int,array<string,mixed>>        $resolved ConvomailProjectResolver::resolvePage() result, updated for the rows filed
+	 * @param  int                                   $max      Rows filed at most
+	 * @return array<int,array{eventid:int,projectid:int,subject:string}>
+	 */
+	public static function autoFile($db, User $user, ConvomailAccount $account, $client, $folder, array $messages, array &$resolved, $max = 10)
+	{
+		$filed = array();
+		$myemails = self::myEmails($db, $user, $account);
+		foreach ($messages as $m) {
+			if (count($filed) >= $max) {
+				break;
+			}
+			$r = $resolved[$m['uid']] ?? null;
+			if (!$r || !in_array($r['strength'], array(ConvomailProjectResolver::THREAD, ConvomailProjectResolver::CODE), true)) {
+				continue;
+			}
+			$full = $client->fetchMessage($folder, $m['uid'], false);
+			if ($full === false) {
+				continue;
+			}
+			$links = self::defaultLinks($db, $full, $myemails, $r['socid']);
+			$eventid = self::logMessage($db, $user, $account, $client, $folder, $m['uid'], $full, $links['socid'], $r['projectid'], $links['contactids'], true);
+			if ($eventid > 0) {
+				$filed[] = array('eventid' => $eventid, 'projectid' => $r['projectid'], 'subject' => $m['subject']);
+				$resolved[$m['uid']]['strength'] = ConvomailProjectResolver::LOGGED;
+				$resolved[$m['uid']]['eventid'] = $eventid;
+			}
+		}
+		return $filed;
+	}
+
+	/**
+	 * One row of the message list
+	 *
+	 * @param  array<string,mixed> $m Summary (listMessages(), or envelopes() for the Combined Inbox)
+	 * @param  array<string,mixed> $o href, accountid, folder, selected (bool), showto (bool: show recipients, for Sent and Drafts),
+	 *                                known (contact or company name of the sender, ''), resolved (project resolution or null),
+	 *                                projects (ConvomailProjectResolver::$projects), open (ConvomailTracker::opens() entry or null),
+	 *                                todaykey (Ymd today), mailbox (label of the mailbox shown on the row, '' for none)
+	 * @return string             HTML
+	 */
+	public static function listRow(array $m, array $o)
+	{
+		global $langs;
+
+		$showto = !empty($o['showto']);
+		// Web form mail: show the visitor (Reply-To), with the form's address after "via"
+		$via = $showto ? array() : (ConvomailMatcher::replyToOthers($m) ? $m['from'] : array());
+		$people = $showto ? $m['to'] : ConvomailMatcher::senders($m);
+		$r = $o['resolved'] ?? null;
+		$known = (string) ($o['known'] ?? '');
+		$classes = 'cm-row'.($m['seen'] ? '' : ' unread').(!empty($o['selected']) ? ' selected' : '').($m['flagged'] ? ' flagged' : '').($known !== '' ? ' cm-row-contact' : '');
+		$h = '<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-accountid="'.((int) $o['accountid']).'" data-folder="'.dol_escape_htmltag($o['folder']).'" data-href="'.dol_escape_htmltag($o['href']).'">';
+		$h .= '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
+		$h .= '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
+		$h .= '<a class="cm-row-main" draggable="false" href="'.dol_escape_htmltag($o['href']).'">';
+		$h .= '<span class="cm-row-top"><span class="cm-from">';
+		if ($known !== '') {
+			$h .= '<span class="fas fa-address-card cm-contact-mark" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailRowFromContact', $known)).'"></span> ';
+		}
+		$h .= dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
+		if (!empty($via)) {
+			$h .= ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
+		}
+		$h .= '</span>';
+		$isToday = $m['date'] && dol_print_date($m['date'], '%Y%m%d', 'tzuserrel') === $o['todaykey'];
+		$h .= '<span class="cm-date">'.($m['date'] ? dol_print_date($m['date'], $isToday ? '%H:%M' : 'day', 'tzuserrel') : '').'</span></span>';
+		$h .= '<span class="cm-row-subject">';
+		if (($o['mailbox'] ?? '') !== '') {
+			$h .= '<span class="cm-row-mailbox" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailCombinedMailboxLabel', $o['mailbox'])).'">'.dol_escape_htmltag($o['mailbox']).'</span>';
+		}
+		$h .= '<span class="cm-subj">'.dol_escape_htmltag($m['subject'] !== '' ? $m['subject'] : $langs->trans('ConvomailNoSubject')).'</span>';
+		if (($m['snippet'] ?? '') !== '') {
+			$h .= '<span class="cm-snippet"> &ndash; '.dol_escape_htmltag($m['snippet']).'</span>';
+		}
+		$h .= '</span>';
+		$h .= '</a>';
+		$h .= '<span class="cm-row-tags">';
+		if (!empty($o['open'])) {
+			$h .= ConvomailTracker::openIcon($o['open']);
+		}
+		if ($m['has_attachments']) {
+			$h .= img_picto($langs->trans('ConvomailHasAttachments'), 'fa-paperclip', 'class="opacitymedium"');
+		}
+		if ($r && $r['projectid'] > 0 && isset($o['projects'][$r['projectid']])) {
+			$h .= self::projectBadge($r['projectid'], $o['projects'][$r['projectid']], $r['strength'] === ConvomailProjectResolver::SUGGESTED);
+		}
+		if ($r && $r['strength'] === ConvomailProjectResolver::LOGGED) {
+			$h .= '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $r['eventid']).'" title="'.dol_escape_htmltag($langs->trans('ConvomailLoggedOpenEvent')).'">'.img_picto('', 'action', 'class="opacitymedium"').'</a>';
+		}
+		$h .= '</span>';
+		$h .= '</div>';
+		return $h;
+	}
+
+	/**
+	 * Texts of the new-mail checks for the list script (%s stays for the script to fill: count, error)
+	 *
+	 * @return string JSON
+	 */
+	public static function pollTexts()
+	{
+		global $langs;
+
+		return json_encode(array(
+			'one' => $langs->transnoentitiesnoconv('ConvomailPollNewOne'),
+			'many' => $langs->transnoentitiesnoconv('ConvomailPollNewMany', '%s'),
+			'show' => $langs->transnoentitiesnoconv('ConvomailPollShow'),
+			'changed' => $langs->transnoentitiesnoconv('ConvomailPollChanged'),
+			'error' => $langs->transnoentitiesnoconv('ConvomailPollError', '%s'),
+			'stopped' => $langs->transnoentitiesnoconv('ConvomailPollStopped', '%s'),
+			'session' => $langs->transnoentitiesnoconv('ConvomailPollSession'),
+			'retry' => $langs->transnoentitiesnoconv('ConvomailPollRetry'),
+			'reload' => $langs->transnoentitiesnoconv('ConvomailPollReload'),
+			'dismiss' => $langs->transnoentitiesnoconv('CloseWindow'),
+		));
+	}
+
+	/**
 	 * HTML of one message: toolbar, subject, people, project line, attachments, sandboxed body
 	 *
 	 * @param  ConvomailAccount       $account Account
@@ -375,9 +503,11 @@ class ConvomailView
 			self::$error = $langs->trans('ConvomailMessageNotFound');
 			return false;
 		}
-		// Opening marks it read: the top-bar count is worked out again
+		// Opening marks it read: the top-bar count is worked out again, the Combined Inbox shows it read
 		dol_include_once('/convomail/class/convomailunread.class.php');
+		dol_include_once('/convomail/class/convomailcombined.class.php');
 		ConvomailUnread::clearCache($user);
+		ConvomailCombined::patchCache($user, (int) $account->id, array((int) $uid), 'read');
 		$message['msgid'] = self::msgid($account, $folder, $uid, $message);
 
 		$myemails = self::myEmails($db, $user, $account);
@@ -395,10 +525,10 @@ class ConvomailView
 		$compose = dol_buildpath('/convomail/compose.php', 1).$base;
 		$pageurl = dol_buildpath('/convomail/message.php', 1).$base;
 
-		$h = '<div class="cm-view" data-uid="'.((int) $uid).'" data-flagged="'.($message['flagged'] ? 1 : 0).'"';
+		$h = '<div class="cm-view" data-uid="'.((int) $uid).'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-flagged="'.($message['flagged'] ? 1 : 0).'"';
 		if ($context === 'page') {
 			// The full-page view runs its toolbar itself (js/convomail.js, bindPageView)
-			$h .= ' data-page="1" data-token="'.newToken().'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'"';
+			$h .= ' data-page="1" data-token="'.newToken().'"';
 			$h .= ' data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1)).'"';
 			$h .= ' data-list="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1).'?accountid='.((int) $account->id).'&folder='.urlencode($folder)).'"';
 			$h .= ' data-self="'.dol_escape_htmltag($pageurl).'"';

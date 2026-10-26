@@ -90,17 +90,19 @@ class ConvomailUnread
 	/**
 	 * Mailboxes the user may read (own and shared, enabled), and which of them are counted
 	 *
-	 * @param  User                                                             $u User
-	 * @return array<int,array{account:ConvomailAccount,counted:bool,own:bool}>     By account id
+	 * @param  User                                                             $u     User
+	 * @param  string                                                           $param User param of the choice: ids, "none", or unset for the own
+	 *                                                                                 mailboxes (PARAM_ACCOUNTS; the Combined Inbox has its own)
+	 * @return array<int,array{account:ConvomailAccount,counted:bool,own:bool}>         By account id
 	 */
-	public function mailboxes(User $u)
+	public function mailboxes(User $u, $param = self::PARAM_ACCOUNTS)
 	{
 		$out = array();
 		$list = (new ConvomailAccount($this->db))->fetchAllUsableBy($u, true);
 		if (!is_array($list)) {
 			return $out;
 		}
-		$chosen = (string) ($u->conf->{self::PARAM_ACCOUNTS} ?? '');
+		$chosen = (string) ($u->conf->{$param} ?? '');
 		$ids = ($chosen === '') ? null : ($chosen === 'none' ? array() : array_map('intval', explode(',', $chosen)));
 		foreach ($list as $acc) {
 			$own = ((int) $acc->fk_user === (int) $u->id);
@@ -205,16 +207,18 @@ class ConvomailUnread
 	 *
 	 * @param  User                                       $u       User
 	 * @param  array<int,int>                             $maxuids Newest counted UID by mailbox id (summary()'s accounts[].maxuid)
+	 * @param  ?string                                    $mode    all or contacts (null: the user's choice for the indicator)
+	 * @param  string                                     $param   User param choosing the mailboxes (see mailboxes())
 	 * @return array{marked:int,errors:array<int,string>}
 	 */
-	public function markAllRead(User $u, array $maxuids)
+	public function markAllRead(User $u, array $maxuids, $mode = null, $param = self::PARAM_ACCOUNTS)
 	{
 		$out = array('marked' => 0, 'errors' => array());
-		$mode = self::mode($u);
+		$mode = $mode ?? self::mode($u);
 		if ($mode === 'off') {
 			return $out;
 		}
-		foreach ($this->mailboxes($u) as $id => $b) {
+		foreach ($this->mailboxes($u, $param) as $id => $b) {
 			$maxuid = (int) ($maxuids[$id] ?? 0);
 			if (!$b['counted'] || $maxuid <= 0) {
 				continue;

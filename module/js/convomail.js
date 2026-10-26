@@ -684,41 +684,79 @@
 		bindLayout(app);
 		var rowsBox = qs('.cm-rows', app);
 
-		function rows() { return qsa('.cm-row', rowsBox); }
-		function rowByUid(uid) { return qs('.cm-row[data-uid="' + uid + '"]', rowsBox); }
-		function currentUid() {
-			var v = qs('.cm-view', pane);
-			return v ? parseInt(v.getAttribute('data-uid'), 10) : 0;
+		// Rows are known by "mailbox:uid": the Combined Inbox (data-view="combined") lists several mailboxes, and
+		// each row, the open message and every action keep their own mailbox
+		var combined = app.getAttribute('data-view') === 'combined';
+		function keyOf(row) { return row.getAttribute('data-accountid') + ':' + row.getAttribute('data-uid'); }
+		function parseKey(key) {
+			var p = String(key).split(':');
+			return { acc: p[0], uid: parseInt(p[1], 10) };
 		}
-		function selectedUids() {
-			var list = qsa('.cm-check:checked', rowsBox).map(function (c) { return parseInt(c.value, 10); });
-			if (!list.length && currentUid()) {
-				list = [currentUid()];
+		function rows() { return qsa('.cm-row', rowsBox); }
+		function rowByKey(key) {
+			var k = parseKey(key);
+			return qs('.cm-row[data-accountid="' + CSS.escape(k.acc) + '"][data-uid="' + k.uid + '"]', rowsBox);
+		}
+		function currentKey() {
+			var v = qs('.cm-view', pane);
+			return v ? v.getAttribute('data-accountid') + ':' + v.getAttribute('data-uid') : '';
+		}
+		function selectedKeys() {
+			var list = qsa('.cm-check:checked', rowsBox).map(function (c) { return keyOf(c.closest('.cm-row')); });
+			if (!list.length && currentKey()) {
+				list = [currentKey()];
 			}
 			return list;
 		}
-
-		function post(action, uids, extra) {
-			var fd = new FormData();
-			fd.append('token', app.getAttribute('data-token'));
-			fd.append('accountid', app.getAttribute('data-accountid'));
-			fd.append('folder', app.getAttribute('data-folder'));
-			fd.append('action', action);
-			uids.forEach(function (u) { fd.append('uids[]', u); });
-			Object.keys(extra || {}).forEach(function (k) { fd.append(k, extra[k]); });
-			return fetch(app.getAttribute('data-ajax-action'), { method: 'POST', body: fd, credentials: 'same-origin' })
-				.then(function (r) { return r.json(); })
-				.then(function (data) {
-					if (!data.ok) {
-						notify(data.error || 'Error', false);
-					}
-					return data;
-				});
+		function folderOf(key) {
+			var row = rowByKey(key);
+			return (row && row.getAttribute('data-folder')) || app.getAttribute('data-folder');
 		}
 
-		function decrementUnread() {
+		// One request per mailbox. Answers {ok: one went through, done: keys changed, removed: keys gone, message}
+		function post(action, keys, extra) {
+			var groups = {};
+			keys.forEach(function (key) {
+				var k = parseKey(key);
+				(groups[k.acc] = groups[k.acc] || []).push(k.uid);
+			});
+			return Promise.all(Object.keys(groups).map(function (acc) {
+				var fd = new FormData();
+				fd.append('token', app.getAttribute('data-token'));
+				fd.append('accountid', acc);
+				fd.append('folder', folderOf(acc + ':' + groups[acc][0]));
+				fd.append('action', action);
+				groups[acc].forEach(function (u) { fd.append('uids[]', u); });
+				Object.keys(extra || {}).forEach(function (k) { fd.append(k, extra[k]); });
+				return fetch(app.getAttribute('data-ajax-action'), { method: 'POST', body: fd, credentials: 'same-origin' })
+					.then(function (r) { return r.json(); })
+					.catch(function () { return { ok: false, error: 'Error' }; })
+					.then(function (data) {
+						if (!data.ok) {
+							notify(data.error || 'Error', false);
+						}
+						data.acc = acc;
+						data.sent = groups[acc];
+						return data;
+					});
+			})).then(function (answers) {
+				var out = { ok: false, done: [], removed: [], message: '' };
+				answers.forEach(function (data) {
+					if (!data.ok) {
+						return;
+					}
+					out.ok = true;
+					data.sent.forEach(function (u) { out.done.push(data.acc + ':' + u); });
+					(data.removed || []).forEach(function (u) { out.removed.push(data.acc + ':' + u); });
+					out.message = data.message || out.message;
+				});
+				return out;
+			});
+		}
+
+		function decrementUnread(acc) {
 			window.dispatchEvent(new CustomEvent('convomail:unread-refresh'));	// the top-bar count
-			var badge = qs('.cm-count[data-folder="' + CSS.escape(app.getAttribute('data-folder')) + '"]', app);
+			var badge = qs('.cm-count[data-accountid="' + CSS.escape(String(acc)) + '"][data-folder="' + CSS.escape(app.getAttribute('data-folder')) + '"]', app);
 			if (badge) {
 				var n = parseInt(badge.textContent, 10) - 1;
 				if (n > 0) {
@@ -729,13 +767,13 @@
 			}
 		}
 
-		function setSelected(uid) {
-			rows().forEach(function (r) { r.classList.toggle('selected', parseInt(r.getAttribute('data-uid'), 10) === uid); });
-			var row = rowByUid(uid);
+		function setSelected(key) {
+			rows().forEach(function (r) { r.classList.toggle('selected', keyOf(r) === key); });
+			var row = rowByKey(key);
 			if (row) {
 				if (row.classList.contains('unread')) {
 					row.classList.remove('unread');
-					decrementUnread();
+					decrementUnread(parseKey(key).acc);
 				}
 				row.scrollIntoView({ block: 'nearest' });
 			}
@@ -745,9 +783,9 @@
 			pane.innerHTML = '<div class="cm-empty cm-pane-empty"></div>';
 		}
 
-		function openMessage(uid, showimages) {
-			var params = '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid'))
-				+ '&folder=' + encodeURIComponent(app.getAttribute('data-folder')) + '&uid=' + uid;
+		function openMessage(key, showimages) {
+			var k = parseKey(key);
+			var params = '?accountid=' + encodeURIComponent(k.acc) + '&folder=' + encodeURIComponent(folderOf(key)) + '&uid=' + k.uid;
 			if (window.matchMedia('(max-width: 767px)').matches) {
 				window.location.href = app.getAttribute('data-page-message') + params;
 				return;
@@ -761,25 +799,25 @@
 					pane.scrollTop = 0;
 					bindFrames(pane);
 					loadThread(pane);
-					setSelected(uid);
-					history.replaceState(null, '', app.getAttribute('data-self') + '&uid=' + uid);
+					setSelected(key);
+					history.replaceState(null, '', app.getAttribute('data-self') + (combined ? '&openaccount=' + encodeURIComponent(k.acc) : '') + '&uid=' + k.uid);
 				});
 		}
 
-		function removeRows(uids) {
-			var cur = currentUid();
+		function removeRows(keys) {
+			var cur = currentKey();
 			var next = null;
-			uids.forEach(function (u) {
-				var row = rowByUid(u);
+			keys.forEach(function (key) {
+				var row = rowByKey(key);
 				if (row) {
-					if (u === cur) {
+					if (key === cur) {
 						var sib = row.nextElementSibling || row.previousElementSibling;
-						next = sib && sib.classList.contains('cm-row') ? parseInt(sib.getAttribute('data-uid'), 10) : null;
+						next = sib && sib.classList.contains('cm-row') ? keyOf(sib) : null;
 					}
 					row.remove();
 				}
 			});
-			if (uids.indexOf(cur) !== -1) {
+			if (keys.indexOf(cur) !== -1) {
 				if (next) {
 					openMessage(next);
 				} else {
@@ -789,24 +827,24 @@
 		}
 
 		// Reload the rows of the current page (after filing: project chips, logged state, thread replies filed
-		// with it), keeping the open message selected, ticked rows and the scroll position
-		function refreshRows() {
-			return fetch(app.getAttribute('data-self'), { credentials: 'same-origin' })
+		// with it), keeping the open message selected, ticked rows and the scroll position. fresh: the Combined
+		// Inbox reads the mailboxes again instead of its one-minute cache (new mail)
+		function refreshRows(fresh) {
+			return fetch(app.getAttribute('data-self') + (fresh && combined ? '&refresh=1' : ''), { credentials: 'same-origin' })
 				.then(function (r) { return r.ok ? r.text() : ''; })
 				.then(function (html) {
 					var fresh = html ? new DOMParser().parseFromString(html, 'text/html').querySelector('.cm-rows') : null;
 					if (!fresh) {
 						return;
 					}
-					var cur = currentUid();
-					var ticked = qsa('.cm-check:checked', rowsBox).map(function (c) { return c.value; });
+					var cur = currentKey();
+					var ticked = qsa('.cm-check:checked', rowsBox).map(function (c) { return keyOf(c.closest('.cm-row')); });
 					var scroll = rowsBox.scrollTop;
 					rowsBox.innerHTML = fresh.innerHTML;
 					rows().forEach(function (r) {
-						var uid = r.getAttribute('data-uid');
-						r.classList.toggle('selected', parseInt(uid, 10) === cur);
+						r.classList.toggle('selected', keyOf(r) === cur);
 						var box = qs('.cm-check', r);
-						if (box && ticked.indexOf(uid) !== -1) {
+						if (box && ticked.indexOf(keyOf(r)) !== -1) {
 							box.checked = true;
 						}
 					});
@@ -833,7 +871,7 @@
 		// "Mark all as read" in the top bar: show the rows read (and the folder counts) without a reload
 		window.addEventListener('convomail:unread-marked', function () {
 			if (!qs('.cm-check:checked', rowsBox)) {
-				refreshRows();
+				refreshRows(true);
 			}
 		});
 
@@ -856,18 +894,32 @@
 			} catch (e) { /* the defaults below */ }
 			var t = function (key, arg) { return String(texts[key] || key).replace('%s', arg === undefined ? '' : arg); };
 			var folder = app.getAttribute('data-folder');
-			var since = parseInt(app.getAttribute('data-maxuid'), 10);
-			if (isNaN(since)) {
-				since = -1;
+			// Newest UID the page knows, per mailbox (-1: not known yet, a search page)
+			var since = {};
+			if (combined) {
+				try {
+					since = JSON.parse(app.getAttribute('data-maxuids') || '{}');
+				} catch (e) {
+					since = {};
+				}
+			} else {
+				since[app.getAttribute('data-accountid')] = parseInt(app.getAttribute('data-maxuid'), 10);
 			}
-			var uidvalidity = '';
-			var waiting = -1;	// newest UID behind the notice bar
+			Object.keys(since).forEach(function (acc) {
+				since[acc] = parseInt(since[acc], 10);
+				if (isNaN(since[acc])) {
+					since[acc] = -1;
+				}
+			});
+			var uidvalidity = {};
+			var waiting = {};	// newest UIDs behind the notice bar
 			var failures = 0;
 			var timer = null;
 			var busy = false;
 			var stopped = false;
 			var lastCheck = Date.now();
 			var baseTitle = document.title;
+			var anyUnknown = function () { return Object.keys(since).some(function (acc) { return since[acc] < 0; }); };
 
 			function schedule(delay) {
 				clearTimeout(timer);
@@ -900,7 +952,7 @@
 				close.type = 'button';
 				close.className = 'cm-notice-close';
 				close.title = t('dismiss');
-				close.textContent = '\u00d7';
+				close.textContent = '×';
 				close.addEventListener('click', hideNotice);
 				notice.appendChild(close);
 				notice.hidden = false;
@@ -909,36 +961,48 @@
 				notice.hidden = true;
 				notice.innerHTML = '';
 			}
+			// Unread count of a folder link (of a mailbox, in the Combined Inbox)
+			function setCount(name, acc, n) {
+				var link = qs('.cm-folder[data-name="' + CSS.escape(name) + '"]' + (acc ? '[data-accountid="' + CSS.escape(String(acc)) + '"]' : ''), app);
+				if (!link) {
+					return;
+				}
+				var badge = qs('.cm-count', link);
+				if (n > 0 && !badge) {
+					badge = document.createElement('span');
+					badge.className = 'cm-count';
+					badge.setAttribute('data-folder', name);
+					badge.setAttribute('data-accountid', acc || app.getAttribute('data-accountid'));
+					link.appendChild(badge);
+				}
+				if (badge) {
+					if (n > 0) {
+						badge.textContent = n;
+					} else {
+						badge.remove();
+					}
+				}
+			}
 			function updateCounts(unseen) {
 				Object.keys(unseen || {}).forEach(function (name) {
-					var link = qs('.cm-folder[data-name="' + CSS.escape(name) + '"]', app);
-					if (!link) {
-						return;
-					}
 					var n = parseInt(unseen[name], 10) || 0;
-					var badge = qs('.cm-count', link);
-					if (n > 0 && !badge) {
-						badge = document.createElement('span');
-						badge.className = 'cm-count';
-						badge.setAttribute('data-folder', name);
-						link.appendChild(badge);
-					}
-					if (badge) {
-						if (n > 0) {
-							badge.textContent = n;
-						} else {
-							badge.remove();
-						}
-					}
+					setCount(name, null, n);
 					if (name === folder) {
 						document.title = (n > 0 ? '(' + n + ') ' : '') + baseTitle;
 					}
 				});
 			}
+			function copy(o) { return JSON.parse(JSON.stringify(o)); }
+			function advance(newest) {
+				Object.keys(newest).forEach(function (acc) { since[acc] = Math.max(since[acc], newest[acc]); });
+				if (combined) {
+					app.setAttribute('data-markuids', JSON.stringify(since));	// "Mark all as read" covers what is shown
+				}
+			}
 			function showNew() {
 				if (app.getAttribute('data-page') === '0' && app.getAttribute('data-searching') === '0') {
-					var before = since;
-					since = Math.max(since, waiting);
+					var before = copy(since);
+					advance(waiting);
 					hideNotice();
 					insertNew(before);
 				} else {
@@ -946,9 +1010,10 @@
 				}
 			}
 			function insertNew(before) {
-				return refreshRows().then(function () {
+				return refreshRows(true).then(function () {
 					rows().forEach(function (r) {
-						if (parseInt(r.getAttribute('data-uid'), 10) > before) {
+						var acc = r.getAttribute('data-accountid');
+						if (before[acc] !== undefined && parseInt(r.getAttribute('data-uid'), 10) > before[acc]) {
 							r.classList.add('cm-row-new');
 						}
 					});
@@ -978,8 +1043,13 @@
 				}
 				busy = true;
 				lastCheck = Date.now();
-				var q = url + '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid'))
-					+ '&folder=' + encodeURIComponent(folder) + '&since=' + since;
+				var q;
+				if (combined) {
+					q = url + '?view=combined' + Object.keys(since).map(function (acc) { return '&since[' + encodeURIComponent(acc) + ']=' + since[acc]; }).join('');
+				} else {
+					q = url + '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid'))
+						+ '&folder=' + encodeURIComponent(folder) + '&since=' + since[app.getAttribute('data-accountid')];
+				}
 				fetch(q, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
 					.then(function (r) {
 						var json = (r.headers.get('Content-Type') || '').indexOf('json') !== -1;
@@ -996,27 +1066,63 @@
 						if (notice.classList.contains('cm-notice-error')) {
 							hideNotice();
 						}
-						updateCounts(data.unseen);
-						// A new UIDVALIDITY, or UIDs going down (only possible then): the folder was recreated on the server
-						if ((uidvalidity !== '' && data.uidvalidity !== uidvalidity) || (since >= 0 && data.newest < since)) {
+						// Per mailbox: {ok, new, newest, uidvalidity} (one mailbox outside the Combined Inbox)
+						var answers = {};
+						if (combined) {
+							answers = data.accounts || {};
+						} else {
+							answers[app.getAttribute('data-accountid')] = data;
+							updateCounts(data.unseen);
+						}
+						var total = 0;
+						var unseen = 0;
+						var newest = {};
+						var errors = [];
+						var changed = false;
+						Object.keys(answers).forEach(function (acc) {
+							var a = answers[acc];
+							if (!a.ok) {
+								errors.push(a.error || 'Error');
+								return;
+							}
+							if (combined) {
+								unseen += parseInt(a.unseen, 10) || 0;
+								setCount(folder, acc, parseInt(a.unseen, 10) || 0);
+							}
+							// A new UIDVALIDITY, or UIDs going down (only possible then): the folder was recreated on the server
+							if ((uidvalidity[acc] && a.uidvalidity !== uidvalidity[acc]) || (since[acc] >= 0 && a.newest < since[acc])) {
+								changed = true;
+							}
+							uidvalidity[acc] = a.uidvalidity;
+							if (since[acc] < 0) {
+								since[acc] = a.newest;	// first check of a search page: the baseline
+							} else if (a.new > 0) {
+								total += a.new;
+								newest[acc] = a.newest;
+							}
+						});
+						if (combined) {
+							document.title = (unseen > 0 ? '(' + unseen + ') ' : '') + baseTitle;
+						}
+						if (changed) {
 							stopped = true;
 							showNotice(t('changed'), [{ label: t('reload'), run: function () { window.location.reload(); } }]);
 							return;
 						}
-						uidvalidity = data.uidvalidity;
-						if (since < 0) {
-							since = data.newest;	// first check of a search page: the baseline
-						} else if (data.new > 0) {
+						if (total > 0) {
 							window.dispatchEvent(new CustomEvent('convomail:unread-refresh'));	// the top-bar count
 							if (quiet()) {
-								var before = since;
-								since = data.newest;
+								var before = copy(since);
+								advance(newest);
 								hideNotice();
 								insertNew(before);
 							} else {
-								waiting = data.newest;
-								showNotice(data.new === 1 ? t('one') : t('many', data.new), [{ label: t('show'), run: showNew }]);
+								Object.keys(newest).forEach(function (acc) { waiting[acc] = Math.max(waiting[acc] || 0, newest[acc]); });
+								showNotice(total === 1 ? t('one') : t('many', total), [{ label: t('show'), run: showNew }]);
 							}
+						} else if (errors.length) {
+							// Some mailboxes of the Combined Inbox did not answer: say which, keep checking the others
+							showNotice(t('error', errors.join(' · ')), [], true);
 						}
 						schedule(interval);
 					})
@@ -1036,25 +1142,25 @@
 				}
 			});
 			// A search page has no baseline yet: take it soon
-			schedule(since < 0 ? 2000 : interval);
+			schedule(anyUnknown() ? 2000 : interval);
 		})();
 
-		function run(action, uids, extra) {
-			if (!uids.length) {
+		function run(action, keys, extra) {
+			if (!keys.length) {
 				return Promise.resolve(null);
 			}
-			if (action === 'delete' && uids.length > 1 && !window.confirm(app.getAttribute('data-confirm-delete'))) {
+			if (action === 'delete' && keys.length > 1 && !window.confirm(app.getAttribute('data-confirm-delete'))) {
 				return Promise.resolve(null);
 			}
-			return post(action, uids, extra).then(function (data) {
+			return post(action, keys, extra).then(function (data) {
 				if (!data.ok) {
 					return;
 				}
-				if (data.removed && data.removed.length) {
+				if (data.removed.length) {
 					removeRows(data.removed);
 				}
-				uids.forEach(function (u) {
-					var row = rowByUid(u);
+				data.done.forEach(function (key) {
+					var row = rowByKey(key);
 					if (!row) {
 						return;
 					}
@@ -1063,11 +1169,11 @@
 					if (action === 'flag') { row.classList.add('flagged'); }
 					if (action === 'unflag') { row.classList.remove('flagged'); }
 				});
-				if (action === 'unread' && uids.indexOf(currentUid()) !== -1) {
+				if (action === 'unread' && data.done.indexOf(currentKey()) !== -1) {
 					emptyPane();
 				}
-				if ((action === 'flag' || action === 'unflag' || action === 'log') && uids.indexOf(currentUid()) !== -1) {
-					openMessage(currentUid());
+				if ((action === 'flag' || action === 'unflag' || action === 'log') && data.done.indexOf(currentKey()) !== -1) {
+					openMessage(currentKey());
 				}
 				if (action === 'log') {
 					refreshRows();
@@ -1082,10 +1188,10 @@
 		 * Folders (ajax/folder.php): New folder, rename and delete an empty folder, "New folder..." in the Move
 		 * menus, and dragging messages from the list onto a folder
 		 */
-		function folderCall(action, fields) {
+		function folderCall(action, fields, acc) {
 			var fd = new FormData();
 			fd.append('token', app.getAttribute('data-token'));
-			fd.append('accountid', app.getAttribute('data-accountid'));
+			fd.append('accountid', acc || app.getAttribute('data-accountid'));
 			fd.append('action', action);
 			Object.keys(fields).forEach(function (k) { fd.append(k, fields[k]); });
 			return fetch(app.getAttribute('data-ajax-folder'), { method: 'POST', body: fd, credentials: 'same-origin' })
@@ -1143,8 +1249,9 @@
 			});
 			input.addEventListener('blur', function () { setTimeout(function () { if (!input.disabled) { close(); } }, 150); });
 		}
-		// Destination of a Move menu: the chosen folder, or a new one ("New folder..."); null when cancelled
-		function pickFolder(sel) {
+		// Destination of a Move menu: the chosen folder, or a new one ("New folder..."); null when cancelled.
+		// acc: the mailbox of the menu (the open message's, for the reading pane's)
+		function pickFolder(sel, acc) {
 			if (sel.value !== '__new__') {
 				return Promise.resolve(sel.value);
 			}
@@ -1153,7 +1260,7 @@
 			if (!name || !name.trim()) {
 				return Promise.resolve(null);
 			}
-			return folderCall('create', { name: name.trim() }).then(function (res) {
+			return folderCall('create', { name: name.trim() }, acc).then(function (res) {
 				app.setAttribute('data-folders-changed', '1');
 				return res.name;
 			}, function (e) {
@@ -1161,13 +1268,34 @@
 				return null;
 			});
 		}
-		function moveTo(sel, uids) {
-			pickFolder(sel).then(function (dest) {
+		// The Combined Inbox's Move menu says the mailbox ("3|Projects"); an email moves only within its own mailbox,
+		// so the emails of the other mailboxes stay where they are, and the user is told
+		function onlyMailbox(keys, acc) {
+			if (!acc) {
+				return keys;
+			}
+			var mine = keys.filter(function (key) { return parseKey(key).acc === String(acc); });
+			if (mine.length < keys.length) {
+				notify(app.getAttribute('data-other-mailbox').replace('%s', keys.length - mine.length), false);
+			}
+			return mine;
+		}
+		function moveTo(sel, keys, acc) {
+			var value = sel.value;
+			if (combined && !acc) {
+				var bar = value.indexOf('|');
+				acc = value.slice(0, bar);
+				value = value.slice(bar + 1);
 				sel.value = '';
-				if (!dest) {
+			}
+			var dest = value === '__new__' ? pickFolder(sel, acc) : Promise.resolve(value);
+			dest.then(function (dest) {
+				sel.value = '';
+				keys = onlyMailbox(keys, acc);
+				if (!dest || !keys.length) {
 					return;
 				}
-				run('move', uids, { dest: dest }).then(function () {
+				run('move', keys, { dest: dest }).then(function () {
 					if (app.getAttribute('data-folders-changed')) {
 						window.location.reload();	// show the new folder in the list
 					}
@@ -1395,21 +1523,33 @@
 				return;
 			}
 			var check = qs('.cm-check', row);
-			dragging = (check && check.checked) ? selectedUids() : [parseInt(row.getAttribute('data-uid'), 10)];
+			dragging = (check && check.checked) ? selectedKeys() : [keyOf(row)];
 			ev.dataTransfer.effectAllowed = 'move';
 			ev.dataTransfer.setData('text/plain', dragging.length + ' message' + (dragging.length > 1 ? 's' : ''));
 			app.classList.add('cm-dragging');
-			dragging.forEach(function (u) {
-				var r = rowByUid(u);
+			dragging.forEach(function (key) {
+				var r = rowByKey(key);
 				if (r) {
 					r.classList.add('cm-dragged');
 				}
 			});
 		});
 		rowsBox.addEventListener('dragend', endDrag);
+		// A folder messages may be dropped on: not the one listed; in the Combined Inbox, a folder of a mailbox
+		function dropFolder(ev) {
+			var f = ev.target.closest('.cm-folder[data-name]');
+			if (!dragging || !f || f.getAttribute('data-name') === app.getAttribute('data-folder') || (combined && !f.getAttribute('data-accountid'))) {
+				return null;
+			}
+			// Not a target when none of the dragged emails is in that folder's mailbox
+			if (combined && !dragging.some(function (key) { return parseKey(key).acc === f.getAttribute('data-accountid'); })) {
+				return null;
+			}
+			return f;
+		}
 		folderBox.addEventListener('dragover', function (ev) {
-			var f = ev.target.closest('.cm-folder');
-			if (!dragging || !f || f.getAttribute('data-name') === app.getAttribute('data-folder')) {
+			var f = dropFolder(ev);
+			if (!f) {
 				return;
 			}
 			ev.preventDefault();
@@ -1433,14 +1573,16 @@
 			}
 		});
 		folderBox.addEventListener('drop', function (ev) {
-			var f = ev.target.closest('.cm-folder');
-			if (!dragging || !f) {
+			var f = dropFolder(ev);
+			if (!f) {
 				return;
 			}
 			ev.preventDefault();
-			var uids = dragging;
+			var keys = onlyMailbox(dragging, f.getAttribute('data-accountid'));
 			endDrag();
-			run('move', uids, { dest: f.getAttribute('data-name') });
+			if (keys.length) {
+				run('move', keys, { dest: f.getAttribute('data-name') });
+			}
 		});
 
 		// Rows: open, star, select
@@ -1449,10 +1591,10 @@
 			if (!row) {
 				return;
 			}
-			var uid = parseInt(row.getAttribute('data-uid'), 10);
+			var key = keyOf(row);
 			if (ev.target.closest('.cm-star')) {
 				ev.preventDefault();
-				run(row.classList.contains('flagged') ? 'unflag' : 'flag', [uid]);
+				run(row.classList.contains('flagged') ? 'unflag' : 'flag', [key]);
 				return;
 			}
 			if (ev.target.closest('.cm-check') || ev.target.closest('.cm-row-tags a')) {
@@ -1462,7 +1604,7 @@
 				return;	// let the browser open the link in a new tab
 			}
 			ev.preventDefault();
-			openMessage(uid);
+			openMessage(key);
 		});
 
 		var checkall = qs('.cm-checkall', app);
@@ -1478,13 +1620,45 @@
 			if (el.tagName === 'SELECT') {
 				el.addEventListener('change', function () {
 					if (el.value) {
-						moveTo(el, selectedUids());
+						moveTo(el, selectedKeys(), null);
 					}
 				});
 			} else {
-				el.addEventListener('click', function () { run(action, selectedUids()); });
+				el.addEventListener('click', function () { run(action, selectedKeys()); });
 			}
 		});
+		// Combined Inbox: every unread email of its Inboxes up to the newest shown, then the list again
+		var markall = qs('[data-cm-markall]', app);
+		if (markall) {
+			markall.addEventListener('click', function () {
+				if (!window.confirm(app.getAttribute('data-markall-confirm'))) {
+					return;
+				}
+				var uids = {};
+				try {
+					uids = JSON.parse(app.getAttribute('data-markuids') || '{}');
+				} catch (e) {
+					uids = {};
+				}
+				var fd = new FormData();
+				fd.append('token', app.getAttribute('data-token'));
+				fd.append('action', 'markread');
+				Object.keys(uids).forEach(function (acc) {
+					if (uids[acc] > 0) {
+						fd.append('maxuid[' + acc + ']', uids[acc]);
+					}
+				});
+				markall.disabled = true;
+				fetch(app.getAttribute('data-ajax-combined'), { method: 'POST', body: fd, credentials: 'same-origin' })
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						(res.errors || []).forEach(function (e) { notify(e, false); });
+						window.dispatchEvent(new CustomEvent('convomail:unread-refresh'));
+						window.location.href = app.getAttribute('data-folder-url') + '&refresh=1';	// rows and counts as they are now
+					})
+					.catch(function () { markall.disabled = false; });
+			});
+		}
 
 		// Reading pane toolbar (delegated: the pane is replaced on each open)
 		pane.addEventListener('click', function (ev) {
@@ -1496,20 +1670,20 @@
 				if (action === 'log') {
 					extra = { projectid: btn.getAttribute('data-projectid'), socid: btn.getAttribute('data-socid'), contactids: btn.getAttribute('data-contactids') || '' };
 				}
-				run(action, [currentUid()], extra);
+				run(action, [currentKey()], extra);
 				return;
 			}
 			if (ev.target.closest('[data-cm-showimages]')) {
 				ev.preventDefault();
-				openMessage(currentUid(), true);
+				openMessage(currentKey(), true);
 			}
 		});
 		// Attachments filed from the "From this email" panel: show the message again (its log state may have changed)
-		pane.addEventListener('convomail:reload', function () { openMessage(currentUid()); });
+		pane.addEventListener('convomail:reload', function () { openMessage(currentKey()); });
 		pane.addEventListener('change', function (ev) {
 			var sel = ev.target.closest('select[data-cm-action="move"]');
 			if (sel && sel.value) {
-				moveTo(sel, [currentUid()]);
+				moveTo(sel, [currentKey()], parseKey(currentKey()).acc);
 			}
 		});
 
@@ -1520,8 +1694,8 @@
 				return;
 			}
 			var list = rows();
-			var cur = currentUid();
-			var idx = list.findIndex(function (r) { return parseInt(r.getAttribute('data-uid'), 10) === cur; });
+			var cur = currentKey();
+			var idx = list.findIndex(function (r) { return keyOf(r) === cur; });
 			var key = ev.key;
 			var press = function (selector) {
 				var el = qs(selector, pane);
@@ -1532,13 +1706,13 @@
 			};
 			if (key === 'ArrowDown' || key === 'j') {
 				var n = list[Math.min(list.length - 1, idx + 1)];
-				if (n) { ev.preventDefault(); openMessage(parseInt(n.getAttribute('data-uid'), 10)); }
+				if (n) { ev.preventDefault(); openMessage(keyOf(n)); }
 			} else if (key === 'ArrowUp' || key === 'k') {
 				var p = list[Math.max(0, idx - 1)];
-				if (p) { ev.preventDefault(); openMessage(parseInt(p.getAttribute('data-uid'), 10)); }
+				if (p) { ev.preventDefault(); openMessage(keyOf(p)); }
 			} else if (key === 'Enter' && idx === -1 && list.length) {
 				ev.preventDefault();
-				openMessage(parseInt(list[0].getAttribute('data-uid'), 10));
+				openMessage(keyOf(list[0]));
 			} else if (key === 'r') {
 				press('[data-cm-key="r"]');
 			} else if (key === 'a') {
@@ -1553,7 +1727,7 @@
 				run('archive', [cur]);
 			} else if (key === 's' && cur) {
 				ev.preventDefault();
-				var row = rowByUid(cur);
+				var row = rowByKey(cur);
 				run(row && row.classList.contains('flagged') ? 'unflag' : 'flag', [cur]);
 			} else if (key === 'u' && cur) {
 				ev.preventDefault();

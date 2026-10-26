@@ -46,6 +46,7 @@ if (!$res) {
 }
 
 dol_include_once('/convomail/class/convomailview.class.php');
+dol_include_once('/convomail/class/convomailcombined.class.php');
 
 /**
  * @param  array<string,mixed> $data Response
@@ -158,5 +159,9 @@ $client->close();
 if (!$result['ok']) {
 	$result['error'] = $client->getError();
 	convomail_json($result, 500);
+}
+// The Combined Inbox shows the change on its next page without reading the mailbox again
+if ($folder === ConvomailCombined::FOLDER && $action !== 'log') {
+	ConvomailCombined::patchCache($user, (int) $account->id, $result['removed'] ?: $uids, $result['removed'] ? 'remove' : $action);
 }
 convomail_json($result);

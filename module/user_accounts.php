@@ -121,11 +121,16 @@ if (convomail_filing_actions($action, $account, $user)) {
 if ($action == 'save_unread') {
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 	dol_include_once('/convomail/class/convomailunread.class.php');
+	dol_include_once('/convomail/class/convomailcombined.class.php');
 	$mode = GETPOST('unread_mode', 'aZ09');
 	$ids = array();
+	$combined = array();
 	foreach ((new ConvomailUnread($db))->mailboxes($object) as $boxid => $box) {
 		if (in_array((string) $boxid, (array) GETPOST('unread_accounts', 'array'), true)) {
 			$ids[] = (int) $boxid;
+		}
+		if (in_array((string) $boxid, (array) GETPOST('combined_accounts', 'array'), true)) {
+			$combined[] = (int) $boxid;
 		}
 	}
 	$params = array(
@@ -133,9 +138,11 @@ if ($action == 'save_unread') {
 		ConvomailUnread::PARAM_PREVIEW  => GETPOSTINT('unread_preview') ? 'yes' : 'no',
 		// "none" when nothing is ticked, so the default (own mailboxes) does not come back
 		ConvomailUnread::PARAM_ACCOUNTS => $ids ? implode(',', $ids) : 'none',
+		ConvomailCombined::PARAM_ACCOUNTS => $combined ? implode(',', $combined) : 'none',
 	);
 	if (dol_set_user_param($db, $conf, $object, $params) > 0) {
 		ConvomailUnread::clearCache($object);
+		ConvomailCombined::clearCache($object);
 		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
 	} else {
 		setEventMessages($langs->trans('Error'), null, 'errors');
@@ -311,6 +318,18 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 		print '</label><br>';
 	}
 	print '<span class="opacitymedium">'.$langs->trans('ConvomailUnreadMailboxesHelp').'</span>';
+	print '</td></tr>';
+	// Combined Inbox: the mailboxes merged into one list (mailbox.php?view=combined)
+	dol_include_once('/convomail/class/convomailcombined.class.php');
+	print '<tr class="oddeven"><td class="tdtop">'.$langs->trans('ConvomailCombinedMailboxes').'</td><td>';
+	foreach ((new ConvomailCombined($db))->choices($object) as $boxid => $box) {
+		$acc = $box['account'];
+		print '<label class="nowraponall"><input type="checkbox" name="combined_accounts[]" value="'.((int) $boxid).'"'.($box['counted'] ? ' checked' : '').'> ';
+		print dol_escape_htmltag($acc->label ? $acc->label.' — '.$acc->email : $acc->email);
+		print $box['own'] ? '' : ' <span class="opacitymedium">('.$langs->trans('ConvomailSharedMailbox').')</span>';
+		print '</label><br>';
+	}
+	print '<span class="opacitymedium">'.$langs->trans('ConvomailCombinedMailboxesHelp').'</span>';
 	print '</td></tr>';
 	print '</table>';
 	print '<div class="center margintoponly"><input type="submit" class="button" value="'.$langs->trans('Save').'"></div>';

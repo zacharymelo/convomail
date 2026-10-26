@@ -12,7 +12,7 @@
  * \ingroup convomail
  * \brief   Three-pane mailbox: folders | message list | reading pane
  *
- * GET parameters: accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, searchbody (also search message text),
+ * GET parameters: view (combined: the Combined Inbox, tpl/combined.tpl.php), accountid, folder, role (inbox|sent|drafts|junk|trash|archive), search, searchbody (also search message text),
  *                 page, limit (page size, remembered), refresh, uid (open message), showimages
  * Listing a folder also files replies to project threads on their project (CONVOMAIL_AUTOFILE_REPLIES, on by default).
  */
@@ -33,6 +33,7 @@ if (!$res) {
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 dol_include_once('/convomail/class/convomailview.class.php');
+dol_include_once('/convomail/class/convomailcombined.class.php');
 
 $langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects'));
 
@@ -58,6 +59,19 @@ if (in_array($limit, convomail_page_sizes(), true)) {
 	}
 } else {
 	$limit = convomail_page_size();
+}
+
+// Combined Inbox (tpl/combined.tpl.php): asked for, chosen in the mailbox picker, or the last view used
+$view = GETPOST('view', 'aZ09');
+if (GETPOST('accountid', 'aZ09') === 'combined' || ($view === '' && !GETPOSTISSET('accountid') && getDolUserString('CONVOMAIL_LAST_VIEW') === 'combined')) {
+	$view = 'combined';
+}
+if ($view === 'combined' && (new ConvomailCombined($db))->available($user)) {
+	include __DIR__.'/tpl/combined.tpl.php';
+	exit;
+}
+if (getDolUserString('CONVOMAIL_LAST_VIEW') !== '') {
+	dol_set_user_param($db, $conf, $user, array('CONVOMAIL_LAST_VIEW' => ''));
 }
 
 // "Show conversation" switch of the folder column, remembered for the user (only "off" is stored)
@@ -156,26 +170,7 @@ $knownnames = $matcher->names($matched);
 // File replies to project threads on their project (at most 10 per page view, so the page stays quick)
 $filed = array();
 if (getDolGlobalInt('CONVOMAIL_AUTOFILE_REPLIES', 1) && in_array($currentrole, array('inbox', 'sent'), true)) {
-	foreach ($messages as $m) {
-		if (count($filed) >= 10) {
-			break;
-		}
-		$r = $resolved[$m['uid']] ?? null;
-		if (!$r || !in_array($r['strength'], array(ConvomailProjectResolver::THREAD, ConvomailProjectResolver::CODE), true)) {
-			continue;
-		}
-		$full = $client->fetchMessage($folder, $m['uid'], false);
-		if ($full === false) {
-			continue;
-		}
-		$links = ConvomailView::defaultLinks($db, $full, $myemails, $r['socid']);
-		$eventid = ConvomailView::logMessage($db, $user, $account, $client, $folder, $m['uid'], $full, $links['socid'], $r['projectid'], $links['contactids'], true);
-		if ($eventid > 0) {
-			$filed[] = array('eventid' => $eventid, 'projectid' => $r['projectid'], 'subject' => $m['subject']);
-			$resolved[$m['uid']]['strength'] = ConvomailProjectResolver::LOGGED;
-			$resolved[$m['uid']]['eventid'] = $eventid;
-		}
-	}
+	$filed = ConvomailView::autoFile($db, $user, $account, $client, $folder, $messages, $resolved);
 }
 if (!empty($filed)) {
 	$links = array();
@@ -223,6 +218,9 @@ foreach (is_array($myaccounts) ? $myaccounts : array() as $acc) {
 if (!isset($options[$account->id])) {
 	$options[$account->id] = $account->choiceLabel();
 }
+if ((new ConvomailCombined($db))->available($user)) {
+	$options = array('combined' => $langs->trans('ConvomailCombinedInbox')) + $options;
+}
 
 $selfbase = $_SERVER['PHP_SELF'].'?accountid='.((int) $account->id).'&folder='.urlencode($folder);
 $searchparam = ($search !== '' ? '&search='.urlencode($search).($searchbody ? '&searchbody=1' : '') : '');
@@ -243,19 +241,7 @@ print '<div class="cm-app" data-accountid="'.((int) $account->id).'" data-folder
 	.' data-maxuid="'.(($list !== false && isset($list['maxuid'])) ? (int) $list['maxuid'] : -1).'"'
 	.' data-page="'.((int) $page).'" data-searching="'.($search !== '' ? 1 : 0).'"'
 	.' data-folder-url="'.dol_escape_htmltag($selfbase).'"'
-	// %s stays for the script to fill (count, error)
-	.' data-poll-texts="'.dol_escape_htmltag(json_encode(array(
-		'one' => $langs->transnoentitiesnoconv('ConvomailPollNewOne'),
-		'many' => $langs->transnoentitiesnoconv('ConvomailPollNewMany', '%s'),
-		'show' => $langs->transnoentitiesnoconv('ConvomailPollShow'),
-		'changed' => $langs->transnoentitiesnoconv('ConvomailPollChanged'),
-		'error' => $langs->transnoentitiesnoconv('ConvomailPollError', '%s'),
-		'stopped' => $langs->transnoentitiesnoconv('ConvomailPollStopped', '%s'),
-		'session' => $langs->transnoentitiesnoconv('ConvomailPollSession'),
-		'retry' => $langs->transnoentitiesnoconv('ConvomailPollRetry'),
-		'reload' => $langs->transnoentitiesnoconv('ConvomailPollReload'),
-		'dismiss' => $langs->transnoentitiesnoconv('CloseWindow'),
-	))).'"'
+	.' data-poll-texts="'.dol_escape_htmltag(ConvomailView::pollTexts()).'"'
 	// Folder management (ajax/folder.php): only for whoever manages the account
 	.($canmanagefolders ? ' data-ajax-folder="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/folder.php', 1)).'"'
 		.' data-new-folder-prompt="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailNewFolderPrompt')).'"'
@@ -315,7 +301,7 @@ foreach ($folders as $f) {
 		print '</span>';
 	}
 	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts'), true)) {
-		print '<span class="cm-count" data-folder="'.dol_escape_htmltag($f['name']).'">'.((int) $f['unseen']).'</span>';
+		print '<span class="cm-count" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($f['name']).'">'.((int) $f['unseen']).'</span>';
 	}
 	print '</a>';
 }
@@ -402,49 +388,18 @@ $todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
 // Sent with the tracking image: opened or not, one query for the page
 $opens = ConvomailTracker::opens($db, (int) $account->id, array_column($messages, 'msgid'));
 foreach ($messages as $m) {
-	// Web form mail: show the visitor (Reply-To), with the form's address after "via"
-	$via = $showto ? array() : (ConvomailMatcher::replyToOthers($m) ? $m['from'] : array());
-	$people = $showto ? $m['to'] : ConvomailMatcher::senders($m);
-	$r = $resolved[$m['uid']] ?? null;
-	$known = $showto ? '' : ConvomailMatcher::senderName($m, $matched, $knownnames);
-	$classes = 'cm-row'.($m['seen'] ? '' : ' unread').($m['uid'] === $openuid ? ' selected' : '').($m['flagged'] ? ' flagged' : '').($known !== '' ? ' cm-row-contact' : '');
-	$href = $selfbase.$listparam.'&uid='.((int) $m['uid']);
-	print '<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-href="'.dol_escape_htmltag($href).'">';
-	print '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
-	print '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
-	print '<a class="cm-row-main" draggable="false" href="'.dol_escape_htmltag($href).'">';
-	print '<span class="cm-row-top"><span class="cm-from">';
-	if ($known !== '') {
-		print '<span class="fas fa-address-card cm-contact-mark" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailRowFromContact', $known)).'"></span> ';
-	}
-	print dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
-	if (!empty($via)) {
-		print ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
-	}
-	print '</span>';
-	$isToday = $m['date'] && dol_print_date($m['date'], '%Y%m%d', 'tzuserrel') === $todaykey;
-	print '<span class="cm-date">'.($m['date'] ? dol_print_date($m['date'], $isToday ? '%H:%M' : 'day', 'tzuserrel') : '').'</span></span>';
-	print '<span class="cm-row-subject"><span class="cm-subj">'.dol_escape_htmltag($m['subject'] !== '' ? $m['subject'] : $langs->trans('ConvomailNoSubject')).'</span>';
-	if ($m['snippet'] !== '') {
-		print '<span class="cm-snippet"> &ndash; '.dol_escape_htmltag($m['snippet']).'</span>';
-	}
-	print '</span>';
-	print '</a>';
-	print '<span class="cm-row-tags">';
-	if (isset($opens[$m['msgid'] ?? ''])) {
-		print ConvomailTracker::openIcon($opens[$m['msgid']]);
-	}
-	if ($m['has_attachments']) {
-		print img_picto($langs->trans('ConvomailHasAttachments'), 'fa-paperclip', 'class="opacitymedium"');
-	}
-	if ($r && $r['projectid'] > 0 && isset($resolver->projects[$r['projectid']])) {
-		print ConvomailView::projectBadge($r['projectid'], $resolver->projects[$r['projectid']], $r['strength'] === ConvomailProjectResolver::SUGGESTED);
-	}
-	if ($r && $r['strength'] === ConvomailProjectResolver::LOGGED) {
-		print '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $r['eventid']).'" title="'.dol_escape_htmltag($langs->trans('ConvomailLoggedOpenEvent')).'">'.img_picto('', 'action', 'class="opacitymedium"').'</a>';
-	}
-	print '</span>';
-	print '</div>';
+	print ConvomailView::listRow($m, array(
+		'href'     => $selfbase.$listparam.'&uid='.((int) $m['uid']),
+		'accountid' => (int) $account->id,
+		'folder'   => $folder,
+		'selected' => $m['uid'] === $openuid,
+		'showto'   => $showto,
+		'known'    => $showto ? '' : ConvomailMatcher::senderName($m, $matched, $knownnames),
+		'resolved' => $resolved[$m['uid']] ?? null,
+		'projects' => $resolver->projects,
+		'open'     => $opens[$m['msgid'] ?? ''] ?? null,
+		'todaykey' => $todaykey,
+	));
 }
 print '</div>';
 print '</section>';
