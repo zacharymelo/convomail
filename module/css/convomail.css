@@ -149,8 +149,10 @@
 /* Files from the computer: the field stays in the form (sent with it) but the button and chips replace it */
 .cm-upload-field { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
 .cm-uploads .warning, #cm-uploads .warning { flex-basis: 100%; margin: 4px 0 0; padding: 4px 8px; }
-.cm-dropping { outline: 2px dashed var(--cm-accent, #3b6fb6); outline-offset: 2px; }
-.cm-dropping::after { content: attr(data-drop-hint); display: block; margin-top: 4px; opacity: .7; }
+/* Files dragged over the compose page: the overlay lets events through to the page and the editor below */
+.cm-drop-overlay { display: none; position: fixed; inset: 0; z-index: 10000; pointer-events: none; align-items: center; justify-content: center; background: rgba(59, 111, 182, .10); border: 3px dashed var(--cm-accent, #3b6fb6); }
+.cm-drop-overlay.cm-drop-on { display: flex; }
+.cm-drop-overlay-box { padding: 14px 22px; border-radius: 8px; background: var(--colorbackbody, #fff); box-shadow: 0 2px 12px rgba(0, 0, 0, .2); font-size: 1.15em; font-weight: bold; }
 .cm-chips .cm-chip { cursor: pointer; }
 .cm-chips .cm-chip a { margin-left: 4px; font-weight: 600; }
 .convomail-signature { color: var(--cm-muted); }

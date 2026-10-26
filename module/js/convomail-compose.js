@@ -389,8 +389,138 @@
 			});
 		}
 
+		/**
+		 * Files dragged in from the computer, anywhere on the page or into the editor's text: an overlay says what a
+		 * drop will do. Images dropped on the text go in it at the drop point (as pasted images do, up to 2 MB each);
+		 * every other file, and anything dropped elsewhere on the page, goes to add() as an attachment. A drop that
+		 * misses never makes the browser open the file (and leave the draft). Drags that start in the page itself
+		 * (an image moved inside the text) are left alone.
+		 */
+		function watchDrops(add, labels) {
+			var INLINE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+			var INLINE_MAX = 2097152;
+			var overlay = null;
+			var box = null;
+			var hideTimer = null;
+			var internal = false;
+			if (add) {
+				overlay = document.createElement('div');
+				overlay.className = 'cm-drop-overlay';
+				overlay.setAttribute('aria-hidden', 'true');
+				box = document.createElement('div');
+				box.className = 'cm-drop-overlay-box';
+				overlay.appendChild(box);
+				document.body.appendChild(overlay);
+			}
+			var hasFiles = function (ev) {
+				return !internal && ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') !== -1;
+			};
+			// While dragging, only the types are known (not the sizes): "into the text" when every item is an image
+			var allImages = function (ev) {
+				var items = ev.dataTransfer.items;
+				if (!items || !items.length) {
+					return false;
+				}
+				return Array.prototype.every.call(items, function (it) { return it.kind === 'file' && INLINE_TYPES.indexOf(it.type) !== -1; });
+			};
+			var hide = function () {
+				if (overlay) {
+					overlay.classList.remove('cm-drop-on');
+				}
+			};
+			// Put the editor's caret where the files were dropped, so the images land there
+			var caretAtDrop = function (ed, ev) {
+				var doc = ed.document.$;
+				var native = null;
+				if (doc.caretRangeFromPoint) {
+					native = doc.caretRangeFromPoint(ev.clientX, ev.clientY);
+				} else if (doc.caretPositionFromPoint) {
+					var pos = doc.caretPositionFromPoint(ev.clientX, ev.clientY);
+					if (pos) {
+						native = { startContainer: pos.offsetNode, startOffset: pos.offset };
+					}
+				}
+				if (!native || !native.startContainer) {
+					return;
+				}
+				try {
+					var range = ed.createRange();
+					range.setStart(new CKEDITOR.dom.node(native.startContainer), native.startOffset);
+					range.collapse(true);
+					ed.getSelection().selectRanges([range]);
+				} catch (e) { /* at the caret it had */ }
+			};
+			var insertImages = function (ed, files) {
+				files.forEach(function (f) {
+					var reader = new FileReader();
+					reader.onload = function () {
+						var img = new CKEDITOR.dom.element('img', ed.document);
+						img.setAttribute('src', String(reader.result));
+						img.setAttribute('alt', f.name);
+						ed.insertElement(img);
+					};
+					reader.readAsDataURL(f);
+				});
+			};
+			var watch = function (doc, ed) {
+				if (!doc || doc.cmDropWatched) {
+					return;
+				}
+				doc.cmDropWatched = true;
+				doc.addEventListener('dragstart', function () { internal = true; }, true);
+				doc.addEventListener('dragend', function () { internal = false; }, true);
+				doc.addEventListener('dragover', function (ev) {
+					if (!hasFiles(ev)) {
+						return;
+					}
+					ev.preventDefault();
+					ev.stopPropagation();
+					ev.dataTransfer.dropEffect = add ? 'copy' : 'none';
+					if (overlay) {
+						// Shown while files are over the page or the editor, gone a moment after they leave both
+						box.textContent = (ed && allImages(ev)) ? labels.inline : labels.attach;
+						overlay.classList.add('cm-drop-on');
+						clearTimeout(hideTimer);
+						hideTimer = setTimeout(hide, 250);
+					}
+				}, true);
+				doc.addEventListener('drop', function (ev) {
+					if (hasFiles(ev)) {
+						ev.preventDefault();
+						ev.stopPropagation();	// before the editor's own drop handling
+						hide();
+						var files = Array.prototype.slice.call(ev.dataTransfer.files || []);
+						if (add && ed) {
+							var inline = files.filter(function (f) { return INLINE_TYPES.indexOf(f.type) !== -1 && f.size <= INLINE_MAX; });
+							if (inline.length) {
+								caretAtDrop(ed, ev);
+								insertImages(ed, inline);
+							}
+							files = files.filter(function (f) { return inline.indexOf(f) === -1; });
+						}
+						if (add && files.length) {
+							add(files);
+						}
+					}
+					internal = false;
+				}, true);
+			};
+			watch(document, null);
+			// The editor's text is a document of its own (an iframe), made again when switching to source and back
+			if (window.CKEDITOR) {
+				var hook = function (ed) {
+					ed.on('contentDom', function () { watch(ed.document && ed.document.$, ed); });
+					if (ed.status === 'ready' && ed.document) {
+						watch(ed.document.$, ed);
+					}
+				};
+				Object.keys(CKEDITOR.instances).forEach(function (k) { hook(CKEDITOR.instances[k]); });
+				CKEDITOR.on('instanceCreated', function (e) { hook(e.editor); });
+			}
+		}
+
 		// Files from the computer: a chip each (name, size, x), added across picks instead of replacing them, and
-		// files dropped on the field's cell; the chosen ones are put back in the field, which the form sends
+		// files dropped anywhere on the page (watchDrops()); the chosen ones are put back in the field, which the form sends
 		var upInput = document.getElementById('cm-upload');
 		var upBtn = document.getElementById('cm-upload-btn');
 		var upBox = document.getElementById('cm-uploads');
@@ -455,26 +585,9 @@
 			upBtn.addEventListener('click', function () { upInput.click(); });
 			// The browser replaces the field's files on each pick: keep the earlier ones
 			upInput.addEventListener('change', function () { add(upInput.files); });
-			var cell = upInput.closest('td') || upBox;
-			cell.setAttribute('data-drop-hint', upBox.getAttribute('data-drop'));
-			cell.addEventListener('dragover', function (ev) {
-				if (ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') !== -1) {
-					ev.preventDefault();
-					cell.classList.add('cm-dropping');
-				}
-			});
-			cell.addEventListener('dragleave', function (ev) {
-				if (!cell.contains(ev.relatedTarget)) {
-					cell.classList.remove('cm-dropping');
-				}
-			});
-			cell.addEventListener('drop', function (ev) {
-				if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
-					ev.preventDefault();
-					cell.classList.remove('cm-dropping');
-					add(ev.dataTransfer.files);
-				}
-			});
+			watchDrops(add, { attach: upBox.getAttribute('data-drop'), inline: upBox.getAttribute('data-drop-inline') });
+		} else if (upInput) {
+			watchDrops(null, {});	// no chips here: a dropped file just never makes the browser leave the draft
 		}
 
 		var tpl = document.getElementById('cm-template');

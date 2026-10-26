@@ -656,7 +656,7 @@ print '<input type="file" name="attachments[]" id="cm-upload" multiple>';
 print ' <button type="button" class="button smallpaddingimp" id="cm-upload-btn" hidden>'.img_picto('', 'fa-paperclip', 'class="pictofixedwidth"').$langs->trans('ConvomailAttachFiles').'</button>';
 print '<div id="cm-uploads" class="cm-dbfiles" data-max="'.$uploadlimit.'" data-remove="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailRemoveFile')).'"';
 print ' data-overlimit="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailUploadOverLimit', $uploadlimit ? dol_print_size($uploadlimit, 1, 1) : '')).'"';
-print ' data-drop="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDropFiles')).'"></div>';
+print ' data-drop="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDropFiles')).'" data-drop-inline="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDropImagesInline')).'"></div>';
 if ($docbrowser) {
 	// After a failed send, the files picked before are shown again
 	$repicked = array();

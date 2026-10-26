@@ -154,7 +154,7 @@ Notes:
 ## Using it
 
 1. In the **Mailbox**, click **Compose email** (or **Agenda → Compose email**).
-2. Check the sender account, recipients, third party and project, write the message, attach files, and click **Send**. **Attach files…** (or dropping files on the *Attached files* row) adds each file as a chip with its size and a × to remove it; picking again adds to the list. A warning shows when the files together are over what the server accepts (PHP's upload limits, and *Max size of uploaded files* in Dolibarr's setup). The files go with the message when you send it.
+2. Check the sender account, recipients, third party and project, write the message, attach files, and click **Send**. **Attach files…** adds each file as a chip with its size and a × to remove it; picking again adds to the list. You can also drag files from your computer onto the compose page: an overlay says what the drop will do. Images dropped onto the message text go in the text where you drop them (up to 2 MB each); every other file, and anything dropped elsewhere on the page, is attached. A file dropped by mistake never makes the browser leave the page. A warning shows when the files together are over what the server accepts (PHP's upload limits, and *Max size of uploaded files* in Dolibarr's setup). The files go with the message when you send it.
 3. You land on the conversation view, where the message now appears.
 4. To answer, open the event and click **Reply**, or open the message in the **Mailbox**.
 
