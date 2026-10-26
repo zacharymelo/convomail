@@ -749,21 +749,39 @@ class ConvomailAccount extends CommonObject
 				'192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4');
 		}
 		foreach ($blocked as $cidr) {
-			list($net, $bits) = explode('/', $cidr);
-			$netbin = inet_pton($net);
-			if (strlen($netbin) !== strlen($bin)) {
-				continue;
-			}
-			$bytes = intdiv((int) $bits, 8);
-			$rest = (int) $bits % 8;
-			if (substr($bin, 0, $bytes) !== substr($netbin, 0, $bytes)) {
-				continue;
-			}
-			if ($rest === 0 || ((ord($bin[$bytes]) ^ ord($netbin[$bytes])) & (0xff << (8 - $rest)) & 0xff) === 0) {
+			if (self::ipInRange($ip, $cidr)) {
 				return false;
 			}
 		}
 		return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+	}
+
+	/**
+	 * Whether an address is in a range: "203.0.113.0/24", "2001:db8::/32", or a single address (all its bits)
+	 *
+	 * @param  string $ip   Address
+	 * @param  string $cidr Range
+	 * @return bool         False for anything malformed, and between IPv4 and IPv6
+	 */
+	public static function ipInRange($ip, $cidr)
+	{
+		$bin = @inet_pton((string) $ip);
+		$parts = explode('/', trim((string) $cidr), 2);
+		$netbin = @inet_pton($parts[0]);
+		if ($bin === false || $netbin === false || strlen($netbin) !== strlen($bin)) {
+			return false;
+		}
+		$max = strlen($bin) * 8;
+		$bits = isset($parts[1]) ? $parts[1] : (string) $max;
+		if (!ctype_digit($bits) || (int) $bits > $max) {
+			return false;
+		}
+		$bytes = intdiv((int) $bits, 8);
+		$rest = (int) $bits % 8;
+		if (substr($bin, 0, $bytes) !== substr($netbin, 0, $bytes)) {
+			return false;
+		}
+		return $rest === 0 || ((ord($bin[$bytes]) ^ ord($netbin[$bytes])) & (0xff << (8 - $rest)) & 0xff) === 0;
 	}
 
 	/**

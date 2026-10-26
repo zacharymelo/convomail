@@ -162,10 +162,11 @@ class ActionsConvomail
 		$out .= '<tr><td>'.$langs->trans('ConvomailNbOpen').'</td><td>';
 		if (empty($message->track_key)) {
 			$out .= '<span class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingNotUsed').'</span>';
-		} elseif ((int) $message->nb_open > 0) {
-			$out .= $langs->trans('ConvomailOpensValue', (int) $message->nb_open, dol_print_date($message->date_first_open, 'dayhour'), dol_print_date($message->date_last_open, 'dayhour'));
 		} else {
-			$out .= '<span class="opacitymedium">'.$langs->trans('ConvomailNotOpenedYet').'</span>';
+			dol_include_once('/convomail/class/convomailtracker.class.php');
+			$open = ConvomailTracker::openOf($this->db, $message);
+			$recent = ConvomailTracker::recentText($open);
+			$out .= '<span'.($open['count'] > 0 ? '' : ' class="opacitymedium"').($recent !== '' ? ' title="'.dol_escape_htmltag($recent, 0, 1).'"' : '').'>'.dol_escape_htmltag(ConvomailTracker::openText($open)).'</span>';
 		}
 		$out .= '</td></tr>';
 

@@ -49,6 +49,7 @@ class ConvomailMessage extends CommonObject
 		'nb_open'       => array('type' => 'integer', 'label' => 'ConvomailNbOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'default' => '0', 'position' => 72),
 		'date_first_open' => array('type' => 'datetime', 'label' => 'ConvomailDateFirstOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 73),
 		'date_last_open'  => array('type' => 'datetime', 'label' => 'ConvomailDateLastOpen', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 74),
+		'open_detail'   => array('type' => 'text', 'label' => 'ConvomailOpenDetail', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 75),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'position' => 500),
 		'tms'           => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 501),
 		'fk_user_creat' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserAuthor', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 510),
@@ -70,6 +71,8 @@ class ConvomailMessage extends CommonObject
 	public $nb_open;
 	public $date_first_open;
 	public $date_last_open;
+	/** @var ?string JSON: opens by kind and the latest ones (ConvomailTracker::detail()) */
+	public $open_detail;
 	public $date_creation;
 	public $fk_user_creat;
 	public $import_key;

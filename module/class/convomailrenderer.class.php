@@ -141,6 +141,7 @@ class ConvomailRenderer
 			return '<div style="white-space:pre-wrap;word-wrap:break-word">'.$html.'</div>';
 		}
 
+		$text = self::stripTrackers($text);
 		$clean = self::purify($text, $allowImages);
 		if (!$allowImages) {
 			// Purifier removes external images; tell the user if there were any
@@ -325,6 +326,23 @@ class ConvomailRenderer
 	}
 
 	/**
+	 * Remove Convomail open-tracking images. A reply usually quotes the email it answers, tracking image included:
+	 * shown here with images on, or quoted again in our answer, it would count as the recipient opening that email.
+	 * Matches the image of any Convomail, also behind Gmail's image proxy (which keeps the original URL after '#').
+	 *
+	 * @param  string $html HTML
+	 * @return string
+	 */
+	public static function stripTrackers($html)
+	{
+		if (stripos($html, 'convomail/public/open.php') === false) {
+			return $html;
+		}
+		$out = preg_replace('#<img\b[^>]*?\bsrc\s*=\s*(?:"[^"]*convomail/public/open\.php[^"]*"|\'[^\']*convomail/public/open\.php[^\']*\'|[^\s>]*convomail/public/open\.php[^\s>]*)[^>]*>#i', '', $html);
+		return $out === null ? $html : $out;	// null: the regex gave up on a huge message
+	}
+
+	/**
 	 * Clean untrusted email HTML with HTMLPurifier
 	 *
 	 * @param  string $html        Raw HTML (UTF-8)
@@ -335,6 +353,7 @@ class ConvomailRenderer
 	{
 		global $conf;
 
+		$html = self::stripTrackers((string) $html);
 		ConvomailHordeMailboxClient::loadLibrary();	// Composer autoloader (HTMLPurifier is in vendor/)
 		if (!class_exists('HTMLPurifier')) {
 			// Never show unpurified HTML

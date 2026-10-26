@@ -10,7 +10,8 @@
 /**
  * \file    public/open.php
  * \ingroup convomail
- * \brief   Open tracking image. Loaded by the recipient's mail app; records the open, always returns a 1x1 GIF.
+ * \brief   Open tracking image. Loaded by the recipient's mail app; records the open and who loaded it (not
+ *          counted when it is the team itself or a scanner), always returns a 1x1 GIF.
  *
  * Public page (no login). Same setup as core public/emailing/mailing-read.php.
  */
@@ -68,7 +69,8 @@ if ($res && isModEnabled('convomail')) {
 	dol_include_once('/convomail/class/convomailtracker.class.php');
 	$key = GETPOST('k', 'aZ09');
 	$tracker = new ConvomailTracker($db);
-	$result = $tracker->recordOpen($key);
+	// Who loads it (the team's own views are not counted): the address and browser are compared, not stored
+	$result = (ConvomailTracker::isEnabled() && preg_match('/^[a-f0-9]{32}$/', $key)) ? $tracker->recordOpen($key, $tracker->requestKind()) : 0;
 	if ($result < 0) {
 		dol_syslog('convomail public/open.php: '.$tracker->error, LOG_WARNING);
 	}

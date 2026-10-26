@@ -476,7 +476,9 @@ class ConvomailView
 		// Sent with the tracking image: whether it was opened (approximate)
 		$open = ConvomailTracker::opens($db, (int) $account->id, array($message['msgid']))[$message['msgid']] ?? null;
 		if ($open) {
-			$h .= '<div class="cm-openline'.($open['count'] > 0 ? ' cm-open-yes' : ' cm-open-no').'" title="'.dol_escape_htmltag($langs->trans('ConvomailOpensApproximate')).'">'.img_picto('', $open['count'] > 0 ? 'fa-eye' : 'fa-eye-slash', 'class="pictofixedwidth"').dol_escape_htmltag(ConvomailTracker::openText($open)).'</div>';
+			$recent = ConvomailTracker::recentText($open);
+			$title = $langs->transnoentitiesnoconv('ConvomailOpensApproximate').($recent !== '' ? "\n\n".$recent : '');
+			$h .= '<div class="cm-openline'.($open['count'] > 0 ? ' cm-open-yes' : ' cm-open-no').'" title="'.dol_escape_htmltag($title, 0, 1).'">'.img_picto('', $open['count'] > 0 ? 'fa-eye' : 'fa-eye-slash', 'class="pictofixedwidth"').dol_escape_htmltag(ConvomailTracker::openText($open)).'</div>';
 		}
 
 		// Project line

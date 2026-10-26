@@ -33,6 +33,7 @@ dol_include_once('/convomail/lib/convomail.lib.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailoauth.class.php');
 dol_include_once('/convomail/class/convomailcreator.class.php');
+dol_include_once('/convomail/class/convomailtracker.class.php');
 
 $langs->loadLangs(array('admin', 'mails', 'convomail@convomail'));
 
@@ -45,6 +46,16 @@ $action = GETPOST('action', 'aZ09');
 if ($action == 'update') {
 	$hosts = implode("\n", ConvomailAccount::allowedHostPatterns(GETPOST('CONVOMAIL_ALLOWED_HOSTS', 'restricthtml')));
 	if (dolibarr_set_const($db, 'CONVOMAIL_ALLOWED_HOSTS', $hosts, 'chaine', 0, '', $conf->entity) > 0) {
+		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+	} else {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	}
+	header('Location: '.$_SERVER['PHP_SELF']);
+	exit;
+}
+if ($action == 'update_ownnetworks') {
+	$nets = implode("\n", ConvomailTracker::networkPatterns(GETPOST(ConvomailTracker::SETTING_OWN_NETWORKS, 'restricthtml')));
+	if (dolibarr_set_const($db, ConvomailTracker::SETTING_OWN_NETWORKS, $nets, 'chaine', 0, '', $conf->entity) > 0) {
 		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
 	} else {
 		setEventMessages($langs->trans('Error'), null, 'errors');
@@ -184,6 +195,14 @@ print '<td class="opacitymedium">'.$langs->trans('ConvomailReadReceiptDefaultDes
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailOpenTracking').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_OPEN_TRACKING').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailOpenTrackingDesc', dol_buildpath('/convomail/public/open.php', 2)).'</td></tr>';
+print '<tr class="oddeven"><td class="tdtop">'.$langs->trans('ConvomailOpenOwnNetworks').'</td><td>';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="margin:0;">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="update_ownnetworks">';
+print '<textarea name="'.ConvomailTracker::SETTING_OWN_NETWORKS.'" rows="3" class="minwidth300">'.dol_escape_htmltag(implode("\n", ConvomailTracker::networkPatterns(getDolGlobalString(ConvomailTracker::SETTING_OWN_NETWORKS))), 0, 1).'</textarea><br>';
+print '<input type="submit" class="button smallpaddingimp" value="'.$langs->trans('Save').'">';
+print '</form>';
+print '</td><td class="opacitymedium">'.$langs->trans('ConvomailOpenOwnNetworksDesc', ConvomailTracker::LOGIN_IP_DAYS).'</td></tr>';
 
 // "From this email" tools of the reading pane: an admin can hide those not used here
 print '<tr class="liste_titre"><td colspan="3">'.$langs->trans('ConvomailToolsTitle').'</td></tr>';

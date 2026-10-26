@@ -17,6 +17,7 @@ CREATE TABLE llx_convomail_message(
     nb_open         INTEGER       NOT NULL DEFAULT 0,
     date_first_open DATETIME,
     date_last_open  DATETIME,
+    open_detail     TEXT,
     date_creation   DATETIME      NOT NULL,
     tms             TIMESTAMP,
     fk_user_creat   INTEGER,
