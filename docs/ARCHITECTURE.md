@@ -70,6 +70,7 @@ convomail/
     class/                Business classes (section 5)
     lib/convomail.lib.php Helpers (account access, folder cache, presets, templates, project contacts)
     mailbox.php           Three-pane mailbox + automatic filing
+    tpl/combined.tpl.php  Combined Inbox (mailbox.php?view=combined, 6.2d)
     message.php           One message on its own page + full "Log to..." form
     compose.php           New mail, reply (agenda event or mailbox message), forward
     project_emails.php    Emails tab of a project
@@ -82,6 +83,7 @@ convomail/
     ajax/action.php       Mailbox actions (JSON)
     ajax/poll.php         New-mail check of the mailbox page (JSON, 6.2b)
     ajax/unread.php       Unread count and shortlist of the top-bar indicator (JSON, 6.2c)
+    ajax/combined.php     Mark all as read of the Combined Inbox (JSON, 6.2d)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
     ajax/addresses.php    Address suggestions for To / Cc / Bcc (JSON)
@@ -135,7 +137,8 @@ Keys: `(entity, fk_user)`, `status`.
 | `date_message` | Message date |
 | `read_receipt` | 1 = a read receipt was requested |
 | `track_key` | Open-tracking key (32 hex) when tracking was on for that send |
-| `nb_open`, `date_first_open`, `date_last_open` | Open counters |
+| `nb_open`, `date_first_open`, `date_last_open` | Open counters (counted kinds only, 6.6) |
+| `open_detail` | JSON `{"k": {kind: count}, "r": [[time, kind], …]}`: loads by kind, the team's and scanners' included, and the latest 20 (1.1.0; no address or user agent) |
 | `date_creation`, `tms`, `fk_user_creat`, `import_key` | Standard (`fk_user_creat` = sender, used for the "opened" event owner) |
 
 Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
@@ -201,7 +204,9 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 | `ConvomailMatcher` | Addresses to contacts and third parties | `parseAddresses()`, `mapEmails()` (per address), `matchRecipients()` (contacts + single third party), `loggedEvents()` (Message-ID → event) |
 | `ConvomailProjectResolver` | Which project a message belongs to | `resolvePage()` (whole page in about 4 queries), `resolve()`, `parentIds()`; `$projects` cache (ref, title, socid) |
 | `ConvomailLogger` | Write agenda events + link rows | `logSent()`, `logReceived()`, `fetchReplyTarget()` |
-| `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `recordOpen()` (first open creates `AC_CONVOMAIL_OPENED`); `opens()` (count, first and last open of tracked messages by account + Message-ID: one query for a list page or a conversation; empty while tracking is off), `openText()`, `openIcon()` — shown on mailbox rows, the message and the conversation |
+| `ConvomailTracker` | Open tracking | `isEnabled()`, `newKey()`, `pixelHtml()`, `requestKind()` (`classify()` of the request: `signedIn()`, `ownRanges()`, user agent), `recordOpen($key, $kind)` (counted kinds update the counters; the first creates `AC_CONVOMAIL_OPENED`; every load goes in `open_detail`), `opens()` / `openOf()` (count, first and last open, kinds, latest loads), `openText()`, `recentText()`, `openIcon()`, `networkPatterns()` — shown on mailbox rows, the message, the conversation and the event card |
+| `ConvomailUnread` | Unread indicator of the top bar (6.2c) | `mailboxes($user, $param)` (usable mailboxes and the chosen ones; also used by the Combined Inbox), `summary()`, `markAllRead($user, $maxuids, $mode, $param)`, `clearCache()` |
+| `ConvomailCombined` | Combined Inbox (6.2d) | `choices()`, `mailboxes()`, `available()` (two or more), `page($user, $before, $after, $limit, $search, $searchBody, $refresh)`, `parseCursor()` / `cursorString()`, `patchCache()`, `clearCache()` |
 | `ConvomailView` | Shared server-side views and filing | `render()` (reading pane / full page), `logMessage()` (filing used by all paths), `defaultLinks()`, `projectThreads()`, `projectBadge()`, `myEmails()`, `msgid()` |
 | `ConvomailInvoiceFill` | The only door to the invoice reading component (6.13) | `enabled()`, `aiEnabled()`, `isCandidate()`, `fill($files, $values, 'data'\|'ai')` |
 | Invoice reading component: `ConvomailEInvoice`, `ConvomailPdfEmbedded`, `ConvomailInvoiceAi`, `ConvomailInvoiceReader` | Reads invoice data from attachments; depends on core only (6.13) | `parse()`, `find()` / `text()` / `extract()`, `scrub()` / `prompt()` / `validate()` / `checkAmounts()` / `checkRates()`, `read()` / `readWithAi()` / `problemText()` |
@@ -287,8 +292,13 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 
 ### 6.6 Open tracking (off by default)
 1. At send time, when tracking is on and the box is ticked, a key goes into the link row and a 1×1 image pointing at `public/open.php?k=<key>&entity=<n>` goes into the delivered HTML only.
-2. `public/open.php` (no login) always returns the GIF. When tracking is on and the key exists, `ConvomailTracker::recordOpen()` updates the counters, and the first open creates `AC_CONVOMAIL_OPENED`.
-3. `ActionsConvomail::formObjectOptions()` shows the counts on the sent event's card.
+2. `public/open.php` (no login) always returns the GIF. When tracking is on and the key is 32 hex, `ConvomailTracker::requestKind()` classifies the load, then `recordOpen($key, $kind)` records it:
+   - **team** (`internal`, not counted): `signedIn()` reads the session of the `DOLSESSID_<prefix>` cookie, if any, read-only with `use_cookies` off (no cookie is sent back), and checks that its login is an active internal user; or the address (`getUserRemoteIP()`, the same reading core uses at sign-in) is in `ownRanges()`: loopback, `SERVER_ADDR`, the admin's `CONVOMAIL_OPEN_IGNORE_IPS` (`networkPatterns()`), and `iplastlogin` / `ippreviouslogin` of active internal users (`fk_soc` empty) signed in within 30 days, an IPv6 one as its /64. Ranges are matched by `ConvomailAccount::ipInRange()`;
+   - then by user agent: `gmail` (GoogleImageProxy), `yahoo` (YahooMailProxy), `apple` (exactly `Mozilla/5.0`, or 17.0.0.0/8), `scanner` (bots, scripts, mail security products; not counted), else `direct`.
+
+   Counted kinds update `nb_open` and the dates; the first creates `AC_CONVOMAIL_OPENED`, whose note names the kind. Every load goes in `open_detail`, read again under `SELECT … FOR UPDATE` so two loads at once don't lose one. The address and user agent are not stored.
+3. `ConvomailRenderer::stripTrackers()` removes any `<img>` whose source contains `convomail/public/open.php` (also after `#` behind Gmail's proxy) from incoming HTML before purifying, in `cleanBody()` and `purify()`: the reading pane with images on, quotes and forwards, and logged copies never load a tracking image.
+4. `ActionsConvomail::formObjectOptions()` shows `openText()` on the sent event's card, the latest loads in its tooltip.
 
 ### 6.2b New-mail checks
 - **Server:** `ajax/poll.php` (GET `accountid`, `folder`, `since`): `convomail_get_usable_account()`, the folder names from the session cache of `convomail_folders()` (no IMAP LIST; Sent, Trash and Drafts left out, 40 at most), `convomail_release_session()`, then `pollFolder()`: one `STATUS` (MESSAGES, UNSEEN, UIDNEXT, UIDVALIDITY) for the shown folder and the listed ones, and only when UIDNEXT moved past `since` a `UID SEARCH` limited to those new UIDs (the last 1000 at most). Nothing is fetched or marked read. Answers `{ok, new, newest, uidvalidity, unseen}`, or `{ok: false, error, halt}`: `halt` for an expired or revoked sign-in (`ConvomailOAuthReconnect`) and an account no longer usable.
@@ -301,9 +311,16 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 - **Endpoint:** `ajax/unread.php` (GET, token, `refresh`) → `ConvomailUnread::summary()`: for each mailbox counted (`mailboxes()`: usable ones; user param `CONVOMAIL_UNREAD_ACCOUNTS`, ids or `none`, unset = own ones), `unreadMessages('INBOX', 200)` (STATUS UNSEEN, then SEARCH UNSEEN and the envelopes of the newest 200, no text). Mode (`CONVOMAIL_UNREAD_MODE`: `contacts` default, `all`, `off`): *contacts* keeps the messages whose sender (`ConvomailMatcher::senders()`, Reply-To aware) maps to a contact or third party (`mapEmails()`, names from `names()`), a count that is a lower bound past 200 unread (`plus`); *all* uses the STATUS count. The 8 newest form the shortlist (sender, matched name, subject, date, mailbox, `mailbox.php?accountid&folder=INBOX&uid` link). The result is cached a minute in `<documents>/convomail/temp/unread/<user>.json`, cleared when a message is opened (`ConvomailView::render()`), marked, moved or deleted (`ajax/action.php`) or the settings change.
 - **Script:** loads the count after the page, then every `max(60, poll interval)` s while visible; a click shows the shortlist (`CONVOMAIL_UNREAD_PREVIEW`, `yes`/`no`; words, since `dol_set_user_param()` drops a `0`), Ctrl/Cmd-click or preview off opens the Inbox. The mailbox page sends `convomail:unread-refresh` when its new-mail check sees mail or a message is read (at most every 20 s). Values are written as text.
 - **Mark all as read:** the dropdown's button (after a `confirm()`) POSTs `action=markread` with `maxuid[<account>]`, the newest unread UID counted per mailbox (`summary()`'s `accounts[].maxuid`). `ConvomailUnread::markAllRead()` takes the unread messages of each counted Inbox up to that UID (1000 newest at most), keeps those from contacts in *contacts* mode, and sets `\Seen` on the server: no record of its own, so every mail app agrees and mail that arrived after the count stays unread. The answer is the new count; the page sends `convomail:unread-marked`, and an open mailbox page refreshes its rows.
-- **Settings:** admin `CONVOMAIL_UNREAD_INDICATOR` (on, also switched on once on upgrade to 1.0.90); user block "Unread emails in the top bar" on `user_accounts.php` (`action=save_unread`).
+- **Settings:** admin `CONVOMAIL_UNREAD_INDICATOR` (on, also switched on once on upgrade to 1.0.90); user block "Unread emails and Combined Inbox" on `user_accounts.php` (`action=save_unread`), shared with the Combined Inbox choice (6.2d).
 - **Contact mark in the list:** `mailbox.php` marks rows whose sender is a known contact or third party (`cm-row-contact`, `fa-address-card` with the name from `ConvomailMatcher::senderName()`); not in Sent and Drafts.
 
+
+### 6.2d Combined Inbox
+- **Choice:** user param `CONVOMAIL_COMBINED_ACCOUNTS` (ids, `none`, unset = own mailboxes), set in the same block of `user_accounts.php` as the unread indicator (`action=save_unread`); who may read what comes from `ConvomailUnread::mailboxes($user, ConvomailCombined::PARAM_ACCOUNTS)`. `available()` (two or more) adds `combined` at the top of the mailbox picker; `mailbox.php` includes `tpl/combined.tpl.php` for `view=combined` (or `accountid=combined`, or no account asked and `CONVOMAIL_LAST_VIEW=combined`).
+- **Listing:** `ConvomailCombined::page()`: per mailbox `folderUids('INBOX', search)` (SEARCH ALL, or the cached header/text search), then `envelopes()` of the next `limit` candidates (envelope, flags, structure, threading headers and INTERNALDATE as `arrival`; no text, no snippet). A k-way merge takes, each time, the head of the mailbox whose arrival is newest, so each mailbox's rows are a run in UID order and a page is described by a cursor per mailbox: `before=<acc>:<uid>,…` (older: below the oldest row it gave) or `after=` (newer: from just above the newest, merged oldest first then reversed), plus `pos` for the count. A mailbox already found unreachable (folder list failed) is skipped and reported.
+- **Cache:** `<documents>/convomail/temp/combined/<user>.json`, a minute, keyed on the mailboxes and the search: UID lists and the envelopes read (600 newest per mailbox). `patchCache()` keeps it in step: `ajax/action.php` (read, unread, flag, unflag; moved, archived and deleted rows removed) and `ConvomailView::render()` (opened = read). `refresh=1` reads the mailboxes again.
+- **Page:** rows from `ConvomailView::listRow()` with `data-accountid`, `data-folder` and a mailbox label; contacts, projects (`resolvePage()` per mailbox) and opens per mailbox; automatic filing (6.4) per mailbox, 10 rows per page view in all. The folder column lists each mailbox's Inbox, Archive, Junk and Trash as drop targets (`data-accountid`); the Move menu has a group per mailbox (`<acc>|<folder>`).
+- **Script:** rows are keyed `account:uid`; `post()` sends one `ajax/action.php` request per mailbox; moves and drops keep only the rows of the target's mailbox and say how many stayed. The reading pane is that mailbox's own (`ajax/message.php?accountid=`), so Reply and Forward use its account. New-mail checks call `ajax/poll.php?view=combined&since[<acc>]=<uid>` (one `pollFolder('INBOX')` per mailbox; per-mailbox answers, `ok: false` only when all fail); new rows slide in through a `refresh=1` reload of the list. **Mark all as read** POSTs `ajax/combined.php` (`maxuid[<acc>]`, the newest UID shown) → `ConvomailUnread::markAllRead(…, 'all', PARAM_ACCOUNTS)`.
 ### 6.7 Mailbox actions
 POST `ajax/action.php` with `uids[]` and `action`:
 - `read`, `unread`, `flag`, `unflag`: `setFlag()`.
@@ -381,7 +398,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 
 | Path | Method | Parameters | Access | Output |
 |---|---|---|---|---|
-| `mailbox.php` | GET | `accountid, folder, role, search, searchbody, page, limit, refresh, uid, showimages` | `account->read`; account usable by user | Page |
+| `mailbox.php` | GET | `accountid, folder, role, search, searchbody, page, limit, refresh, uid, showimages`; Combined Inbox: `view=combined, before, after, pos, search, searchbody, refresh, openaccount, uid, showimages` | `account->read`; account usable by user (Combined Inbox: the user's chosen mailboxes, each usable) | Page |
 | `message.php` | GET / POST | `accountid, folder, uid, showimages, action=log\|confirm_log\|confirm_thirdparty, newthirdparty, socid, projectid, contactids[], copyfiles, addr, addrname, addcontact, firstname, lastname, logit` | same | Page |
 | `compose.php` | GET / POST | `socid, contactid, projectid, origin, originid, replyto, accountid, folder, uid, mode`; POST `action=send, sendto, sendtocc, sendtobcc, subject, message, attachments[], fwdparts[], dbfile[], read_receipt, track_opens` | `message->send`; own account | Page |
 | `attachment.php` | GET | `accountid, folder, uid, part, inline` | `account->read`; usable account | File (`nosniff`, sandbox CSP; inline only for png/jpeg/gif/webp) |
@@ -400,6 +417,7 @@ The response is JSON `{ok, removed, message, events}`; the JS updates rows and t
 | `ajax/projectcontacts.php` | GET | `id` | `message->send` + project read + private-project check | JSON list |
 | `ajax/addresses.php` | GET | `term` (2+ chars) | `message->send`; contacts need `societe->contact->lire`, third parties `societe->lire`, both limited like core lists (`societe_commerciaux` without `client->voir`, private contacts, external users to their company); users need `user->user->lire`; recent = the user's own email events, minus their own addresses | JSON list, up to 15 |
 | `ajax/debug.php` | GET | `mode` | admin + `CONVOMAIL_DEBUG_MODE` | Text |
+| `ajax/combined.php` | POST + token | `action=markread, maxuid[<account>]` | `account->read`; internal user; the user's Combined Inbox mailboxes | JSON `{ok, marked, errors, message}` |
 | `public/open.php` | GET | `k, entity` | none (public) | 1×1 GIF |
 
 The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for many calls. Core's `main.inc.php` refuses POSTs without a valid token.
@@ -435,13 +453,14 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_ADD_SIGNATURE` | 1 (created on activation) | Insert signature in compose |
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
   | `CONVOMAIL_OPEN_TRACKING` | 0 | Open tracking available |
+  | `CONVOMAIL_OPEN_IGNORE_IPS` | empty | *Your networks*: addresses and ranges whose image loads are the team's (6.6) |
   | `CONVOMAIL_OAUTH_GOOGLE_APP`, `CONVOMAIL_OAUTH_MICROSOFT_APP` | empty | Core OAuth app used for each provider; empty = provider not offered |
   | `CONVOMAIL_INVOICE_READ` | 0 (unset) | **Fill from the invoice** on the supplier invoice panel (6.13) |
   | `CONVOMAIL_INVOICE_AI` | 0 (unset) | **Read with AI** for invoice PDFs without e-invoice data, through core's AI module (6.13) |
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php`, and records an IMAP protocol trace per user in `<documents>/convomail/temp/imap-trace-<user id>.log` (`?mode=imaptrace`) |
 
 - **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. For OAuth accounts also `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL` and `OAUTH_<TYPE>-convomail<id>_ID/_SECRET/_TENANT/_SCOPE/_URLCALLBACK`. They are never written to `llx_const`.
-- **User params:** `CONVOMAIL_UNREAD_MODE`, `CONVOMAIL_UNREAD_ACCOUNTS`, `CONVOMAIL_UNREAD_PREVIEW` (6.2c), `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default), `CONVOMAIL_HIDE_CONVERSATION` (1 = the user turned **Show conversation** off; unset = on).
+- **User params:** `CONVOMAIL_UNREAD_MODE`, `CONVOMAIL_UNREAD_ACCOUNTS`, `CONVOMAIL_UNREAD_PREVIEW` (6.2c), `CONVOMAIL_COMBINED_ACCOUNTS`, `CONVOMAIL_LAST_VIEW` (`combined` while the user is in the Combined Inbox; 6.2d), `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default), `CONVOMAIL_HIDE_CONVERSATION` (1 = the user turned **Show conversation** off; unset = on).
 - **Session:** `convomail_folders_<accountid>` (folder list, 5 minutes), cleared on account changes and when Archive / Trash are created.
 
 ## 9. Security model
@@ -457,7 +476,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 - **SSRF:** `checkHostAllowed()` on save and before every send, so a user can't point the server at internal hosts.
 - **Secrets:** passwords are encrypted with `dolEncrypt()`, OAuth tokens by `DoliStorage` (also `dolEncrypt()`). SMTP settings live in memory only for one send. `ajax/debug.php` takes no SQL from the request (the free query mode lives only on the `debug-tools` branch), prints only a token's expiry, and the IMAP trace passes through `ConvomailTraceMaskFilter`, which replaces XOAUTH2 credentials with `[TOKEN]` (Horde masks only passwords).
 - **OAuth:** the consent state is a random nonce in the session, single use, checked with `hash_equals()`, and tied to an account the signed-in user owns. Only the owner can connect an account.
-- **Public endpoint:** `public/open.php` accepts only 32-hex keys, does nothing when tracking is off, and always returns the same GIF (no oracle).
+- **Public endpoint:** `public/open.php` accepts only 32-hex keys, does nothing when tracking is off, and always returns the same GIF (no oracle). The request's address and user agent are compared to tell the team's loads apart and never stored; the session check reads the session read-only and sends no cookie.
 
 ## 10. External code
 
@@ -477,6 +496,6 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 - **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's. The default header search took 0.1–0.3 s on 20,000 messages (Dovecot without full-text index); a search in the message text about 4 s there, and much more on a remote server with large messages.
 - **Session lock:** mailbox, message, reading pane and attachment requests call `convomail_release_session()` before talking to the mail server, so a slow server never blocks the user's other Dolibarr pages. Session writes after that point are not saved; pending notices are moved out first so they show once.
 - **Drafts aren't saved**, and nothing is permanently deleted (emptying Trash is left to the mail client).
-- **Tested** on Dolibarr 23.0 with PHP 8.2 and GreenMail, and on Dolibarr 20.0 (install, mailbox, compose, File / Create panels) with `dev/compat/`. Not yet tested on real Gmail / Microsoft 365, Dolibarr 21, 22 or 24 (the user's production runs 24), or the dark theme.
+- **Tested** on Dolibarr 23.0 with PHP 8.2 and GreenMail, on Dolibarr 20.0 (install, mailbox, compose, File / Create panels) with `dev/compat/`, and by the owner on a Dolibarr 24 test instance. Not yet tested on real Gmail / Microsoft 365, Dolibarr 21 or 22, or the dark theme.
 - **Older Dolibarr:** core functions newer than 20 are used only behind `function_exists()`: `getExecutableContent()` (22; `ConvomailFiler::executableExtensions()` has a copy of its list) and `getListForAIRephraseStyle()` / `getListForAISummarize()` (22; no AI writing tools before). Dolibarr 20's notices show HTML as text, so `notify()` in `js/convomail.js` shows plain text.
 - **Test-server quirks:** GreenMail omits In-Reply-To from ENVELOPE, returns nothing for partial fetches, doesn't search Latin-1 bodies, refuses grouped search criteria, and matches FROM / TO / CC against whole addresses only (so "dana" finds nothing there; real servers match any part). The client works around the first two and the grouping.

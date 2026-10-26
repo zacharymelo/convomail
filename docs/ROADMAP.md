@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (0.15.0)
+## Where it stands (1.1.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -58,17 +58,18 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Compose | **Attach files…** shows each file as a chip (name, size, × to remove), adds to the list on each pick, and warns over the server's upload limit. Files dragged from the computer can be dropped anywhere on the page (an overlay says what the drop will do): images dropped on the text go in the text, other files are attached; a missed drop never leaves the page | 0.18.0 |
 | From an email | The third party of every Create panel shows as Dolibarr's own link once chosen, with a pen to pick another. *Fill from the invoice* and *Read with AI* select the supplier whose VAT number the invoice gives (exactly one), marked *VAT number*, with a warning when the email does not come from one of its addresses. While they read, the panel stays on screen with a progress line | 0.18.0 |
 | Security | Fixes from the audit of 2026-10-26: the SMTP settings of a send are restored whatever happens (`finally`); the mail-server host check reads IPv4 and IPv6 addresses, refuses more non-public ranges (CGNAT, IPv4 inside IPv6…) and runs again before every IMAP connection; entity filters on single-record reads; escaped page URLs; Dolibarr's file functions. The debug endpoint's free SQL mode is gone from releases (it read every secret of the database); a hardened copy lives on the `debug-tools` branch. Checks: `dev/checks/security.php` | 1.0.0 |
+| Top bar | Unread emails in the top bar: from Dolibarr contacts and third parties by default (or all, or off), mailboxes chosen per user, a shortlist that opens each email, Mark all as read up to the newest counted; emails from contacts marked in the list (ARCHITECTURE 6.2c) | 1.1.0 |
+| Open tracking | The team's own views are left out: Convomail's tracking image is removed from incoming mail and quotes, and loads from a signed-in Dolibarr browser, a recent sign-in address, the admin's networks or the server are not counted. Each load gets a kind (direct, Gmail, Yahoo, Apple Mail Privacy Protection, scanner, team; scanners not counted), shown as a breakdown with the latest loads; addresses compared, never stored (6.6) | 1.1.0 |
+| Combined Inbox | The Inboxes of chosen mailboxes in one list (`mailbox.php?view=combined`): envelopes merged by arrival, a cursor per mailbox for older/newer pages, a one-minute per-user cache, every action in the row's own mailbox (moves stay within it), replies from the mailbox the email came to, new-mail checks and search across mailboxes, Mark all as read, a notice for an unreachable mailbox (6.2d) | 1.1.0 |
 
-**Tested:** Dolibarr 23.0 (everything) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. The 0.17.0 and 0.18.0 features were also checked by the owner on their test instance (test builds 0.16.91–0.16.93, 0.17.90–0.17.92). See [Test debt](#test-debt).
+**Tested:** Dolibarr 23.0 (everything), 24.0 (by the owner, on their test instance, 1.0.9x test builds) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. The 0.17.0 and 0.18.0 features were also checked by the owner on their test instance (test builds 0.16.91–0.16.93, 0.17.90–0.17.92). See [Test debt](#test-debt).
 
 ## Next
 
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
 
-### Unread emails in the top bar (built, not released: test build 1.0.90)
-- Envelope next to the bookmarks with the unread count (from Dolibarr contacts by default, or all, or off, per user), a shortlist of the newest on click that opens each email, mailboxes chosen per user (own by default), admin switch; emails from contacts marked in the list. ARCHITECTURE 6.2c.
-
 ### Mailbox follow-ups
+- Combined Inbox: a combined Sent folder; a conversation that spans mailboxes (today it stays in the email's own mailbox).
 - Opt-in per user: a browser notification for new mail.
 
 ### Reading supplier invoices: follow-ups
