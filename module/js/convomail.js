@@ -680,9 +680,225 @@
 						}
 					});
 					rowsBox.scrollTop = scroll;
+					// The "1–25 / 53" count and the page arrows (the page size form keeps its own element)
+					var paging = qs('.cm-paging', app);
+					var freshPaging = new DOMParser().parseFromString(html, 'text/html').querySelector('.cm-paging');
+					if (paging && freshPaging) {
+						Array.prototype.slice.call(paging.childNodes).forEach(function (n) {
+							if (n.nodeType === 3 || (n.matches && n.matches('a'))) {
+								paging.removeChild(n);
+							}
+						});
+						Array.prototype.slice.call(freshPaging.childNodes).forEach(function (n) {
+							if (n.nodeType === 3 || (n.matches && n.matches('a'))) {
+								paging.appendChild(document.importNode(n, true));
+							}
+						});
+					}
 				})
 				.catch(function () { /* the list stays as it was */ });
 		}
+
+		/*
+		 * New-mail checks (ajax/poll.php): every data-poll-interval seconds while the tab is visible. New mail
+		 * slides into the list when that disturbs nothing (first page, no search, nothing ticked or dragged);
+		 * otherwise the notice bar offers to show it. Two failed checks are retried quietly with a longer
+		 * wait; the third, or an error that won't fix itself, stops the checks and the bar offers Retry.
+		 */
+		(function () {
+			var interval = (parseInt(app.getAttribute('data-poll-interval'), 10) || 0) * 1000;
+			var url = app.getAttribute('data-poll-url');
+			var notice = qs('.cm-notice', app);
+			if (!interval || !url || !notice) {
+				return;
+			}
+			var texts = {};
+			try {
+				texts = JSON.parse(app.getAttribute('data-poll-texts') || '{}');
+			} catch (e) { /* the defaults below */ }
+			var t = function (key, arg) { return String(texts[key] || key).replace('%s', arg === undefined ? '' : arg); };
+			var folder = app.getAttribute('data-folder');
+			var since = parseInt(app.getAttribute('data-maxuid'), 10);
+			if (isNaN(since)) {
+				since = -1;
+			}
+			var uidvalidity = '';
+			var waiting = -1;	// newest UID behind the notice bar
+			var failures = 0;
+			var timer = null;
+			var busy = false;
+			var stopped = false;
+			var lastCheck = Date.now();
+			var baseTitle = document.title;
+
+			function schedule(delay) {
+				clearTimeout(timer);
+				timer = null;
+				if (!stopped && !document.hidden) {
+					timer = setTimeout(check, delay);
+				}
+			}
+			function quiet() {
+				return app.getAttribute('data-page') === '0' && app.getAttribute('data-searching') === '0'
+					&& !qs('.cm-check:checked', rowsBox) && !app.classList.contains('cm-dragging') && !app.classList.contains('cm-dragging-folder');
+			}
+			// Text and buttons only (no HTML from the server): [{label, run}]
+			function showNotice(text, buttons, isError) {
+				notice.innerHTML = '';
+				notice.classList.toggle('cm-notice-error', !!isError);
+				var span = document.createElement('span');
+				span.className = 'cm-notice-text';
+				span.textContent = text;
+				notice.appendChild(span);
+				(buttons || []).forEach(function (b) {
+					var btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'cm-notice-btn';
+					btn.textContent = b.label;
+					btn.addEventListener('click', b.run);
+					notice.appendChild(btn);
+				});
+				var close = document.createElement('button');
+				close.type = 'button';
+				close.className = 'cm-notice-close';
+				close.title = t('dismiss');
+				close.textContent = '\u00d7';
+				close.addEventListener('click', hideNotice);
+				notice.appendChild(close);
+				notice.hidden = false;
+			}
+			function hideNotice() {
+				notice.hidden = true;
+				notice.innerHTML = '';
+			}
+			function updateCounts(unseen) {
+				Object.keys(unseen || {}).forEach(function (name) {
+					var link = qs('.cm-folder[data-name="' + CSS.escape(name) + '"]', app);
+					if (!link) {
+						return;
+					}
+					var n = parseInt(unseen[name], 10) || 0;
+					var badge = qs('.cm-count', link);
+					if (n > 0 && !badge) {
+						badge = document.createElement('span');
+						badge.className = 'cm-count';
+						badge.setAttribute('data-folder', name);
+						link.appendChild(badge);
+					}
+					if (badge) {
+						if (n > 0) {
+							badge.textContent = n;
+						} else {
+							badge.remove();
+						}
+					}
+					if (name === folder) {
+						document.title = (n > 0 ? '(' + n + ') ' : '') + baseTitle;
+					}
+				});
+			}
+			function showNew() {
+				if (app.getAttribute('data-page') === '0' && app.getAttribute('data-searching') === '0') {
+					var before = since;
+					since = Math.max(since, waiting);
+					hideNotice();
+					insertNew(before);
+				} else {
+					window.location.href = app.getAttribute('data-folder-url');
+				}
+			}
+			function insertNew(before) {
+				return refreshRows().then(function () {
+					rows().forEach(function (r) {
+						if (parseInt(r.getAttribute('data-uid'), 10) > before) {
+							r.classList.add('cm-row-new');
+						}
+					});
+				});
+			}
+			function retry() {
+				stopped = false;
+				failures = 0;
+				hideNotice();
+				check();
+			}
+			function fail(message, halt, session) {
+				failures++;
+				if (session) {
+					stopped = true;
+					showNotice(t('session'), [{ label: t('reload'), run: function () { window.location.reload(); } }], true);
+				} else if (halt || failures >= 3) {
+					stopped = true;
+					showNotice(t('stopped', message), [{ label: t('retry'), run: retry }], true);
+				} else {
+					schedule(interval * Math.pow(2, failures));
+				}
+			}
+			function check() {
+				if (busy || stopped) {
+					return;
+				}
+				busy = true;
+				lastCheck = Date.now();
+				var q = url + '?accountid=' + encodeURIComponent(app.getAttribute('data-accountid'))
+					+ '&folder=' + encodeURIComponent(folder) + '&since=' + since;
+				fetch(q, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+					.then(function (r) {
+						var json = (r.headers.get('Content-Type') || '').indexOf('json') !== -1;
+						// Dolibarr answers its login page when the session has ended
+						return json ? r.json() : { ok: false, session: r.ok || r.status === 401 };
+					})
+					.then(function (data) {
+						busy = false;
+						if (!data.ok) {
+							fail(data.error || 'Error', !!data.halt, !!data.session);
+							return;
+						}
+						failures = 0;
+						if (notice.classList.contains('cm-notice-error')) {
+							hideNotice();
+						}
+						updateCounts(data.unseen);
+						// A new UIDVALIDITY, or UIDs going down (only possible then): the folder was recreated on the server
+						if ((uidvalidity !== '' && data.uidvalidity !== uidvalidity) || (since >= 0 && data.newest < since)) {
+							stopped = true;
+							showNotice(t('changed'), [{ label: t('reload'), run: function () { window.location.reload(); } }]);
+							return;
+						}
+						uidvalidity = data.uidvalidity;
+						if (since < 0) {
+							since = data.newest;	// first check of a search page: the baseline
+						} else if (data.new > 0) {
+							if (quiet()) {
+								var before = since;
+								since = data.newest;
+								hideNotice();
+								insertNew(before);
+							} else {
+								waiting = data.newest;
+								showNotice(data.new === 1 ? t('one') : t('many', data.new), [{ label: t('show'), run: showNew }]);
+							}
+						}
+						schedule(interval);
+					})
+					.catch(function () {
+						busy = false;
+						fail(t('error', ''), false, false);
+					});
+			}
+
+			document.addEventListener('visibilitychange', function () {
+				if (document.hidden) {
+					clearTimeout(timer);
+					timer = null;
+				} else if (!stopped) {
+					// Back on the tab: check now if the last check is old, else when it is due
+					schedule(Math.max(0, interval - (Date.now() - lastCheck)));
+				}
+			});
+			// A search page has no baseline yet: take it soon
+			schedule(since < 0 ? 2000 : interval);
+		})();
 
 		function run(action, uids, extra) {
 			if (!uids.length) {

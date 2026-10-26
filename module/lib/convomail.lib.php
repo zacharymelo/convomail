@@ -153,6 +153,27 @@ function convomail_page_sizes()
 }
 
 /**
+ * Choices of the new-mail check interval, in seconds (0 = no checks)
+ *
+ * @return int[]
+ */
+function convomail_poll_intervals()
+{
+	return array(0, 30, 60, 120, 300);
+}
+
+/**
+ * Seconds between new-mail checks of the mailbox page: the setup's choice, else 60; 0 = no checks
+ *
+ * @return int
+ */
+function convomail_poll_interval()
+{
+	$value = getDolGlobalString('CONVOMAIL_POLL_INTERVAL', '60');
+	return in_array((int) $value, convomail_poll_intervals(), true) ? (int) $value : 60;
+}
+
+/**
  * Number of messages per mailbox page: the user's choice, else the setup default, else 25
  *
  * @return int

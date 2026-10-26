@@ -331,3 +331,14 @@
 	.cm-rp-grid { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
 	.cm-rp-label { margin-top: 4px; }
 }
+
+/* New-mail notice bar (above the list) and new rows */
+.cm-notice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; padding: 4px 8px; border: 1px solid var(--cm-border); border-radius: 4px; background: var(--colorbacktitle1, #f4f4f4); }
+.cm-notice[hidden] { display: none; }
+.cm-notice-error { border-color: #d9a400; background: #fff7d6; }
+.cm-notice-text { flex: 1 1 auto; }
+.cm-notice-btn { border: 1px solid var(--cm-border); border-radius: 4px; background: transparent; padding: 1px 10px; cursor: pointer; font-weight: bold; }
+.cm-notice-close { border: none; background: transparent; cursor: pointer; font-size: 1.2em; line-height: 1; opacity: 0.6; }
+.cm-row-new { animation: cm-row-new 4s ease-out; }
+@keyframes cm-row-new { from { background-color: #fff3b0; } to { background-color: transparent; } }
+

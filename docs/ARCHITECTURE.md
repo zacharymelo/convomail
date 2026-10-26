@@ -80,6 +80,7 @@ convomail/
     ajax/thread.php       Conversation under a message, and one of its messages opened
     ajax/folder.php       Folder management: create, rename, delete an empty folder (JSON)
     ajax/action.php       Mailbox actions (JSON)
+    ajax/poll.php         New-mail check of the mailbox page (JSON, 6.2b)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
     ajax/addresses.php    Address suggestions for To / Cc / Bcc (JSON)
@@ -287,6 +288,12 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 2. `public/open.php` (no login) always returns the GIF. When tracking is on and the key exists, `ConvomailTracker::recordOpen()` updates the counters, and the first open creates `AC_CONVOMAIL_OPENED`.
 3. `ActionsConvomail::formObjectOptions()` shows the counts on the sent event's card.
 
+### 6.2b New-mail checks
+- **Server:** `ajax/poll.php` (GET `accountid`, `folder`, `since`): `convomail_get_usable_account()`, the folder names from the session cache of `convomail_folders()` (no IMAP LIST; Sent, Trash and Drafts left out, 40 at most), `convomail_release_session()`, then `pollFolder()`: one `STATUS` (MESSAGES, UNSEEN, UIDNEXT, UIDVALIDITY) for the shown folder and the listed ones, and only when UIDNEXT moved past `since` a `UID SEARCH` limited to those new UIDs (the last 1000 at most). Nothing is fetched or marked read. Answers `{ok, new, newest, uidvalidity, unseen}`, or `{ok: false, error, halt}`: `halt` for an expired or revoked sign-in (`ConvomailOAuthReconnect`) and an account no longer usable.
+- **Page:** `mailbox.php` puts `data-poll-*` on `.cm-app`: the interval (`convomail_poll_interval()`, `CONVOMAIL_POLL_INTERVAL`, 0/30/60/120/300 s, default 60, 0 = off), `data-maxuid` (the folder's newest UID from `listMessages()`, -1 on a search, whose first check then takes the baseline), `data-page`, `data-searching`, `data-folder-url` and the texts. The script checks every interval while `document.hidden` is false, pauses when the tab is hidden and checks on return when the last check is older than the interval.
+- **New mail:** unread badges (`.cm-count`) and the title (`(n) Mailbox`) follow `unseen`. On the first page without a search, nothing ticked and nothing dragged, `refreshRows()` brings the rows, the count and the page arrows, and new rows flash (`cm-row-new`); otherwise the notice bar (`.cm-notice`) says "n new messages · Show" (Show refreshes in place on the first page, else opens it). A new UIDVALIDITY, or a newest UID below the page's (UIDs never go down otherwise), means the folder was recreated: the bar offers Reload and checks stop.
+- **Errors:** a failed check is retried after 2×, then 4× the interval without a word; the third failure, or a `halt`, stops the checks and the bar shows the error with **Retry** (checks at once and resumes). An HTML answer (Dolibarr's login page) means the session ended: the bar offers Reload. Text only in the bar: no HTML from the server.
+
 ### 6.7 Mailbox actions
 POST `ajax/action.php` with `uids[]` and `action`:
 - `read`, `unread`, `flag`, `unflag`: `setFlag()`.
@@ -412,6 +419,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_ALLOW_SELF_SIGNED` | 0 | Accept self-signed SMTP certificates |
   | `CONVOMAIL_AUTOFILE_REPLIES` | 1 (created on activation) | Automatic filing (6.4) |
   | `CONVOMAIL_PAGE_SIZE` | 25 (unset) | Default messages per mailbox page (10, 25, 50, 100) |
+  | `CONVOMAIL_POLL_INTERVAL` | 60 (unset) | Seconds between new-mail checks of the mailbox page (0, 30, 60, 120, 300; 0 = off) |
   | `CONVOMAIL_ADD_SIGNATURE` | 1 (created on activation) | Insert signature in compose |
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
   | `CONVOMAIL_OPEN_TRACKING` | 0 | Open tracking available |
@@ -453,7 +461,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
 ## 11. Known limits
 
 - **IMAP only.** Sign-in is by password, or OAuth with Google or Microsoft 365. OAuth was tested against a local Dovecot with a token check, not yet against Google or Microsoft themselves. Other OAuth providers aren't offered.
-- **No sync of its own.** Replies are filed when a mailbox page lists them, or in the background through core's Email Collector (*Log replies automatically*, 6.10).
+- **No sync of its own.** Replies are filed when a mailbox page lists them, or in the background through core's Email Collector (*Log replies automatically*, 6.10). An open mailbox page checks for new mail by polling (6.2b), not by IMAP IDLE or server push: that would hold a PHP worker and an IMAP connection per open page.
 - **No local copy of the mailbox.** Every page talks to IMAP (about 2–4 round trips per list page), and search is the server's. The default header search took 0.1–0.3 s on 20,000 messages (Dovecot without full-text index); a search in the message text about 4 s there, and much more on a remote server with large messages.
 - **Session lock:** mailbox, message, reading pane and attachment requests call `convomail_release_session()` before talking to the mail server, so a slow server never blocks the user's other Dolibarr pages. Session writes after that point are not saved; pending notices are moved out first so they show once.
 - **Drafts aren't saved**, and nothing is permanently deleted (emptying Trash is left to the mail client).

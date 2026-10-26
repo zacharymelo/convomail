@@ -235,6 +235,25 @@ print '<div class="cm-app" data-accountid="'.((int) $account->id).'" data-folder
 	.' data-page-message="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1)).'"'
 	.' data-self="'.dol_escape_htmltag($selfbase.$listparam).'"'
 	.' data-confirm-delete="'.dol_escape_htmltag($langs->trans('ConvomailConfirmDelete')).'"'
+	// New-mail checks (ajax/poll.php): every CONVOMAIL_POLL_INTERVAL seconds while the page is visible, 0 = off
+	.' data-poll-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/poll.php', 1)).'"'
+	.' data-poll-interval="'.convomail_poll_interval().'"'
+	.' data-maxuid="'.(($list !== false && isset($list['maxuid'])) ? (int) $list['maxuid'] : -1).'"'
+	.' data-page="'.((int) $page).'" data-searching="'.($search !== '' ? 1 : 0).'"'
+	.' data-folder-url="'.dol_escape_htmltag($selfbase).'"'
+	// %s stays for the script to fill (count, error)
+	.' data-poll-texts="'.dol_escape_htmltag(json_encode(array(
+		'one' => $langs->transnoentitiesnoconv('ConvomailPollNewOne'),
+		'many' => $langs->transnoentitiesnoconv('ConvomailPollNewMany', '%s'),
+		'show' => $langs->transnoentitiesnoconv('ConvomailPollShow'),
+		'changed' => $langs->transnoentitiesnoconv('ConvomailPollChanged'),
+		'error' => $langs->transnoentitiesnoconv('ConvomailPollError', '%s'),
+		'stopped' => $langs->transnoentitiesnoconv('ConvomailPollStopped', '%s'),
+		'session' => $langs->transnoentitiesnoconv('ConvomailPollSession'),
+		'retry' => $langs->transnoentitiesnoconv('ConvomailPollRetry'),
+		'reload' => $langs->transnoentitiesnoconv('ConvomailPollReload'),
+		'dismiss' => $langs->transnoentitiesnoconv('CloseWindow'),
+	))).'"'
 	// Folder management (ajax/folder.php): only for whoever manages the account
 	.($canmanagefolders ? ' data-ajax-folder="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/folder.php', 1)).'"'
 		.' data-new-folder-prompt="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailNewFolderPrompt')).'"'
@@ -364,6 +383,8 @@ if ($last < $total) {
 print '</span>';
 print '</div>';
 
+// Notice bar of the new-mail checks: new messages when the list can't update in place, or why checking stopped
+print '<div class="cm-notice" role="status" aria-live="polite" hidden></div>';
 print '<div class="cm-rows" role="list">';
 if ($listerror !== '') {
 	print '<div class="cm-empty error">'.dol_escape_htmltag($listerror).'</div>';

@@ -488,6 +488,59 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * What arrived in a folder since a UID, and the unread counts of other folders (see the interface)
+	 *
+	 * UIDs only grow, so anything above $sinceUid is new. The search is skipped while UIDNEXT has not moved,
+	 * and covers at most the last 1000 UIDs (a bigger jump is reported as that many).
+	 *
+	 * @param  string   $folder   Folder shown
+	 * @param  int      $sinceUid Highest UID the page knows; -1 when unknown
+	 * @param  string[] $others   Other folders whose unread count is shown
+	 * @return array{uidvalidity:string,uidnext:int,messages:int,new:int,newest:int,unseen:array<string,int>}|false
+	 */
+	public function pollFolder($folder, $sinceUid, array $others)
+	{
+		try {
+			$imap = $this->connect();
+			$flags = Horde_Imap_Client::STATUS_MESSAGES | Horde_Imap_Client::STATUS_UNSEEN | Horde_Imap_Client::STATUS_UIDNEXT | Horde_Imap_Client::STATUS_UIDVALIDITY;
+			$names = array_values(array_unique(array_merge(array($folder), $others)));
+			try {
+				$status = $imap->status($names, $flags);
+			} catch (Exception $e) {
+				// A folder renamed or deleted elsewhere: the shown one alone
+				$status = array($folder => $imap->status($folder, $flags));
+			}
+			$cur = $status[$folder] ?? array();
+			$uidnext = (int) ($cur['uidnext'] ?? 0);
+			$result = array(
+				'uidvalidity' => (string) ($cur['uidvalidity'] ?? ''),
+				'uidnext'     => $uidnext,
+				'messages'    => (int) ($cur['messages'] ?? 0),
+				'new'         => 0,
+				'newest'      => max(0, $uidnext - 1),
+				'unseen'      => array(),
+			);
+			foreach ($status as $name => $counts) {
+				$result['unseen'][(string) $name] = (int) ($counts['unseen'] ?? 0);
+			}
+			if ($sinceUid >= 0 && $uidnext > $sinceUid + 1) {
+				$from = max($sinceUid + 1, $uidnext - 1000);
+				$query = new Horde_Imap_Client_Search_Query();
+				$query->ids(new Horde_Imap_Client_Ids(range($from, $uidnext - 1)));
+				$found = array_filter(array_map('intval', $imap->search($folder, $query)['match']->ids), function ($uid) use ($sinceUid) {
+					return $uid > $sinceUid;
+				});
+				$result['new'] = count($found) + ($from > $sinceUid + 1 ? $from - $sinceUid - 1 : 0);
+				$result['newest'] = $found ? max($found) : $result['newest'];
+			}
+			return $result;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
 	 * Rename a folder, moving its subscription with it
 	 *
 	 * @param  string $from Current name
@@ -848,7 +901,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
 
-			return array('total' => $total, 'messages' => $this->summaries($imap, $folder, $pageuids));
+			// The newest UID of the folder, for new-mail checks (pollFolder()); unknown on a search
+			$maxuid = ($searchText === '') ? ($uids ? max($uids) : 0) : -1;
+			return array('total' => $total, 'maxuid' => $maxuid, 'messages' => $this->summaries($imap, $folder, $pageuids));
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
 			return false;

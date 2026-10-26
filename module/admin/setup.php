@@ -67,6 +67,16 @@ if ($action == 'update_oauth') {
 	header('Location: '.$_SERVER['PHP_SELF']);
 	exit;
 }
+if ($action == 'update_pollinterval') {
+	$interval = GETPOSTINT('CONVOMAIL_POLL_INTERVAL');
+	if (in_array($interval, convomail_poll_intervals(), true) && dolibarr_set_const($db, 'CONVOMAIL_POLL_INTERVAL', (string) $interval, 'chaine', 0, '', $conf->entity) > 0) {
+		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+	} else {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	}
+	header('Location: '.$_SERVER['PHP_SELF']);
+	exit;
+}
 if ($action == 'update_pagesize') {
 	$size = GETPOSTINT('CONVOMAIL_PAGE_SIZE');
 	if (in_array($size, convomail_page_sizes(), true) && dolibarr_set_const($db, 'CONVOMAIL_PAGE_SIZE', $size, 'chaine', 0, '', $conf->entity) > 0) {
@@ -145,6 +155,19 @@ foreach (convomail_page_sizes() as $size) {
 print '</select> <input type="submit" class="button smallpaddingimp" value="'.$langs->trans('Save').'">';
 print '</form>';
 print '</td><td class="opacitymedium">'.$langs->trans('ConvomailPageSizeDefaultDesc').'</td></tr>';
+
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailPollInterval').'</td><td>';
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="update_pollinterval">';
+print '<select name="CONVOMAIL_POLL_INTERVAL" class="flat">';
+foreach (convomail_poll_intervals() as $seconds) {
+	$label = $seconds === 0 ? $langs->trans('ConvomailPollOff') : ($seconds < 60 ? $langs->trans('ConvomailPollSeconds', $seconds) : $langs->trans('ConvomailPollMinutes', $seconds / 60));
+	print '<option value="'.$seconds.'"'.($seconds === convomail_poll_interval() ? ' selected' : '').'>'.dol_escape_htmltag($label).'</option>';
+}
+print '</select> <input type="submit" class="button smallpaddingimp" value="'.$langs->trans('Save').'">';
+print '</form>';
+print '</td><td class="opacitymedium">'.$langs->trans('ConvomailPollIntervalDesc').'</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAddSignature').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_ADD_SIGNATURE').'</td>';

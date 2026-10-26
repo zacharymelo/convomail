@@ -66,9 +66,10 @@ interface ConvomailMailboxClient
 	 * @param  int    $limit      Page size
 	 * @param  string $searchText Words to search for ('' = all); every word must match
 	 * @param  bool   $searchBody Search the message text too; false = sender, recipients and subject only
-	 * @return array{total:int,messages:array<int,array<string,mixed>>}|false
-	 *         Each message: uid, msgid, subject, date (timestamp), from, to, cc (lists of array{name,email}),
-	 *         seen, answered, flagged, size, has_attachments. false on error.
+	 * @return array{total:int,maxuid:int,messages:array<int,array<string,mixed>>}|false
+	 *         maxuid: the folder's newest UID (0 when empty, -1 on a search). Each message: uid, msgid,
+	 *         subject, date (timestamp), from, to, cc (lists of array{name,email}), seen, answered, flagged,
+	 *         size, has_attachments. false on error.
 	 */
 	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false);
 
@@ -110,6 +111,18 @@ interface ConvomailMailboxClient
 	 * @return array{messages:int,children:int}|false
 	 */
 	public function folderStatus($name);
+
+	/**
+	 * What arrived in a folder since a UID, and the unread counts of other folders: one STATUS round trip,
+	 * plus a UID search limited to the new UIDs when the folder's UIDNEXT moved past $sinceUid. Nothing
+	 * is fetched and nothing is marked read.
+	 *
+	 * @param  string   $folder   Folder shown
+	 * @param  int      $sinceUid Highest UID the page knows; -1 when unknown (the answer gives a baseline)
+	 * @param  string[] $others   Other folders whose unread count is shown
+	 * @return array{uidvalidity:string,uidnext:int,messages:int,new:int,newest:int,unseen:array<string,int>}|false
+	 */
+	public function pollFolder($folder, $sinceUid, array $others);
 
 	/**
 	 * Rename a folder (its subscription follows).
