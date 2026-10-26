@@ -40,6 +40,9 @@ class ConvomailInvoiceFill
 	/** @var DoliDB */
 	public $db;
 
+	/** @var string[] Sender addresses of the email being read (lowercase) */
+	private $senders = array();
+
 	/**
 	 * @param DoliDB $db Database handler
 	 */
@@ -90,10 +93,12 @@ class ConvomailInvoiceFill
 	 * @param  array<int,array{name:string,content:string,mimetype?:string}> $files  Attachments
 	 * @param  array<string,mixed>                                            $values Panel values (ConvomailCreator::defaults())
 	 * @param  string                                                         $mode   'data' or 'ai'
+	 * @param  string[]                                                       $senders The email's sender addresses (checked against the supplier the VAT number selects)
 	 * @return array{values:array<string,mixed>,sources:array<string,string>,origin:string,notes:array<int,array{level:string,text:string}>,aioffer:bool}
 	 */
-	public function fill(array $files, array $values, $mode = 'data')
+	public function fill(array $files, array $values, $mode = 'data', array $senders = array())
 	{
+		$this->senders = array_values(array_filter(array_map('strtolower', $senders)));
 		global $langs, $mysoc;
 
 		require_once __DIR__.'/convomailinvoicereader.class.php';
@@ -227,7 +232,7 @@ class ConvomailInvoiceFill
 			}
 		}
 
-		$this->checkSupplier($v, $h, $note);
+		$this->checkSupplier($v, $h, $note, $out);
 		foreach ($problems as $problem) {
 			$note('warning', self::problemText($problem));
 		}
@@ -236,22 +241,53 @@ class ConvomailInvoiceFill
 	}
 
 	/**
-	 * Compare the pre-selected supplier (from the sender) with the seller named on the invoice; never pick one
+	 * The supplier: the one pre-selected from the sender is compared with the invoice's VAT number; with none,
+	 * the supplier whose VAT number the invoice gives is selected (exactly one, a supplier the user may see),
+	 * with a badge and a warning when the email does not come from one of its addresses
 	 *
-	 * @param  array<string,mixed> $v     Panel values
-	 * @param  array<string,mixed> $h     Hints
-	 * @param  callable            $note  Adds a note (level, text)
+	 * @param  array<string,mixed> $v    Panel values (socid may be set)
+	 * @param  array<string,mixed> $h    Hints
+	 * @param  callable            $note Adds a note (level, text)
+	 * @param  array<string,mixed> $out  Result being built (sources)
 	 * @return void
 	 */
-	private function checkSupplier(array $v, array $h, $note)
+	private function checkSupplier(array &$v, array $h, $note, array &$out)
 	{
-		global $langs;
+		global $langs, $user;
 
 		$seller = $h['seller_name'] !== '' ? $h['seller_name'] : '?';
 		if ((int) $v['socid'] <= 0) {
-			if ($h['seller_name'] !== '' || $h['seller_vat'] !== '') {
-				$note('info', $langs->transnoentitiesnoconv($h['seller_vat'] !== '' ? 'ConvomailReadSellerVat' : 'ConvomailReadSeller', $seller, $h['seller_vat']));
+			if ($h['seller_vat'] === '') {
+				if ($h['seller_name'] !== '') {
+					$note('info', $langs->transnoentitiesnoconv('ConvomailReadSeller', $seller));
+				}
+				return;
 			}
+			$found = $this->thirdPartiesByVat($h['seller_vat']);
+			$suppliers = array_values(array_filter($found, function ($t) {
+				return (int) $t['fournisseur'] === 1;
+			}));
+			if (count($suppliers) === 1) {
+				dol_include_once('/convomail/class/convomailtargets.class.php');
+				$visible = (new ConvomailTargets($this->db))->fetchVisible('societe', (int) $suppliers[0]['rowid'], $user);
+				if ($visible) {
+					$v['socid'] = (int) $suppliers[0]['rowid'];
+					$v['contactid'] = 0;
+					$out['sources']['socid'] = $langs->transnoentitiesnoconv('ConvomailReadSupplierByVat');
+					$note('info', $langs->transnoentitiesnoconv('ConvomailReadSupplierMatched', $suppliers[0]['nom'], $h['seller_vat']));
+					if (!$this->senderKnown((int) $suppliers[0]['rowid'])) {
+						$note('warning', $langs->transnoentitiesnoconv('ConvomailReadSupplierNotSender', $suppliers[0]['nom'], implode(', ', $this->senders)));
+					}
+					return;
+				}
+			} elseif (count($suppliers) > 1) {
+				$note('warning', $langs->transnoentitiesnoconv('ConvomailReadVatSeveral', $h['seller_vat']));
+				return;
+			} elseif (!empty($found)) {
+				$note('info', $langs->transnoentitiesnoconv('ConvomailReadVatNotSupplier', $found[0]['nom'], $h['seller_vat']));
+				return;
+			}
+			$note('info', $langs->transnoentitiesnoconv($h['seller_name'] !== '' ? 'ConvomailReadSellerVat' : 'ConvomailReadSellerVatOnly', $seller, $h['seller_vat']));
 			return;
 		}
 		if ($h['seller_vat'] === '') {
@@ -272,6 +308,60 @@ class ConvomailInvoiceFill
 				$note('warning', $langs->transnoentitiesnoconv('ConvomailReadVatDiffersNoName', $h['seller_vat'], (string) $obj->nom, $known));
 			}
 		}
+	}
+
+	/**
+	 * Active third parties whose VAT number is this one (spaces, dots and dashes ignored)
+	 *
+	 * @param  string $vat Normalised VAT number
+	 * @return array<int,array{rowid:int,nom:string,fournisseur:int}>
+	 */
+	private function thirdPartiesByVat($vat)
+	{
+		$rows = array();
+		$sql = 'SELECT rowid, nom, fournisseur FROM '.MAIN_DB_PREFIX.'societe';
+		$sql .= " WHERE REPLACE(REPLACE(REPLACE(UPPER(tva_intra), ' ', ''), '.', ''), '-', '') = '".$this->db->escape($vat)."'";
+		$sql .= ' AND status = 1 AND entity IN ('.getEntity('societe').')';
+		$sql .= $this->db->plimit(5);
+		$resql = $this->db->query($sql);
+		while ($resql && ($obj = $this->db->fetch_object($resql))) {
+			$rows[] = array('rowid' => (int) $obj->rowid, 'nom' => (string) $obj->nom, 'fournisseur' => (int) $obj->fournisseur);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Whether the email comes from an address (or the domain of an address) of the third party or its contacts
+	 *
+	 * @param  int  $socid Third party
+	 * @return bool
+	 */
+	private function senderKnown($socid)
+	{
+		if (empty($this->senders)) {
+			return false;
+		}
+		$known = array();
+		$sql = 'SELECT email FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid);
+		$sql .= ' UNION SELECT email FROM '.MAIN_DB_PREFIX.'socpeople WHERE fk_soc = '.((int) $socid);
+		$resql = $this->db->query($sql);
+		while ($resql && ($obj = $this->db->fetch_object($resql))) {
+			$email = strtolower(trim((string) $obj->email));
+			if ($email !== '') {
+				$known[] = $email;
+			}
+		}
+		$domain = function ($email) {
+			return substr(strrchr($email, '@') ?: '', 1);
+		};
+		foreach ($this->senders as $sender) {
+			foreach ($known as $email) {
+				if ($sender === $email || ($domain($sender) !== '' && $domain($sender) === $domain($email))) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

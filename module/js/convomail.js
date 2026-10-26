@@ -390,6 +390,7 @@
 					item.setAttribute('data-type', r.type);
 					item.setAttribute('data-name', r.name);
 					item.setAttribute('data-url', r.url || '');
+					item.setAttribute('data-html', r.html || '');	// Dolibarr's own link to it (core HTML)
 					item.textContent = r.label;
 					box.appendChild(item);
 				});
@@ -416,7 +417,54 @@
 			open.hidden = !item.getAttribute('data-url');
 		}
 		pickerResults(picker).innerHTML = '';
+		showChosen(picker, item.getAttribute('data-html'));
 		checkTarget(picker);
+	}
+
+	/**
+	 * A picker with a record chosen shows Dolibarr's own link to it (as on a record's card) and a button to pick
+	 * another, instead of the search field; without a link (older answer) the field keeps the name
+	 */
+	function showChosen(picker, html) {
+		var chosen = qs('.cm-picker-chosen', picker);
+		if (!chosen || !html) {
+			return;
+		}
+		chosen.innerHTML = '';
+		var link = document.createElement('span');
+		link.className = 'cm-picker-link';
+		link.innerHTML = html;
+		chosen.appendChild(link);
+		var btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'cm-picker-change';
+		btn.setAttribute('data-cm-picker-change', '1');
+		btn.title = chosen.getAttribute('data-change') || '';
+		btn.innerHTML = '<span class="fas fa-pen"></span>';
+		chosen.appendChild(btn);
+		chosen.hidden = false;
+		qs('.cm-picker-input', picker).hidden = true;
+		var open = qs('.cm-picker-open', picker);
+		if (open) {
+			open.hidden = true;
+		}
+	}
+
+	// "Pick another": the search field again, empty and focused; nothing is chosen until a result is
+	function pickAnother(picker) {
+		var chosen = qs('.cm-picker-chosen', picker);
+		if (chosen) {
+			chosen.hidden = true;
+		}
+		qsa('[data-cm-pick]', picker).forEach(function (h) { h.value = ''; });
+		var input = qs('.cm-picker-input', picker);
+		input.hidden = false;
+		input.value = '';
+		input.focus();
+		var form = picker.closest('form.cm-rp');
+		if (form && form.elements.acceptwarnings) {
+			form.elements.acceptwarnings.value = '0';
+		}
 	}
 
 	// File panel: using a picker or the Documents folder choice selects its radio
@@ -485,6 +533,12 @@
 		if (x) {
 			ev.preventDefault();
 			x.closest('.cm-rp-row').remove();	// the project: none (set on the card)
+			return;
+		}
+		var change = ev.target.closest('[data-cm-picker-change]');
+		if (change) {
+			ev.preventDefault();
+			pickAnother(change.closest('.cm-picker'));
 			return;
 		}
 		var item = ev.target.closest('.cm-picker-item');

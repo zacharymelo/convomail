@@ -211,9 +211,11 @@ class ConvomailRecord
 	 * @param  string $role      supplier|customer|'' (third parties)
 	 * @param  string $typename  Name of the hidden type field ('' if one type)
 	 * @param  bool   $write     Only records the user may add files to (else ones the user may open)
+	 * @param  string $chosen    Dolibarr's link to the chosen record (ConvomailTargets::nomUrl()): shown instead of the
+	 *                           search field, which "change" brings back
 	 * @return string
 	 */
-	private static function picker($idname, $id, $label, $types, $role = '', $typename = '', $write = false)
+	private static function picker($idname, $id, $label, $types, $role = '', $typename = '', $write = false, $chosen = '')
 	{
 		global $langs;
 
@@ -222,12 +224,31 @@ class ConvomailRecord
 		if ($typename !== '') {
 			$h .= '<input type="hidden" name="'.dol_escape_htmltag($typename).'" value="" data-cm-pick="type">';
 		}
-		$h .= '<input type="text" class="cm-picker-input" value="'.dol_escape_htmltag($label).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchToPick')).'" autocomplete="off" spellcheck="false">';
+		$showchosen = ($id > 0 && $chosen !== '');
+		$h .= '<input type="text" class="cm-picker-input" value="'.dol_escape_htmltag($label).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchToPick')).'" autocomplete="off" spellcheck="false"'.($showchosen ? ' hidden' : '').'>';
 		// The record picked (or pre-selected), to check it in a new tab before linking or creating
 		$url = ($id > 0 && strpos($types, ',') === false) ? ConvomailTargets::cardUrl($types, (int) $id) : '';
-		$h .= '<a class="cm-picker-open" href="'.dol_escape_htmltag($url).'" target="_blank" rel="noopener" title="'.dol_escape_htmltag($langs->trans('ConvomailOpenInNewTab')).'"'.($url === '' ? ' hidden' : '').'>'.img_picto('', 'fa-external-link-alt').'</a>';
+		$h .= '<a class="cm-picker-open" href="'.dol_escape_htmltag($url).'" target="_blank" rel="noopener" title="'.dol_escape_htmltag($langs->trans('ConvomailOpenInNewTab')).'"'.(($url === '' || $showchosen) ? ' hidden' : '').'>'.img_picto('', 'fa-external-link-alt').'</a>';
+		// Once chosen: Dolibarr's own link, as on a record's card, and a button to pick another
+		$h .= '<span class="cm-picker-chosen"'.($showchosen ? '' : ' hidden').' data-change="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailPickAnother')).'">';
+		if ($showchosen) {
+			$h .= '<span class="cm-picker-link">'.$chosen.'</span>'.self::changeButton();
+		}
+		$h .= '</span>';
 		$h .= '<span class="cm-picker-results" role="listbox"></span></span>';
 		return $h;
+	}
+
+	/**
+	 * The button of a chosen picker that brings back its search field
+	 *
+	 * @return string
+	 */
+	private static function changeButton()
+	{
+		global $langs;
+
+		return '<button type="button" class="cm-picker-change" data-cm-picker-change="1" title="'.dol_escape_htmltag($langs->trans('ConvomailPickAnother')).'">'.img_picto('', 'fa-pen').'</button>';
 	}
 
 	/**
@@ -348,23 +369,27 @@ class ConvomailRecord
 			$readable = !empty($this->invoiceAttachments());
 			$readmode = GETPOSTINT('readinvoice');
 			if ($readable && $readmode > 0) {
-				$read = (new ConvomailInvoiceFill($this->db))->fill($this->invoiceFiles(), $v, ($readmode === 2 && ConvomailInvoiceFill::aiEnabled()) ? 'ai' : 'data');
+				$senders = array_column(ConvomailMatcher::senders($this->message), 'email');
+				$read = (new ConvomailInvoiceFill($this->db))->fill($this->invoiceFiles(), $v, ($readmode === 2 && ConvomailInvoiceFill::aiEnabled()) ? 'ai' : 'data', $senders);
 				$v = $read['values'];
 			}
 		}
 		$dups = $this->creator->duplicates($type, $v, array('pdfhashes' => $type === 'invoice_supplier' ? $this->pdfHashes(array_map('strval', array_column($this->attachments, 'id'))) : array()));
 		$socname = '';
+		$sochtml = '';
 		if ($v['socid'] > 0) {
-			$resql = $this->db->query('SELECT nom FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $v['socid']));
-			$obj = $resql ? $this->db->fetch_object($resql) : null;
-			$socname = $obj ? (string) $obj->nom : '';
+			$soc = new Societe($this->db);
+			if ($soc->fetch((int) $v['socid']) > 0) {
+				$socname = (string) $soc->name;
+				$sochtml = ConvomailTargets::nomUrl($soc);
+			}
 		}
 
 		$h = '<input type="hidden" name="contactid" value="'.((int) $v['contactid']).'">';
 		$h .= '<div class="cm-rp-grid">';
 		$date = '<input type="date" name="date" value="'.dol_print_date($v['date'], '%Y-%m-%d', 'tzuserrel').'" class="maxwidth150">';
 		if ($type === 'invoice_supplier') {
-			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier'), true);
+			$h .= self::row($langs->trans('Supplier').self::readBadge($read, 'socid'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier', '', false, $sochtml), true);
 			if ($readable && $read === null) {
 				$button = '<button type="button" class="button smallpaddingimp" data-cm-invoice-read="1" data-cm-busy="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadBusy')).'" data-cm-busy-failed="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadBusyFailed')).'">'.img_picto('', 'fa-file-invoice', 'class="pictofixedwidth"').$langs->trans('ConvomailReadButton').'</button>';
 				$h .= self::row('', $button, false, $langs->transnoentitiesnoconv('ConvomailReadButtonHelp'));
@@ -391,13 +416,13 @@ class ConvomailRecord
 		} elseif ($role === 'customer') {
 			// Proposal, order, invoice: the customer and their reference
 			$refhelp = array('propal' => 'ConvomailRefCustomerProposalHelp', 'commande' => 'ConvomailRefCustomerHelp', 'facture' => 'ConvomailRefCustomerInvoiceHelp');
-			$h .= self::row($langs->trans('Customer'), self::picker('socid', $v['socid'], $socname, 'societe', 'customer'), true);
+			$h .= self::row($langs->trans('Customer'), self::picker('socid', $v['socid'], $socname, 'societe', 'customer', '', false, $sochtml), true);
 			$h .= self::row($langs->trans('RefCustomer'), '<input type="text" name="ref_client" class="minwidth150" maxlength="255" value="'.dol_escape_htmltag($v['ref_client']).'">', false, $langs->transnoentitiesnoconv($refhelp[$type]));
 		} elseif ($role === 'supplier') {
-			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier'), true);
+			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier', '', false, $sochtml), true);
 		} else {
 			$required = ($type === 'project' && getDolGlobalString('PROJECT_THIRDPARTY_REQUIRED'));
-			$h .= self::row($langs->trans('ThirdParty'), self::picker('socid', $v['socid'], $socname, 'societe'), $required);
+			$h .= self::row($langs->trans('ThirdParty'), self::picker('socid', $v['socid'], $socname, 'societe', '', '', false, $sochtml), $required);
 			$h .= self::row($langs->trans($type === 'project' ? 'Label' : 'Subject'), '<input type="text" name="subject" class="minwidth300 cm-rp-wide" maxlength="255" value="'.dol_escape_htmltag($v['subject']).'">', true);
 		}
 		if ($role !== '') {

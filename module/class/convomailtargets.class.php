@@ -348,6 +348,7 @@ class ConvomailTargets
 					'name'  => ($type === 'societe') ? (string) $o->name : $label,
 					'picto' => self::types()[$type]['picto'],
 					'url'   => self::cardUrl($type, (int) $o->id),
+					'html'  => self::nomUrl($o),
 				);
 			}
 			if (count($out) >= $limit) {
@@ -481,6 +482,21 @@ class ConvomailTargets
 			'fichinter' => '/fichinter/card.php?id=',
 		);
 		return isset($pages[$type]) ? DOL_URL_ROOT.$pages[$type].((int) $id) : '';
+	}
+
+	/**
+	 * Dolibarr's own link to a record (icon, name, tooltip), opening in a new tab so the panel stays
+	 *
+	 * @param  CommonObject $object Record
+	 * @return string               HTML from core
+	 */
+	public static function nomUrl($object)
+	{
+		if (!is_object($object) || !method_exists($object, 'getNomUrl')) {
+			return '';
+		}
+		$html = (string) $object->getNomUrl(1);
+		return preg_replace('#<a\b(?![^>]*\btarget=)#i', '<a target="_blank" rel="noopener"', $html, 1);
 	}
 
 	/**

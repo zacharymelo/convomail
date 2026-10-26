@@ -332,6 +332,10 @@
 .cm-picker-input { flex: 0 1 260px; width: 260px; min-width: 0; box-sizing: border-box; }
 .cm-picker-open { flex: 0 0 auto; margin-left: 6px; color: var(--cm-muted); }
 .cm-picker-open[hidden] { display: none; }
+.cm-picker-input[hidden], .cm-picker-chosen[hidden] { display: none; }
+.cm-picker-chosen { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; }
+.cm-picker-change { border: 0; background: transparent; padding: 2px 4px; cursor: pointer; color: var(--cm-muted); }
+.cm-picker-change:hover { color: inherit; }
 .cm-rp-open .cm-open-icon, .cm-picker-open .fa, .cm-picker-open .fas { font-size: .8em; opacity: .6; }
 .cm-rp-open:hover .cm-open-icon { opacity: 1; }
 .cm-rp-value input[type="text"] { max-width: 100%; box-sizing: border-box; }
