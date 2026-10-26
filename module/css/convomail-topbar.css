@@ -1,9 +1,9 @@
 /* Convomail top-bar unread indicator (every page) */
-.cm-topunread-wrap { position: relative; }
+.cm-topunread-wrap { position: relative; vertical-align: middle; margin-right: 10px; }	/* room for the bubble, which sticks out on the right */
 .cm-topunread-wrap[hidden] { display: none; }
-.cm-topunread { position: relative; display: inline-block; }
+.cm-topunread { position: relative; display: inline-block; padding: 0 3px 0 4px; line-height: 25px; }	/* as core's .login_block_elem */
 .cm-topunread.cm-topunread-failed .fa { opacity: .5; }
-.cm-topunread-count { position: absolute; top: -6px; right: -9px; min-width: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #d93025; color: #fff; font-size: 10px; font-weight: bold; line-height: 16px; text-align: center; pointer-events: none; }
+.cm-topunread-count { position: absolute; top: -2px; right: -9px; min-width: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px; background: #d93025; color: #fff; font-size: 9px; font-weight: bold; line-height: 14px; text-align: center; white-space: nowrap; pointer-events: none; }
 .cm-topunread-count[hidden] { display: none; }
 .cm-topunread-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 1100; width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto; text-align: left; white-space: normal; color: var(--colortext, #222); background: var(--colorbackbody, #fff); border-radius: 6px; box-shadow: 0 6px 24px rgba(0, 0, 0, .22); font-size: 13px; line-height: 1.35; }
 .cm-topunread-menu[hidden] { display: none; }
