@@ -41,6 +41,11 @@ docker compose up -d
 
 **GreenMail differs from real servers.** It omits In-Reply-To from ENVELOPE, returns nothing for partial body fetches, doesn't search Latin-1 bodies, refuses grouped search criteria (and stalls, until the read timeout, on an unquoted `<id>` before `)`), and matches FROM / TO / CC against whole addresses only. Test search on `dev/bigmailbox/` (Dovecot, 20,000 messages) instead. Real-server behaviour (Gmail, Microsoft 365) is untested.
 
+## Branches: dev, main, debug-tools
+
+- `main` carries releases only; `dev` is where work happens and fast-forwards `main` at a release.
+- **`debug-tools`** = `dev` plus one commit that puts back the free SQL query mode of `ajax/debug.php` (`?mode=sql&q=SELECT…`), hardened (SELECT only, no `INTO OUTFILE`/`DUMPFILE`, `LOAD_FILE`, `SLEEP`/`BENCHMARK`, several statements, or credential columns and tables). It is never released: the audit of 2026-10-26 found that mode reads every secret of the database. To use it on the dev stack: `git switch debug-tools && git rebase dev`, then switch back. Build release zips from `dev`/`main` only.
+
 ## Release
 
 Only when asked:

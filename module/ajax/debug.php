@@ -18,11 +18,13 @@
  *   settings  — All CONVOMAIL_* constants
  *   classes   — Class loading and method availability
  *   messages  — Last 20 logged messages with their agenda events
- *   sql       — Read-only diagnostic query (?mode=sql&q=SELECT...)
  *   hooks     — Registered hook contexts
  *   imap      — How a folder of your default mail account is ordered (?mode=imap&folder=INBOX)
  *   imaptrace — Your last IMAP exchanges with the mail server (recorded while Debug mode is on)
- *   all       — Every diagnostic except sql
+ *   all       — Every diagnostic
+ *
+ * No SQL mode in released builds: an arbitrary query would read every secret of the database (SMTP and API keys,
+ * OAuth tokens) and, depending on the database rights, files on the server. The debug-tools branch keeps one.
  */
 
 $res = 0;
@@ -68,7 +70,7 @@ print "Timestamp: ".date('Y-m-d H:i:s T')."\n";
 print "Dolibarr: ".(defined('DOL_VERSION') ? DOL_VERSION : 'unknown')."\n";
 print "PHP: ".PHP_VERSION."\n";
 print "Mode: $mode\n";
-print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|imap|imaptrace|all\n";
+print "Usage: ?mode=overview|settings|classes|messages|hooks|imap|imaptrace|all\n";
 print str_repeat('=', 60)."\n\n";
 
 if ($mode === 'overview' || $run_all) {
@@ -158,87 +160,6 @@ if ($mode === 'messages' || $run_all) {
 		}
 	}
 	print "\n";
-}
-
-if ($mode === 'sql') {
-	$q = trim((string) GETPOST('q', 'restricthtml'));
-	print "--- SQL QUERY ---\n";
-	if ($q === '') {
-		print "Usage: ?mode=sql&q=SELECT+rowid,email,status+FROM+llx_convomail_account\n";
-	} elseif (stripos($q, 'SELECT') !== 0 || preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\b/i', $q)) {
-		print "ERROR: Only SELECT queries allowed.\n";
-	} elseif (preg_match('/pass_crypted/i', $q)) {
-		print "ERROR: Password column is not shown here.\n";
-	} else {
-		if (stripos($q, 'LIMIT') === false) {
-			$q .= ' LIMIT 50';
-		}
-		print "Query: $q\n\n";
-		$resql = $db->query($q);
-		if ($resql) {
-			$first = true;
-			$n = 0;
-			while ($row = $db->fetch_array($resql)) {
-				if ($first) {
-					print implode("\t", array_keys($row))."\n".str_repeat('-', 80)."\n";
-					$first = false;
-				}
-				$n++;
-				$vals = array();
-				foreach ($row as $v) {
-					$vals[] = ($v === null) ? 'NULL' : (strlen($v) > 40 ? substr($v, 0, 40).'...' : $v);
-				}
-				print implode("\t", $vals)."\n";
-			}
-			print "\n$n rows returned.\n";
-		} else {
-			print "SQL ERROR: ".$db->lasterror()."\n";
-		}
-	}
-	print "\n";
-}
-
-if ($mode === 'imap') {
-	print "--- IMAP MESSAGE ORDER ---\n";
-	dol_include_once('/convomail/class/convomailaccount.class.php');
-	dol_include_once('/convomail/class/hordemailboxclient.class.php');
-	$account = new ConvomailAccount($db);
-	if ($account->fetchDefaultForUser($user) <= 0) {
-		print "No mail account for this user.\n";
-	} else {
-		$folder = GETPOST('folder', 'restricthtml') ?: 'INBOX';
-		print "Account: $account->email ($account->imap_host)  Folder: $folder\n";
-		if ($account->isOAuth()) {
-			// Sign-in state only: the token itself is never printed
-			dol_include_once('/convomail/class/convomailoauth.class.php');
-			$st = (new ConvomailOAuth($db))->status($account);
-			print 'Sign-in: OAuth app '.$account->oauth_app.', token '.($st['connected'] ? 'stored, expires '.dol_print_date($st['expires'], 'standard', 'gmt').' UTC, refresh token '.($st['refreshable'] ? 'yes' : 'no') : 'missing')."\n";
-		} else {
-			print "Sign-in: password\n";
-		}
-		$client = new ConvomailHordeMailboxClient($account);
-		print implode("\n", $client->sortDiagnostics($folder))."\n";
-		$client->close();
-	}
-	print "\n";
-}
-
-if ($mode === 'imaptrace') {
-	print "--- IMAP TRACE: your last 8 requests, newest first (passwords are masked by the IMAP library; long server lines are cut) ---\n";
-	dol_include_once('/convomail/class/hordemailboxclient.class.php');
-	$file = ConvomailHordeMailboxClient::traceFile(true);
-	$text = is_readable($file) ? (string) file_get_contents($file) : '';
-	$requests = preg_split('/\n(?====)/', trim($text));
-	$requests = array_reverse(array_slice(array_filter($requests), -8));
-	if (empty($requests)) {
-		print "Nothing recorded yet. Repeat the action in the mailbox, then reload this page.\n";
-	}
-	foreach ($requests as $request) {
-		foreach (explode("\n", $request) as $line) {
-			print (strlen($line) > 300 ? substr($line, 0, 300).' [...]' : $line)."\n";
-		}
-		print "\n";
-	}
 }
 
 if ($mode === 'hooks' || $run_all) {
