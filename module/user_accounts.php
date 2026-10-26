@@ -162,7 +162,7 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 
 	print load_fiche_titre($iscreate ? $langs->trans('ConvomailNewAccount') : $langs->trans('ConvomailEditAccount'), '', 'email');
 
-	print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?id='.$object->id.($iscreate ? '' : '&accountid='.$account->id).'" autocomplete="off">';
+	print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'?id='.$object->id.($iscreate ? '' : '&accountid='.$account->id).'" autocomplete="off">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="action" value="'.($iscreate ? 'add' : 'update').'">';
 
@@ -241,10 +241,10 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 		print '<td class="center">'.($acc->is_default ? img_picto($langs->trans('Default'), 'on') : '').'</td>';
 		print '<td class="center">'.$acc->getLibStatut(5).'</td>';
 		print '<td class="right nowraponall">';
-		print '<a class="editfielda marginrightonly" href="'.$baseurl.'&action=test">'.img_picto($langs->trans('ConvomailTestConnection'), 'technic', 'class="pictofixedwidth"').$langs->trans('ConvomailTestConnection').'</a> ';
-		print '<a class="editfielda marginrightonly" href="'.$baseurl.'&action=detectsent">'.$langs->trans('ConvomailDetectSentFolder').'</a> ';
-		print '<a class="editfielda marginrightonly" href="'.$baseurl.'&action=edit">'.img_edit().'</a>';
-		print '<a class="marginleftonly" href="'.$baseurl.'&action=delete">'.img_delete().'</a>';
+		print '<a class="editfielda marginrightonly" href="'.dol_escape_htmltag($baseurl.'&action=test').'">'.img_picto($langs->trans('ConvomailTestConnection'), 'technic', 'class="pictofixedwidth"').$langs->trans('ConvomailTestConnection').'</a> ';
+		print '<a class="editfielda marginrightonly" href="'.dol_escape_htmltag($baseurl.'&action=detectsent').'">'.$langs->trans('ConvomailDetectSentFolder').'</a> ';
+		print '<a class="editfielda marginrightonly" href="'.dol_escape_htmltag($baseurl.'&action=edit').'">'.img_edit().'</a>';
+		print '<a class="marginleftonly" href="'.dol_escape_htmltag($baseurl.'&action=delete').'">'.img_delete().'</a>';
 		print '</td>';
 		print '</tr>';
 	}

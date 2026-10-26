@@ -333,7 +333,7 @@ class ConvomailTargets
 				$socid = ($type === 'societe') ? 0 : (int) ($o->socid ?? ($o->fk_soc ?? 0));
 				if ($socid > 0) {
 					if (!isset($socnames[$socid])) {
-						$r = $this->db->query('SELECT nom FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid);
+						$r = $this->db->query('SELECT nom FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid.' AND entity IN ('.getEntity('societe').')');
 						$so = $r ? $this->db->fetch_object($r) : null;
 						$socnames[$socid] = $so ? (string) $so->nom : '';
 					}

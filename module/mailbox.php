@@ -262,7 +262,7 @@ print '<div class="cm-app" data-accountid="'.((int) $account->id).'" data-folder
 
 // Left: account, compose, folders
 print '<aside class="cm-folders">';
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="convomail-switcher">';
+print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="convomail-switcher">';
 print $form->selectarray('accountid', $options, $account->id, 0, 0, 0, '', 0, 0, 0, '', 'cm-account', 0);
 print '</form>';
 if ($user->hasRight('convomail', 'message', 'send')) {
@@ -322,7 +322,7 @@ if ($canmanagefolders) {
 	print '<a href="#" class="cm-newfolder" data-cm-folder="create">'.img_picto('', 'fa-folder-plus', 'class="pictofixedwidth"').$langs->trans('ConvomailNewFolder').'</a>';
 }
 print '<a class="cm-refresh" href="'.dol_escape_htmltag($selfbase.'&refresh=1').'">'.img_picto('', 'fa-sync', 'class="pictofixedwidth"').$langs->trans('Refresh').'</a>';
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" class="cm-conversation-switch">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="cm-conversation-switch">';
 print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="setconversation">';
 print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
 if ($search !== '') {
@@ -353,13 +353,13 @@ if ($canmanagefolders) {
 	print '<option value="__new__">'.dol_escape_htmltag($langs->trans('ConvomailNewFolderInMove')).'</option>';
 }
 print '</select>';
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-search" data-searching="'.dol_escape_htmltag($langs->trans('ConvomailSearching')).'">';
+print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="cm-search" data-searching="'.dol_escape_htmltag($langs->trans('ConvomailSearching')).'">';
 print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
 print '<input type="search" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchHelp')).'">';
 print '<label class="cm-searchbody" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchBodyHelp')).'"><input type="checkbox" name="searchbody" value="1"'.($searchbody ? ' checked' : '').'> '.$langs->trans('ConvomailSearchBody').'</label>';
 print '</form>';
 print '<span class="cm-paging">';
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" class="cm-pagesize">';
+print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="cm-pagesize">';
 print '<input type="hidden" name="accountid" value="'.((int) $account->id).'"><input type="hidden" name="folder" value="'.dol_escape_htmltag($folder).'">';
 if ($search !== '') {
 	print '<input type="hidden" name="search" value="'.dol_escape_htmltag($search).'">';

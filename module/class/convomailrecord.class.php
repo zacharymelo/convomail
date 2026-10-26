@@ -535,7 +535,7 @@ class ConvomailRecord
 		$matcher = new ConvomailMatcher($this->db);
 		$events = $matcher->loggedEvents(array($this->message['msgid']));
 		if (!empty($events)) {
-			$resql = $this->db->query('SELECT fk_element, elementtype, fk_project, fk_soc FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)));
+			$resql = $this->db->query('SELECT fk_element, elementtype, fk_project, fk_soc FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)).' AND entity IN ('.getEntity('agenda').')');
 			if ($resql && ($obj = $this->db->fetch_object($resql))) {
 				if (($t = ConvomailTargets::fromEventType((string) $obj->elementtype)) !== '') {
 					$add($t, (int) $obj->fk_element);
@@ -588,7 +588,7 @@ class ConvomailRecord
 		if (empty($events)) {
 			return null;
 		}
-		$resql = $this->db->query('SELECT id, fk_user_action, fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)));
+		$resql = $this->db->query('SELECT id, fk_user_action, fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)).' AND entity IN ('.getEntity('agenda').')');
 		$obj = $resql ? $this->db->fetch_object($resql) : null;
 		if (!$obj) {
 			return null;
@@ -683,7 +683,7 @@ class ConvomailRecord
 		$matcher = new ConvomailMatcher($this->db);
 		$events = $matcher->loggedEvents(array($this->message['msgid']));
 		if (!empty($events)) {
-			$resql = $this->db->query('SELECT fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)));
+			$resql = $this->db->query('SELECT fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) reset($events)).' AND entity IN ('.getEntity('agenda').')');
 			$obj = $resql ? $this->db->fetch_object($resql) : null;
 			if ($obj && (string) $obj->elementtype === ConvomailTargets::eventType($type) && (int) $obj->fk_element > 0) {
 				$o = $this->targets->fetchVisible($type, (int) $obj->fk_element, $user);
@@ -715,7 +715,7 @@ class ConvomailRecord
 		}
 		// The contact suggested from the email only goes with the third party it belongs to
 		if ($values['contactid'] > 0) {
-			$resql = $this->db->query('SELECT fk_soc FROM '.MAIN_DB_PREFIX.'socpeople WHERE rowid = '.((int) $values['contactid']));
+			$resql = $this->db->query('SELECT fk_soc FROM '.MAIN_DB_PREFIX.'socpeople WHERE rowid = '.((int) $values['contactid']).' AND entity IN ('.getEntity('contact').')');
 			$obj = $resql ? $this->db->fetch_object($resql) : null;
 			if (!$obj || (int) $obj->fk_soc !== (int) $values['socid']) {
 				$values['contactid'] = 0;

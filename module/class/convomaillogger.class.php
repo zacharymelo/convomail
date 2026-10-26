@@ -272,7 +272,7 @@ class ConvomailLogger
 		if (empty($set)) {
 			return 1;
 		}
-		$sql = 'UPDATE '.MAIN_DB_PREFIX.'actioncomm SET '.implode(', ', $set).' WHERE id = '.((int) $eventid).$where;
+		$sql = 'UPDATE '.MAIN_DB_PREFIX.'actioncomm SET '.implode(', ', $set).' WHERE id = '.((int) $eventid).' AND entity IN ('.getEntity('agenda').')'.$where;
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();

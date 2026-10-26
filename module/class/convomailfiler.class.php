@@ -122,9 +122,10 @@ class ConvomailFiler
 				$this->errors[] = 'Cannot write '.$name;
 				continue;
 			}
+			dolChmod($path);
 			$virus = dolCheckVirus($path, $name);
 			if (!empty($virus)) {
-				@unlink($path);
+				dol_delete_file($path, 1, 1, 1, null, false, 0);
 				$this->refused[] = array('name' => $name, 'reason' => implode(' ', $virus));
 				continue;
 			}

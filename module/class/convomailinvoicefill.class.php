@@ -293,7 +293,7 @@ class ConvomailInvoiceFill
 		if ($h['seller_vat'] === '') {
 			return;
 		}
-		$resql = $this->db->query('SELECT nom, tva_intra FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $v['socid']));
+		$resql = $this->db->query('SELECT nom, tva_intra FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $v['socid']).' AND entity IN ('.getEntity('societe').')');
 		$obj = $resql ? $this->db->fetch_object($resql) : null;
 		if (!$obj) {
 			return;
@@ -342,8 +342,8 @@ class ConvomailInvoiceFill
 			return false;
 		}
 		$known = array();
-		$sql = 'SELECT email FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid);
-		$sql .= ' UNION SELECT email FROM '.MAIN_DB_PREFIX.'socpeople WHERE fk_soc = '.((int) $socid);
+		$sql = 'SELECT email FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid).' AND entity IN ('.getEntity('societe').')';
+		$sql .= ' UNION SELECT email FROM '.MAIN_DB_PREFIX.'socpeople WHERE fk_soc = '.((int) $socid).' AND entity IN ('.getEntity('contact').')';
 		$resql = $this->db->query($sql);
 		while ($resql && ($obj = $this->db->fetch_object($resql))) {
 			$email = strtolower(trim((string) $obj->email));

@@ -127,7 +127,7 @@ print '<table class="noborder centpercent">';
 print '<tr class="liste_titre"><td>'.$langs->trans('Parameter').'</td><td>'.$langs->trans('Value').'</td><td>'.$langs->trans('Description').'</td></tr>';
 
 print '<tr class="oddeven"><td class="titlefield tdtop">'.$langs->trans('ConvomailAllowedHosts').'</td><td>';
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="margin:0;">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="update">';
 print '<textarea name="CONVOMAIL_ALLOWED_HOSTS" rows="5" class="minwidth300">'.dol_escape_htmltag(implode("\n", ConvomailAccount::allowedHostPatterns(getDolGlobalString('CONVOMAIL_ALLOWED_HOSTS'))), 0, 1).'</textarea><br>';
@@ -144,7 +144,7 @@ print '<td>'.ajax_constantonoff('CONVOMAIL_AUTOFILE_REPLIES').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailAutofileRepliesDesc').'</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailPageSizeDefault').'</td><td>';
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="margin:0;">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="update_pagesize">';
 $defaultsize = in_array(getDolGlobalInt('CONVOMAIL_PAGE_SIZE'), convomail_page_sizes(), true) ? getDolGlobalInt('CONVOMAIL_PAGE_SIZE') : 25;
@@ -157,7 +157,7 @@ print '</form>';
 print '</td><td class="opacitymedium">'.$langs->trans('ConvomailPageSizeDefaultDesc').'</td></tr>';
 
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailPollInterval').'</td><td>';
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" style="margin:0;">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="margin:0;">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="update_pollinterval">';
 print '<select name="CONVOMAIL_POLL_INTERVAL" class="flat">';
@@ -222,7 +222,7 @@ print '</table>';
 print '<br>';
 print load_fiche_titre($langs->trans('ConvomailOAuthSetup'), '', '');
 print '<div class="opacitymedium marginbottomonly">'.$langs->trans('ConvomailOAuthSetupDesc', DOL_URL_ROOT.'/admin/oauth.php').'</div>';
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="update_oauth">';
 print '<table class="noborder centpercent">';

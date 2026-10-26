@@ -387,6 +387,7 @@ if ($action == 'send') {
 			dol_mkdir($upload_dir_tmp);
 			$safename = dol_sanitizeFileName(convomail_part_filename($att));
 			file_put_contents($upload_dir_tmp.'/'.$safename, $content['data']);
+			dolChmod($upload_dir_tmp.'/'.$safename);
 			$files[] = array('path' => $upload_dir_tmp.'/'.$safename, 'mime' => $att['type'] ?: dol_mimetype($safename), 'name' => $safename);
 		}
 	}
@@ -555,7 +556,7 @@ foreach ($accounts as $acc) {
 	}
 }
 
-print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" enctype="multipart/form-data">';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" enctype="multipart/form-data">';
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="send">';
 print '<input type="hidden" name="origin" value="'.dol_escape_htmltag($origin).'">';

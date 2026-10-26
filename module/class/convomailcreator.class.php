@@ -198,7 +198,7 @@ class ConvomailCreator
 	 */
 	public function hasRole($socid, $role)
 	{
-		$resql = $this->db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid));
+		$resql = $this->db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.((int) $socid).' AND entity IN ('.getEntity('societe').')');
 		$obj = $resql ? $this->db->fetch_object($resql) : null;
 		if (!$obj) {
 			return false;

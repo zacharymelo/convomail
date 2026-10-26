@@ -283,7 +283,7 @@ class ConvomailView
 	{
 		global $langs;
 
-		$resql = $db->query('SELECT fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) $eventid));
+		$resql = $db->query('SELECT fk_element, elementtype FROM '.MAIN_DB_PREFIX.'actioncomm WHERE id = '.((int) $eventid).' AND entity IN ('.getEntity('agenda').')');
 		$obj = $resql ? $db->fetch_object($resql) : null;
 		$type = ($obj && (int) $obj->fk_element > 0) ? ConvomailTargets::fromEventType((string) $obj->elementtype) : '';
 		if ($type === '') {
@@ -330,7 +330,7 @@ class ConvomailView
 			}
 		}
 		if ($socid > 0) {
-			$resql = $db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid);
+			$resql = $db->query('SELECT client, fournisseur FROM '.MAIN_DB_PREFIX.'societe WHERE rowid = '.$socid.' AND entity IN ('.getEntity('societe').')');
 			$obj = $resql ? $db->fetch_object($resql) : null;
 			if ($obj && (int) $obj->fournisseur === 1 && !in_array((int) $obj->client, array(1, 2, 3), true)) {
 				$groups = array('supplier', 'customer', 'other');

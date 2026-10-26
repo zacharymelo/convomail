@@ -144,60 +144,62 @@ class ConvomailTransport
 			}
 		}
 
+		// The account's SMTP settings live in memory for this one email only: whatever happens (an error, an exception
+		// in CMailFile, Swift Mailer or a trigger), they are restored before leaving
 		$saved = $this->overrideSmtpSettings($account);
-
-		$mailfile = new CMailFile(
-			(string) $msg['subject'],
-			(string) $msg['to'],
-			$from,
-			$body,
-			$filepaths,
-			$mimetypes,
-			$filenames,
-			(string) ($msg['cc'] ?? ''),
-			(string) ($msg['bcc'] ?? ''),
-			empty($msg['read_receipt']) ? 0 : 1,
-			1,
-			'',
-			'',
-			(string) ($msg['trackid'] ?? ''),
-			'',
-			self::SEND_CONTEXT,
-			'',
-			(string) ($msg['upload_dir_tmp'] ?? ''),
-			$inreplyto,
-			$inreplyto	// References: parent only in phase 1 (Swift Mailer accepts one id here)
-		);
-
-		if (!empty($mailfile->error)) {
-			$this->restoreSmtpSettings($saved);
-			$this->error = $mailfile->error;
-			$this->errors = $mailfile->errors;
-			return -1;
-		}
-
-		$this->dedupePastedImages($mailfile);
-
-		$result = $mailfile->sendfile();
-
 		$rawmime = '';
-		// @phan-suppress-next-line PhanUndeclaredProperty
-		if ($result && isset($mailfile->message) && is_object($mailfile->message) && method_exists($mailfile->message, 'toString')) {
-			// Swift Mailer gives the message a new Message-ID right after sending it.
-			// Put back the one that was delivered so the Sent copy threads with the replies.
-			$idheader = $mailfile->message->getHeaders()->get('Message-ID');
-			if ($idheader && !empty($mailfile->msgid)) {
-				$idheader->setId(trim((string) $mailfile->msgid, " <>"));
-			}
-			// The sender reading their own Sent copy must not count as an open: take the tracking image out
-			if ($pixel !== '') {
-				$sentbody = str_replace($pixel, '', (string) $mailfile->message->getBody());
-				$mailfile->message->setBody($sentbody, 'text/html');
-			}
-			$rawmime = $mailfile->message->toString();
-		}
+		try {
+			$mailfile = new CMailFile(
+				(string) $msg['subject'],
+				(string) $msg['to'],
+				$from,
+				$body,
+				$filepaths,
+				$mimetypes,
+				$filenames,
+				(string) ($msg['cc'] ?? ''),
+				(string) ($msg['bcc'] ?? ''),
+				empty($msg['read_receipt']) ? 0 : 1,
+				1,
+				'',
+				'',
+				(string) ($msg['trackid'] ?? ''),
+				'',
+				self::SEND_CONTEXT,
+				'',
+				(string) ($msg['upload_dir_tmp'] ?? ''),
+				$inreplyto,
+				$inreplyto	// References: parent only in phase 1 (Swift Mailer accepts one id here)
+			);
 
-		$this->restoreSmtpSettings($saved);
+			if (!empty($mailfile->error)) {
+				$this->error = $mailfile->error;
+				$this->errors = $mailfile->errors;
+				return -1;
+			}
+
+			$this->dedupePastedImages($mailfile);
+
+			$result = $mailfile->sendfile();
+
+			// @phan-suppress-next-line PhanUndeclaredProperty
+			if ($result && isset($mailfile->message) && is_object($mailfile->message) && method_exists($mailfile->message, 'toString')) {
+				// Swift Mailer gives the message a new Message-ID right after sending it.
+				// Put back the one that was delivered so the Sent copy threads with the replies.
+				$idheader = $mailfile->message->getHeaders()->get('Message-ID');
+				if ($idheader && !empty($mailfile->msgid)) {
+					$idheader->setId(trim((string) $mailfile->msgid, " <>"));
+				}
+				// The sender reading their own Sent copy must not count as an open: take the tracking image out
+				if ($pixel !== '') {
+					$sentbody = str_replace($pixel, '', (string) $mailfile->message->getBody());
+					$mailfile->message->setBody($sentbody, 'text/html');
+				}
+				$rawmime = $mailfile->message->toString();
+			}
+		} finally {
+			$this->restoreSmtpSettings($saved);
+		}
 
 		if (!$result) {
 			$this->error = $mailfile->error ? $mailfile->error : $langs->trans('ErrorFailedToSendMail', $account->email, $msg['to']);

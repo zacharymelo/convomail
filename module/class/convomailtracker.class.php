@@ -92,6 +92,7 @@ class ConvomailTracker
 		}
 		$sql = 'SELECT msgid, nb_open, date_first_open, date_last_open FROM '.MAIN_DB_PREFIX.'convomail_message';
 		$sql .= ' WHERE fk_account = '.((int) $accountid).' AND track_key IS NOT NULL AND msgid IN ('.implode(',', array_slice($in, 0, 500)).')';
+		$sql .= ' AND entity IN ('.getEntity('convomailmessage').')';
 		$resql = $db->query($sql);
 		while ($resql && ($obj = $db->fetch_object($resql))) {
 			$out[$obj->msgid] = array('count' => (int) $obj->nb_open, 'first' => (int) $db->jdate($obj->date_first_open), 'last' => (int) $db->jdate($obj->date_last_open));

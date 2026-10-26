@@ -681,17 +681,89 @@ class ConvomailAccount extends CommonObject
 			return false;
 		}
 
-		// No allowlist: refuse private, loopback and reserved ranges
-		$ips = filter_var($host, FILTER_VALIDATE_IP) ? array($host) : (gethostbynamel($host) ?: array());
+		// No allowlist: every address the name resolves to (IPv4 and IPv6) must be public
+		$ips = filter_var($host, FILTER_VALIDATE_IP) ? array($host) : self::resolveHost($host);
 		if (empty($ips)) {
 			return false;
 		}
 		foreach ($ips as $ip) {
-			if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+			if (!self::isPublicIp($ip)) {
 				return false;
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Addresses of a host name: A and AAAA records (one CNAME followed), and the system resolver for IPv4
+	 * (it also reads /etc/hosts)
+	 *
+	 * @param  string   $host Host name
+	 * @return string[]
+	 */
+	private static function resolveHost($host)
+	{
+		$ips = gethostbynamel($host) ?: array();
+		$names = array($host);
+		$records = @dns_get_record($host, DNS_A | DNS_AAAA | DNS_CNAME) ?: array();
+		foreach ($records as $r) {
+			if (($r['type'] ?? '') === 'CNAME' && !empty($r['target'])) {
+				$names[] = (string) $r['target'];
+			}
+		}
+		foreach (array_unique($names) as $i => $name) {
+			$list = $i === 0 ? $records : (@dns_get_record($name, DNS_A | DNS_AAAA) ?: array());
+			foreach ($list as $r) {
+				if (!empty($r['ip'])) {
+					$ips[] = (string) $r['ip'];
+				}
+				if (!empty($r['ipv6'])) {
+					$ips[] = (string) $r['ipv6'];
+				}
+			}
+		}
+		return array_values(array_unique($ips));
+	}
+
+	/**
+	 * Whether an address is on the public internet: not private, loopback, link-local, CGNAT, documentation,
+	 * benchmark, multicast or reserved, for IPv4 and IPv6 (IPv4 inside IPv6, mapped or NAT64, is checked as IPv4)
+	 *
+	 * @param  string $ip Address
+	 * @return bool
+	 */
+	public static function isPublicIp($ip)
+	{
+		$bin = @inet_pton((string) $ip);
+		if ($bin === false) {
+			return false;
+		}
+		if (strlen($bin) === 16) {
+			// ::ffff:a.b.c.d and 64:ff9b::a.b.c.d carry an IPv4 address
+			if (substr($bin, 0, 12) === str_repeat("\0", 10)."\xff\xff" || substr($bin, 0, 12) === "\x00\x64\xff\x9b".str_repeat("\0", 8)) {
+				return self::isPublicIp((string) inet_ntop(substr($bin, 12)));
+			}
+			$blocked = array('::/127', '::ffff:0:0/96', '100::/64', '2001::/23', '2001:db8::/32', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8');
+		} else {
+			$blocked = array('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24',
+				'192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4');
+		}
+		foreach ($blocked as $cidr) {
+			list($net, $bits) = explode('/', $cidr);
+			$netbin = inet_pton($net);
+			if (strlen($netbin) !== strlen($bin)) {
+				continue;
+			}
+			$bytes = intdiv((int) $bits, 8);
+			$rest = (int) $bits % 8;
+			if (substr($bin, 0, $bytes) !== substr($netbin, 0, $bytes)) {
+				continue;
+			}
+			if ($rest === 0 || ((ord($bin[$bytes]) ^ ord($netbin[$bytes])) & (0xff << (8 - $rest)) & 0xff) === 0) {
+				return false;
+			}
+		}
+		return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
 	}
 
 	/**

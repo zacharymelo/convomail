@@ -87,6 +87,13 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		if (!class_exists('Horde_Imap_Client_Socket', true)) {
 			throw new Exception('Horde_Imap_Client library not found: run composer install in the convomail module');
 		}
+		// Checked again at every connection, not only when the account was saved: the name may point elsewhere since
+		$host = strtolower(trim((string) $this->account->imap_host));
+		if (!ConvomailAccount::isHostAllowed($host)) {
+			global $langs;
+			$langs->load('convomail@convomail');
+			throw new Exception($langs->transnoentitiesnoconv('ConvomailErrorHostNotAllowed', $host));
+		}
 
 		$secure = false;
 		switch ($this->account->imap_encryption) {
@@ -280,8 +287,8 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			// Some servers (GreenMail, older ones) refuse grouped criteria: one simple search per header and word
 			$uids = $this->searchHeadersOneByOne($imap, $folder, $words);
 		}
-		if ($cachefile !== '') {
-			@file_put_contents($cachefile, json_encode($uids));
+		if ($cachefile !== '' && @file_put_contents($cachefile, json_encode($uids)) !== false) {
+			dolChmod($cachefile);
 		}
 		return $uids;
 	}
@@ -331,6 +338,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		if (empty($conf->convomail->dir_output) || !is_object($user)) {
 			return '';
 		}
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 		$dir = $conf->convomail->dir_output.'/temp/search';
 		if (!is_dir($dir) && dol_mkdir($dir) < 0) {
 			return '';
@@ -338,7 +346,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		if (mt_rand(1, 20) === 1) {
 			foreach ((array) glob($dir.'/*.json') as $old) {
 				if (dol_now() - (int) @filemtime($old) > self::SEARCH_CACHE_TTL) {
-					@unlink($old);
+					dol_delete_file($old, 1, 1, 1, null, false, 0);
 				}
 			}
 		}
