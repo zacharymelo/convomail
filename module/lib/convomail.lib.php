@@ -153,6 +153,36 @@ function convomail_page_sizes()
 }
 
 /**
+ * Largest upload the server accepts in one form post, in bytes: PHP's upload_max_filesize and post_max_size,
+ * and core's MAIN_UPLOAD_DOC (kB) when set; 0 when unknown
+ *
+ * @return int
+ */
+function convomail_upload_limit()
+{
+	$bytes = function ($v) {
+		$v = trim((string) $v);
+		if ($v === '' || $v === '-1' || $v === '0') {
+			return 0;
+		}
+		$n = (float) $v;
+		switch (strtoupper(substr($v, -1))) {
+			case 'G':
+				$n *= 1024;
+				// no break
+			case 'M':
+				$n *= 1024;
+				// no break
+			case 'K':
+				$n *= 1024;
+		}
+		return (int) $n;
+	};
+	$limits = array_filter(array($bytes(ini_get('upload_max_filesize')), $bytes(ini_get('post_max_size')), getDolGlobalInt('MAIN_UPLOAD_DOC') * 1024));
+	return $limits ? (int) min($limits) : 0;
+}
+
+/**
  * File name of a message part: its own, else "image-<part>.png" style from its type
  *
  * @param  array<string,mixed> $part Part (name, id, type)

@@ -146,6 +146,11 @@
 .cm-dbfiles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .cm-dbfiles .opacitymedium { flex-basis: 100%; }
 .cm-dbchip a { margin-left: 6px; text-decoration: none; font-weight: bold; }
+/* Files from the computer: the field stays in the form (sent with it) but the button and chips replace it */
+.cm-upload-field { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.cm-uploads .warning, #cm-uploads .warning { flex-basis: 100%; margin: 4px 0 0; padding: 4px 8px; }
+.cm-dropping { outline: 2px dashed var(--cm-accent, #3b6fb6); outline-offset: 2px; }
+.cm-dropping::after { content: attr(data-drop-hint); display: block; margin-top: 4px; opacity: .7; }
 .cm-chips .cm-chip { cursor: pointer; }
 .cm-chips .cm-chip a { margin-left: 4px; font-weight: 600; }
 .convomail-signature { color: var(--cm-muted); }

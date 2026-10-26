@@ -389,6 +389,94 @@
 			});
 		}
 
+		// Files from the computer: a chip each (name, size, x), added across picks instead of replacing them, and
+		// files dropped on the field's cell; the chosen ones are put back in the field, which the form sends
+		var upInput = document.getElementById('cm-upload');
+		var upBtn = document.getElementById('cm-upload-btn');
+		var upBox = document.getElementById('cm-uploads');
+		var canSet = false;
+		try {
+			canSet = typeof DataTransfer === 'function' && !!new DataTransfer().files;
+		} catch (e) { canSet = false; }
+		if (upInput && upBtn && upBox && canSet) {
+			var chosen = [];
+			var limit = parseInt(upBox.getAttribute('data-max'), 10) || 0;
+			var sizeText = function (b) {
+				return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+			};
+			var sync = function () {
+				var dt = new DataTransfer();
+				chosen.forEach(function (f) { dt.items.add(f); });
+				upInput.files = dt.files;
+			};
+			var renderUploads = function () {
+				upBox.textContent = '';
+				var total = 0;
+				chosen.forEach(function (f, i) {
+					total += f.size;
+					var chip = document.createElement('span');
+					chip.className = 'cm-chip cm-dbchip cm-upchip';
+					chip.title = f.name;
+					var icon = document.createElement('span');
+					icon.className = 'fa fa-paperclip pictofixedwidth';
+					chip.appendChild(icon);
+					chip.appendChild(document.createTextNode(f.name + ' (' + sizeText(f.size) + ')'));
+					var x = document.createElement('a');
+					x.href = '#';
+					x.textContent = '\u00d7';
+					x.title = upBox.getAttribute('data-remove');
+					x.addEventListener('click', function (ev) {
+						ev.preventDefault();
+						chosen.splice(i, 1);
+						sync();
+						renderUploads();
+					});
+					chip.appendChild(x);
+					upBox.appendChild(chip);
+				});
+				if (limit > 0 && total > limit) {
+					var note = document.createElement('div');
+					note.className = 'warning';
+					note.textContent = upBox.getAttribute('data-overlimit');
+					upBox.appendChild(note);
+				}
+			};
+			var add = function (list) {
+				Array.prototype.forEach.call(list || [], function (f) {
+					if (!chosen.some(function (c) { return c.name === f.name && c.size === f.size && c.lastModified === f.lastModified; })) {
+						chosen.push(f);
+					}
+				});
+				sync();
+				renderUploads();
+			};
+			upInput.classList.add('cm-upload-field');
+			upBtn.hidden = false;
+			upBtn.addEventListener('click', function () { upInput.click(); });
+			// The browser replaces the field's files on each pick: keep the earlier ones
+			upInput.addEventListener('change', function () { add(upInput.files); });
+			var cell = upInput.closest('td') || upBox;
+			cell.setAttribute('data-drop-hint', upBox.getAttribute('data-drop'));
+			cell.addEventListener('dragover', function (ev) {
+				if (ev.dataTransfer && Array.prototype.indexOf.call(ev.dataTransfer.types || [], 'Files') !== -1) {
+					ev.preventDefault();
+					cell.classList.add('cm-dropping');
+				}
+			});
+			cell.addEventListener('dragleave', function (ev) {
+				if (!cell.contains(ev.relatedTarget)) {
+					cell.classList.remove('cm-dropping');
+				}
+			});
+			cell.addEventListener('drop', function (ev) {
+				if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+					ev.preventDefault();
+					cell.classList.remove('cm-dropping');
+					add(ev.dataTransfer.files);
+				}
+			});
+		}
+
 		var tpl = document.getElementById('cm-template');
 		if (tpl) {
 			tpl.addEventListener('change', function () {
