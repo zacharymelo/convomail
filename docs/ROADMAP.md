@@ -57,6 +57,7 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Compose | Reply and Reply all offer the original attachments (unticked). Forwards keep the images shown in the text, embedded, and list them with checkboxes; an image too large or SVG goes as an attachment instead of being dropped. An image a message attaches with a Content-ID but never shows is listed as an attachment | 0.17.0 |
 | Compose | **Attach files…** shows each file as a chip (name, size, × to remove), adds to the list on each pick, and warns over the server's upload limit. Files dragged from the computer can be dropped anywhere on the page (an overlay says what the drop will do): images dropped on the text go in the text, other files are attached; a missed drop never leaves the page | 0.18.0 |
 | From an email | The third party of every Create panel shows as Dolibarr's own link once chosen, with a pen to pick another. *Fill from the invoice* and *Read with AI* select the supplier whose VAT number the invoice gives (exactly one), marked *VAT number*, with a warning when the email does not come from one of its addresses. While they read, the panel stays on screen with a progress line | 0.18.0 |
+| Security | Fixes from the audit of 2026-10-26: the SMTP settings of a send are restored whatever happens (`finally`); the mail-server host check reads IPv4 and IPv6 addresses, refuses more non-public ranges (CGNAT, IPv4 inside IPv6…) and runs again before every IMAP connection; entity filters on single-record reads; escaped page URLs; Dolibarr's file functions. The debug endpoint's free SQL mode is gone from releases (it read every secret of the database); a hardened copy lives on the `debug-tools` branch. Checks: `dev/checks/security.php` | 1.0.0 |
 
 **Tested:** Dolibarr 23.0 (everything) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. The 0.17.0 and 0.18.0 features were also checked by the owner on their test instance (test builds 0.16.91–0.16.93, 0.17.90–0.17.92). See [Test debt](#test-debt).
 
@@ -138,6 +139,8 @@ Each [UPSTREAM.md](../UPSTREAM.md) item is a small separate core PR, to make bef
 | Distribution | DoliStore listing vs GitHub releases only | The repo is public on GitHub, with releases there |
 
 ## Test debt
+
+- **Audit of 2026-10-26, left for later:** `MAIN_DB_PREFIX` instead of `$db->prefix()` (6); PHPUnit tests for the pure functions (matcher, host check, parsers) (9). The DNS-rebinding window between the host check and the connection remains: the IMAP and SMTP libraries resolve the name themselves.
 
 Not yet verified. Do these before telling users it works there:
 - **Dolibarr 24** (the owner's production) and `develop`; **21 and 22** (20 and 23 are checked; `dev/compat/` runs any version with `DOLI_VERSION`).
