@@ -18,13 +18,13 @@
  *   settings  — All CONVOMAIL_* constants
  *   classes   — Class loading and method availability
  *   messages  — Last 20 logged messages with their agenda events
+ *   sql       — Read-only diagnostic query (?mode=sql&q=SELECT...). debug-tools branch only, never released:
+ *               one SELECT in a read-only transaction; no file access (INTO OUTFILE/DUMPFILE, LOAD_FILE), no
+ *               SLEEP/BENCHMARK/locks, no credential tables or columns; values of secret-looking columns masked
  *   hooks     — Registered hook contexts
  *   imap      — How a folder of your default mail account is ordered (?mode=imap&folder=INBOX)
  *   imaptrace — Your last IMAP exchanges with the mail server (recorded while Debug mode is on)
- *   all       — Every diagnostic
- *
- * No SQL mode in released builds: an arbitrary query would read every secret of the database (SMTP and API keys,
- * OAuth tokens) and, depending on the database rights, files on the server. The debug-tools branch keeps one.
+ *   all       — Every diagnostic except sql
  */
 
 $res = 0;
@@ -70,7 +70,7 @@ print "Timestamp: ".date('Y-m-d H:i:s T')."\n";
 print "Dolibarr: ".(defined('DOL_VERSION') ? DOL_VERSION : 'unknown')."\n";
 print "PHP: ".PHP_VERSION."\n";
 print "Mode: $mode\n";
-print "Usage: ?mode=overview|settings|classes|messages|hooks|imap|imaptrace|all\n";
+print "Usage: ?mode=overview|settings|classes|messages|sql|hooks|imap|imaptrace|all\n";
 print str_repeat('=', 60)."\n\n";
 
 if ($mode === 'overview' || $run_all) {
@@ -158,6 +158,69 @@ if ($mode === 'messages' || $run_all) {
 			print "  [$row->rowid] account=$row->fk_account event=$row->fk_actioncomm ($row->code) soc=$row->fk_soc project=$row->fk_project sent=$row->folder#$row->uid\n";
 			print "        msgid=$row->msgid".($row->in_reply_to ? " in-reply-to=$row->in_reply_to" : '')."\n";
 		}
+	}
+	print "\n";
+}
+
+if ($mode === 'sql') {
+	$q = trim((string) GETPOST('q', 'restricthtml'));
+	$q = rtrim($q, "; \t\n\r");
+	print "--- SQL QUERY (debug-tools branch) ---\n";
+	// What a query may not do, even for an admin in debug mode
+	$refused = array(
+		'/;/' => 'one statement only',
+		'/\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|RENAME|GRANT|REVOKE|LOCK|UNLOCK|CALL|DO|HANDLER|LOAD|SET|PREPARE|EXECUTE)\b/i' => 'only SELECT',
+		'/\b(INTO|OUTFILE|DUMPFILE|LOAD_FILE)\b/i' => 'no file access',
+		'/\b(SLEEP|BENCHMARK|GET_LOCK|RELEASE_LOCK|SYS_EXEC|SYS_EVAL)\s*\(/i' => 'no timing or lock functions',
+		'/\b'.preg_quote(MAIN_DB_PREFIX, '/').'(const|oauth_token|user_param)\b/i' => 'credential tables are not shown here',
+		'/\b\w*(pass|password|pass_crypted|pass_temp|secret|token|api_key|apikey)\w*\b/i' => 'credential columns are not shown here',
+	);
+	$why = '';
+	if ($q === '') {
+		print "Usage: ?mode=sql&q=SELECT+rowid,email,status+FROM+llx_convomail_account\n";
+	} elseif (stripos($q, 'SELECT') !== 0) {
+		$why = 'only SELECT';
+	} else {
+		foreach ($refused as $re => $reason) {
+			if (preg_match($re, $q)) {
+				$why = $reason;
+				break;
+			}
+		}
+	}
+	if ($why !== '') {
+		print "ERROR: refused ($why).\n";
+	} elseif ($q !== '') {
+		if (stripos($q, 'LIMIT') === false) {
+			$q .= ' LIMIT 50';
+		}
+		print "Query: $q\n\n";
+		// A read-only transaction too: what slipped past the checks above still can't write
+		$db->query('START TRANSACTION READ ONLY');
+		$resql = $db->query($q);
+		if ($resql) {
+			$first = true;
+			$n = 0;
+			while ($row = $db->fetch_array($resql)) {
+				if ($first) {
+					print implode("\t", array_keys($row))."\n".str_repeat('-', 80)."\n";
+					$first = false;
+				}
+				$n++;
+				$vals = array();
+				foreach ($row as $col => $v) {
+					if (preg_match('/pass|secret|token|key/i', (string) $col)) {
+						$v = ($v === null || $v === '') ? $v : '***';
+					}
+					$vals[] = ($v === null) ? 'NULL' : (strlen($v) > 40 ? substr($v, 0, 40).'...' : $v);
+				}
+				print implode("\t", $vals)."\n";
+			}
+			print "\n$n rows returned.\n";
+		} else {
+			print "SQL ERROR: ".$db->lasterror()."\n";
+		}
+		$db->query('ROLLBACK');
 	}
 	print "\n";
 }
