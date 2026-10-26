@@ -717,6 +717,7 @@
 		}
 
 		function decrementUnread() {
+			window.dispatchEvent(new CustomEvent('convomail:unread-refresh'));	// the top-bar count
 			var badge = qs('.cm-count[data-folder="' + CSS.escape(app.getAttribute('data-folder')) + '"]', app);
 			if (badge) {
 				var n = parseInt(badge.textContent, 10) - 1;
@@ -999,6 +1000,7 @@
 						if (since < 0) {
 							since = data.newest;	// first check of a search page: the baseline
 						} else if (data.new > 0) {
+							window.dispatchEvent(new CustomEvent('convomail:unread-refresh'));	// the top-bar count
 							if (quiet()) {
 								var before = since;
 								since = data.newest;

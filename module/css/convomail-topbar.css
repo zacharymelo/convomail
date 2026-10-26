@@ -1,0 +1,21 @@
+/* Convomail top-bar unread indicator (every page) */
+.cm-topunread-wrap { position: relative; }
+.cm-topunread-wrap[hidden] { display: none; }
+.cm-topunread { position: relative; display: inline-block; }
+.cm-topunread.cm-topunread-failed .fa { opacity: .5; }
+.cm-topunread-count { position: absolute; top: -6px; right: -9px; min-width: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #d93025; color: #fff; font-size: 10px; font-weight: bold; line-height: 16px; text-align: center; pointer-events: none; }
+.cm-topunread-count[hidden] { display: none; }
+.cm-topunread-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 1100; width: 340px; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto; text-align: left; white-space: normal; color: var(--colortext, #222); background: var(--colorbackbody, #fff); border-radius: 6px; box-shadow: 0 6px 24px rgba(0, 0, 0, .22); font-size: 13px; line-height: 1.35; }
+.cm-topunread-menu[hidden] { display: none; }
+.cm-topunread-head { padding: 8px 12px; font-weight: bold; border-bottom: 1px solid var(--colortopbordertitle1, #e6e6e6); }
+.cm-topunread-empty { padding: 14px 12px; opacity: .7; }
+.cm-topunread-menu a.cm-topunread-item { display: block; padding: 8px 12px; border-bottom: 1px solid var(--colortopbordertitle1, #f0f0f0); color: inherit !important; text-decoration: none; }
+.cm-topunread-menu a.cm-topunread-item:hover, .cm-topunread-menu a.cm-topunread-item:focus { background: var(--colorbacklinepairhover, #f2f6fc); }
+.cm-topunread-top { display: flex; justify-content: space-between; gap: 8px; }
+.cm-topunread-from { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-topunread-when { flex: none; opacity: .65; font-size: 12px; }
+.cm-topunread-contact, .cm-topunread-account { display: block; font-size: 12px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-topunread-subject { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-topunread-foot { display: flex; justify-content: space-between; padding: 8px 12px; }
+.cm-topunread-menu .cm-topunread-foot a { color: var(--colortextlink, #1f5fb6) !important; text-decoration: none; }
+.cm-topunread-menu .cm-topunread-foot a:hover { text-decoration: underline; }

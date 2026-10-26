@@ -117,6 +117,33 @@ if (convomail_filing_actions($action, $account, $user)) {
 	exit;
 }
 
+// Unread indicator of the top bar: what is counted and where (per user)
+if ($action == 'save_unread') {
+	require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
+	dol_include_once('/convomail/class/convomailunread.class.php');
+	$mode = GETPOST('unread_mode', 'aZ09');
+	$ids = array();
+	foreach ((new ConvomailUnread($db))->mailboxes($object) as $boxid => $box) {
+		if (in_array((string) $boxid, (array) GETPOST('unread_accounts', 'array'), true)) {
+			$ids[] = (int) $boxid;
+		}
+	}
+	$params = array(
+		ConvomailUnread::PARAM_MODE     => in_array($mode, array('off', 'all', 'contacts'), true) ? $mode : 'contacts',
+		ConvomailUnread::PARAM_PREVIEW  => GETPOSTINT('unread_preview') ? 'yes' : 'no',
+		// "none" when nothing is ticked, so the default (own mailboxes) does not come back
+		ConvomailUnread::PARAM_ACCOUNTS => $ids ? implode(',', $ids) : 'none',
+	);
+	if (dol_set_user_param($db, $conf, $object, $params) > 0) {
+		ConvomailUnread::clearCache($object);
+		setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+	} else {
+		setEventMessages($langs->trans('Error'), null, 'errors');
+	}
+	header('Location: '.$_SERVER['PHP_SELF'].'?id='.$object->id.'#cm-unread-settings');
+	exit;
+}
+
 if (($action == 'test' || $action == 'detectsent') && $account->id > 0) {
 	convomail_account_test($account, $user, $action == 'test');
 	$action = '';
@@ -251,6 +278,44 @@ if ($action == 'create' || ($action == 'edit' && $account->id > 0)) {
 	print '</table>';
 	print '</div>';
 	print convomail_filing_explanation();
+
+	// Unread indicator of the top bar
+	dol_include_once('/convomail/class/convomailunread.class.php');
+	$boxes = (new ConvomailUnread($db))->mailboxes($object);
+	$mode = ConvomailUnread::mode($object);
+	print '<div id="cm-unread-settings">';
+	print load_fiche_titre($langs->trans('ConvomailUnreadSettingsTitle'), '', 'fa-envelope');
+	if (!ConvomailUnread::enabled()) {
+		print '<div class="opacitymedium">'.$langs->trans('ConvomailUnreadDisabledByAdmin').'</div>';
+	}
+	print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF'].'?id='.$object->id).'">';
+	print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="save_unread">';
+	print '<table class="noborder centpercent">';
+	print '<tr class="oddeven"><td class="titlefieldcreate">'.$langs->trans('ConvomailUnreadShow').'</td><td>';
+	foreach (array('contacts' => 'ConvomailUnreadModeContacts', 'all' => 'ConvomailUnreadModeAll', 'off' => 'ConvomailUnreadModeOff') as $value => $label) {
+		print '<label class="marginrightonly nowraponall"><input type="radio" name="unread_mode" value="'.$value.'"'.($mode === $value ? ' checked' : '').'> '.$langs->trans($label).'</label> ';
+	}
+	print '</td></tr>';
+	print '<tr class="oddeven"><td>'.$langs->trans('ConvomailUnreadPreview').'</td><td>';
+	print '<label><input type="checkbox" name="unread_preview" value="1"'.(ConvomailUnread::preview($object) ? ' checked' : '').'> '.$langs->trans('ConvomailUnreadPreviewHelp').'</label>';
+	print '</td></tr>';
+	print '<tr class="oddeven"><td class="tdtop">'.$langs->trans('ConvomailUnreadMailboxes').'</td><td>';
+	if (empty($boxes)) {
+		print '<span class="opacitymedium">'.$langs->trans('ConvomailNoAccount').'</span>';
+	}
+	foreach ($boxes as $boxid => $box) {
+		$acc = $box['account'];
+		print '<label class="nowraponall"><input type="checkbox" name="unread_accounts[]" value="'.((int) $boxid).'"'.($box['counted'] ? ' checked' : '').'> ';
+		print dol_escape_htmltag($acc->label ? $acc->label.' — '.$acc->email : $acc->email);
+		print $box['own'] ? '' : ' <span class="opacitymedium">('.$langs->trans('ConvomailSharedMailbox').')</span>';
+		print '</label><br>';
+	}
+	print '<span class="opacitymedium">'.$langs->trans('ConvomailUnreadMailboxesHelp').'</span>';
+	print '</td></tr>';
+	print '</table>';
+	print '<div class="center margintoponly"><input type="submit" class="button" value="'.$langs->trans('Save').'"></div>';
+	print '</form>';
+	print '</div>';
 }
 
 llxFooter();

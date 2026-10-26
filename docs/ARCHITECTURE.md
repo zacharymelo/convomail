@@ -81,6 +81,7 @@ convomail/
     ajax/folder.php       Folder management: create, rename, delete an empty folder (JSON)
     ajax/action.php       Mailbox actions (JSON)
     ajax/poll.php         New-mail check of the mailbox page (JSON, 6.2b)
+    ajax/unread.php       Unread count and shortlist of the top-bar indicator (JSON, 6.2c)
     ajax/template.php     Email template, substituted (JSON)
     ajax/projectcontacts.php  Project contacts for compose chips (JSON)
     ajax/addresses.php    Address suggestions for To / Cc / Bcc (JSON)
@@ -295,6 +296,13 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 - **New mail:** unread badges (`.cm-count`) and the title (`(n) Mailbox`) follow `unseen`. On the first page without a search, nothing ticked and nothing dragged, `refreshRows()` brings the rows, the count and the page arrows, and new rows flash (`cm-row-new`); otherwise the notice bar (`.cm-notice`) says "n new messages · Show" (Show refreshes in place on the first page, else opens it). A new UIDVALIDITY, or a newest UID below the page's (UIDs never go down otherwise), means the folder was recreated: the bar offers Reload and checks stop.
 - **Errors:** a failed check is retried after 2×, then 4× the interval without a word; the third failure, or a `halt`, stops the checks and the bar shows the error with **Retry** (checks at once and resumes). An HTML answer (Dolibarr's login page) means the session ended: the bar offers Reload. Text only in the bar: no HTML from the server.
 
+### 6.2c Unread indicator in the top bar
+- **Hook:** `ActionsConvomail::printTopRightMenu` (context `toprightmenu`, Dolibarr 20+; `upgradeSchema()` rewrites `MAIN_MODULE_CONVOMAIL_HOOKS` so upgraded installs get it without re-enabling) prints an envelope link with `data-*` (endpoint, token, preview, interval, texts) and its own CSS/JS (`css/convomail-topbar.css`, `js/convomail-topbar.js`). Nothing is read from the mail server while the page renders.
+- **Endpoint:** `ajax/unread.php` (GET, token, `refresh`) → `ConvomailUnread::summary()`: for each mailbox counted (`mailboxes()`: usable ones; user param `CONVOMAIL_UNREAD_ACCOUNTS`, ids or `none`, unset = own ones), `unreadMessages('INBOX', 200)` (STATUS UNSEEN, then SEARCH UNSEEN and the envelopes of the newest 200, no text). Mode (`CONVOMAIL_UNREAD_MODE`: `contacts` default, `all`, `off`): *contacts* keeps the messages whose sender (`ConvomailMatcher::senders()`, Reply-To aware) maps to a contact or third party (`mapEmails()`, names from `names()`), a count that is a lower bound past 200 unread (`plus`); *all* uses the STATUS count. The 8 newest form the shortlist (sender, matched name, subject, date, mailbox, `mailbox.php?accountid&folder=INBOX&uid` link). The result is cached a minute in `<documents>/convomail/temp/unread/<user>.json`, cleared when a message is opened (`ConvomailView::render()`), marked, moved or deleted (`ajax/action.php`) or the settings change.
+- **Script:** loads the count after the page, then every `max(60, poll interval)` s while visible; a click shows the shortlist (`CONVOMAIL_UNREAD_PREVIEW`, `yes`/`no`; words, since `dol_set_user_param()` drops a `0`), Ctrl/Cmd-click or preview off opens the Inbox. The mailbox page sends `convomail:unread-refresh` when its new-mail check sees mail or a message is read (at most every 20 s). Values are written as text.
+- **Settings:** admin `CONVOMAIL_UNREAD_INDICATOR` (on, also switched on once on upgrade to 1.0.90); user block "Unread emails in the top bar" on `user_accounts.php` (`action=save_unread`).
+- **Contact mark in the list:** `mailbox.php` marks rows whose sender is a known contact or third party (`cm-row-contact`, `fa-address-card` with the name from `ConvomailMatcher::senderName()`); not in Sent and Drafts.
+
 ### 6.7 Mailbox actions
 POST `ajax/action.php` with `uids[]` and `action`:
 - `read`, `unread`, `flag`, `unflag`: `setFlag()`.
@@ -412,7 +420,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   - `user:+convomail` (Mail accounts, badge `ConvomailAccount::countForUser`);
   - `project:+convomail_emails` (Emails, badge `ConvomailMessage::countForProject`);
   - `email_admin:+convomail`, shown only with the [core patch](../patches/README.md).
-- **Hook contexts:** `elementproperties`, `thirdpartycard`, `contactcard`, `projectcard`, `actioncard`, `usercard`.
+- **Hook contexts:** `elementproperties`, `thirdpartycard`, `contactcard`, `projectcard`, `actioncard`, `usercard`, `toprightmenu`.
 - **Settings** (`llx_const`):
 
   | Name | Default | Effect |
@@ -421,6 +429,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_ALLOW_SELF_SIGNED` | 0 | Accept self-signed SMTP certificates |
   | `CONVOMAIL_AUTOFILE_REPLIES` | 1 (created on activation) | Automatic filing (6.4) |
   | `CONVOMAIL_PAGE_SIZE` | 25 (unset) | Default messages per mailbox page (10, 25, 50, 100) |
+  | `CONVOMAIL_UNREAD_INDICATOR` | 1 (created on activation, and on upgrade to 1.0.90) | Unread emails indicator in the top bar (6.2c) |
   | `CONVOMAIL_POLL_INTERVAL` | 60 (unset) | Seconds between new-mail checks of the mailbox page (0, 30, 60, 120, 300; 0 = off) |
   | `CONVOMAIL_ADD_SIGNATURE` | 1 (created on activation) | Insert signature in compose |
   | `CONVOMAIL_READ_RECEIPT_DEFAULT` | 0 | Read receipt box ticked by default |
@@ -431,7 +440,7 @@ The AJAX files define `NOTOKENRENEWAL`, so the page's CSRF token stays valid for
   | `CONVOMAIL_DEBUG_MODE` | 0 | Enables `ajax/debug.php`, and records an IMAP protocol trace per user in `<documents>/convomail/temp/imap-trace-<user id>.log` (`?mode=imaptrace`) |
 
 - **In-memory only, during one send:** `MAIN_MAIL_SENDMODE_CONVOMAIL`, `MAIN_MAIL_SMTP_SERVER_CONVOMAIL`, `_PORT_`, `MAIN_MAIL_SMTPS_ID_`, `_PW_`, `_AUTH_TYPE_`, `MAIN_MAIL_EMAIL_TLS_`, `_STARTTLS_`, `MAIN_MAIL_EMAIL_SMTP_ALLOW_SELF_SIGNED_CONVOMAIL`, `MAIN_MAIL_ADD_INLINE_IMAGES_IF_DATA`. For OAuth accounts also `MAIN_MAIL_SMTPS_OAUTH_SERVICE_CONVOMAIL` and `OAUTH_<TYPE>-convomail<id>_ID/_SECRET/_TENANT/_SCOPE/_URLCALLBACK`. They are never written to `llx_const`.
-- **User params:** `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default), `CONVOMAIL_HIDE_CONVERSATION` (1 = the user turned **Show conversation** off; unset = on).
+- **User params:** `CONVOMAIL_UNREAD_MODE`, `CONVOMAIL_UNREAD_ACCOUNTS`, `CONVOMAIL_UNREAD_PREVIEW` (6.2c), `CONVOMAIL_LAST_ACCOUNT`, `CONVOMAIL_LAST_FOLDER`, `CONVOMAIL_PAGE_SIZE` (overrides the setup default), `CONVOMAIL_HIDE_CONVERSATION` (1 = the user turned **Show conversation** off; unset = on).
 - **Session:** `convomail_folders_<accountid>` (folder list, 5 minutes), cleared on account changes and when Archive / Trash are created.
 
 ## 9. Security model

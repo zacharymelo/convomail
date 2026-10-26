@@ -375,6 +375,9 @@ class ConvomailView
 			self::$error = $langs->trans('ConvomailMessageNotFound');
 			return false;
 		}
+		// Opening marks it read: the top-bar count is worked out again
+		dol_include_once('/convomail/class/convomailunread.class.php');
+		ConvomailUnread::clearCache($user);
 		$message['msgid'] = self::msgid($account, $folder, $uid, $message);
 
 		$myemails = self::myEmails($db, $user, $account);

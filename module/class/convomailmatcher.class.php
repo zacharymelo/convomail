@@ -47,6 +47,56 @@ class ConvomailMatcher
 	}
 
 	/**
+	 * Names of matched contacts (with their company) and third parties, for tooltips and the unread list
+	 *
+	 * @param  array<string,array{contactid:int,socid:int}> $matched mapEmails() result
+	 * @return array<string,string>                                  'c<id>' and 's<id>' => name
+	 */
+	public function names(array $matched)
+	{
+		$names = array();
+		$contacts = array_filter(array_unique(array_column($matched, 'contactid')));
+		$socs = array_filter(array_unique(array_column($matched, 'socid')));
+		if ($socs) {
+			$sql = 'SELECT rowid, nom FROM '.MAIN_DB_PREFIX.'societe WHERE rowid IN ('.implode(',', array_map('intval', $socs)).') AND entity IN ('.getEntity('societe').')';
+			$resql = $this->db->query($sql);
+			while ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$names['s'.$obj->rowid] = (string) $obj->nom;
+			}
+		}
+		if ($contacts) {
+			$sql = 'SELECT rowid, firstname, lastname, fk_soc FROM '.MAIN_DB_PREFIX.'socpeople WHERE rowid IN ('.implode(',', array_map('intval', $contacts)).') AND entity IN ('.getEntity('contact').')';
+			$resql = $this->db->query($sql);
+			while ($resql && ($obj = $this->db->fetch_object($resql))) {
+				$name = trim($obj->firstname.' '.$obj->lastname);
+				$soc = $names['s'.$obj->fk_soc] ?? '';
+				$names['c'.$obj->rowid] = $soc !== '' ? $name.' ('.$soc.')' : $name;
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * The Dolibarr name of a message's sender, '' when the sender is not a known contact or third party
+	 *
+	 * @param  array<string,mixed>                          $message Summary (from, reply_to)
+	 * @param  array<string,array{contactid:int,socid:int}> $matched mapEmails() result
+	 * @param  array<string,string>                         $names   names() result
+	 * @return string
+	 */
+	public static function senderName(array $message, array $matched, array $names)
+	{
+		foreach (self::senders($message) as $a) {
+			$hit = $matched[strtolower($a['email'])] ?? null;
+			if ($hit) {
+				$name = $hit['contactid'] > 0 ? ($names['c'.$hit['contactid']] ?? '') : ($names['s'.$hit['socid']] ?? '');
+				return $name !== '' ? $name : $a['email'];
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * For each address, the contact (and its third party) or the third party it belongs to
 	 *
 	 * @param  string[] $emails Bare addresses

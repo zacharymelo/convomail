@@ -919,6 +919,43 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * Unread messages of a folder, newest first, without their text: the unread count (STATUS) and the summaries
+	 * (envelope, flags) of the newest $limit unread ones, for the top-bar indicator
+	 *
+	 * @param  string                                                           $folder Folder
+	 * @param  int                                                              $limit  Summaries at most
+	 * @return array{unseen:int,messages:array<int,array<string,mixed>>}|false Summaries as listMessages() without snippet
+	 */
+	public function unreadMessages($folder, $limit = 200)
+	{
+		try {
+			$imap = $this->connect();
+			$status = $imap->status($folder, Horde_Imap_Client::STATUS_UNSEEN);
+			$unseen = (int) ($status['unseen'] ?? 0);
+			if ($unseen === 0) {
+				return array('unseen' => 0, 'messages' => array());
+			}
+			$query = new Horde_Imap_Client_Search_Query();
+			$query->flag(Horde_Imap_Client::FLAG_SEEN, false);
+			$uids = array_slice(self::newestFirst($imap->search($folder, $query)['match']), 0, max(1, (int) $limit));
+			$fetchquery = new Horde_Imap_Client_Fetch_Query();
+			$fetchquery->envelope();
+			$fetchquery->flags();
+			$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($uids)));
+			$messages = array();
+			foreach ($uids as $uid) {
+				if ($fetched[$uid]) {
+					$messages[] = self::summary($uid, $fetched[$uid]);
+				}
+			}
+			return array('unseen' => $unseen, 'messages' => $messages);
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
+		}
+	}
+
+	/**
 	 * Summaries with snippets of some messages of a folder, in the order of $uids
 	 *
 	 * @param  Horde_Imap_Client_Socket $imap   Connection

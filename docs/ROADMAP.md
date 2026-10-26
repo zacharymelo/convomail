@@ -65,6 +65,9 @@ Users leave Dolibarr to send email from another client, and the link between a c
 
 Phases in order of value as last agreed. Re-check the order with the owner before starting one.
 
+### Unread emails in the top bar (built, not released: test build 1.0.90)
+- Envelope next to the bookmarks with the unread count (from Dolibarr contacts by default, or all, or off, per user), a shortlist of the newest on click that opens each email, mailboxes chosen per user (own by default), admin switch; emails from contacts marked in the list. ARCHITECTURE 6.2c.
+
 ### Mailbox follow-ups
 - Opt-in per user: a browser notification for new mail.
 

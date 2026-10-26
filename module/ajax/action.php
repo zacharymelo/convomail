@@ -87,6 +87,11 @@ if (!$account || $folder === '' || empty($uids)) {
 $client = new ConvomailHordeMailboxClient($account);
 $result = array('ok' => true, 'action' => $action, 'uids' => $uids, 'removed' => array(), 'message' => '');
 
+// Read state or place changes: the top-bar unread count is worked out again
+if (in_array($action, array('read', 'unread', 'move', 'archive', 'delete'), true)) {
+	dol_include_once('/convomail/class/convomailunread.class.php');
+	ConvomailUnread::clearCache($user);
+}
 switch ($action) {
 	case 'read':
 	case 'unread':

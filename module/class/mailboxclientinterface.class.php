@@ -125,6 +125,15 @@ interface ConvomailMailboxClient
 	public function pollFolder($folder, $sinceUid, array $others);
 
 	/**
+	 * Unread messages of a folder, newest first, without their text (top-bar indicator)
+	 *
+	 * @param  string                                                           $folder Folder
+	 * @param  int                                                              $limit  Summaries at most
+	 * @return array{unseen:int,messages:array<int,array<string,mixed>>}|false
+	 */
+	public function unreadMessages($folder, $limit = 200);
+
+	/**
 	 * Rename a folder (its subscription follows).
 	 *
 	 * @param  string $from Current name

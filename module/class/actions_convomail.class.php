@@ -42,6 +42,53 @@ class ActionsConvomail
 	}
 
 	/**
+	 * Top bar, next to the bookmarks: an envelope with the number of unread emails (ConvomailUnread), filled in by
+	 * js/convomail-topbar.js after the page has loaded, and the shortlist under it when the user wants one
+	 *
+	 * @param  array<string,mixed> $parameters  Hook parameters
+	 * @param  CommonObject|null   $object      Object
+	 * @param  string              $action      Action
+	 * @param  HookManager         $hookmanager Hook manager
+	 * @return int                              0
+	 */
+	public function printTopRightMenu($parameters, &$object, &$action, $hookmanager)
+	{
+		global $user, $langs;
+
+		if (!isModEnabled('convomail') || empty($user->id) || !empty($user->socid) || !$user->hasRight('convomail', 'account', 'read')) {
+			return 0;
+		}
+		dol_include_once('/convomail/class/convomailunread.class.php');
+		dol_include_once('/convomail/lib/convomail.lib.php');
+		if (!ConvomailUnread::enabled() || ConvomailUnread::mode($user) === 'off') {
+			return 0;
+		}
+		$langs->load('convomail@convomail');
+		$contacts = (ConvomailUnread::mode($user) === 'contacts');
+		$texts = array(
+			'title'    => $langs->transnoentitiesnoconv($contacts ? 'ConvomailUnreadTitleContacts' : 'ConvomailUnreadTitleAll'),
+			'none'     => $langs->transnoentitiesnoconv($contacts ? 'ConvomailUnreadNoneContacts' : 'ConvomailUnreadNoneAll'),
+			'count'    => $langs->transnoentitiesnoconv($contacts ? 'ConvomailUnreadCountContacts' : 'ConvomailUnreadCountAll', '%s'),
+			'error'    => $langs->transnoentitiesnoconv('ConvomailUnreadError'),
+			'inbox'    => $langs->transnoentitiesnoconv('ConvomailUnreadOpenInbox'),
+			'settings' => $langs->transnoentitiesnoconv('ConvomailUnreadSettings'),
+			'more'     => $langs->transnoentitiesnoconv('ConvomailUnreadMore', '%s'),
+		);
+		$h = '<div class="inline-block cm-topunread-wrap">';
+		$h .= '<a class="cm-topunread login-dropdown-a nofocusvisible" href="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1).'?role=inbox').'"';
+		$h .= ' data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/unread.php', 1)).'" data-token="'.newToken().'"';
+		$h .= ' data-preview="'.(ConvomailUnread::preview($user) ? 1 : 0).'" data-interval="'.max(60, convomail_poll_interval() ?: 120).'"';
+		$h .= ' data-settings="'.dol_escape_htmltag(dol_buildpath('/convomail/user_accounts.php', 1).'?id='.((int) $user->id).'#cm-unread-settings').'"';
+		$h .= ' data-texts="'.dol_escape_htmltag(json_encode($texts)).'" title="'.dol_escape_htmltag($texts['title']).'" aria-haspopup="true" aria-expanded="false">';
+		$h .= '<i class="fa fa-envelope"></i><span class="cm-topunread-count" hidden></span></a>';
+		$h .= '<div class="cm-topunread-menu" hidden></div>';
+		$h .= '</div>';
+		$h .= convomail_assets(array('/convomail/css/convomail-topbar.css'), array('/convomail/js/convomail-topbar.js'));
+		$this->resprints = $h;
+		return 0;
+	}
+
+	/**
 	 * Register the module's objects so getElementProperties() can resolve them
 	 *
 	 * @param  array<string,mixed> $parameters Hook parameters

@@ -56,6 +56,9 @@
 .cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .cm-rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .cm-row { display: grid; grid-template-columns: 22px 22px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 6px 8px 6px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
+/* From a known contact or third party: a card icon before the name and a light tint (hover and selection win) */
+.cm-row.cm-row-contact { background: rgba(59, 111, 182, .06); }
+.cm-contact-mark { color: var(--cm-accent); font-size: .9em; }
 .cm-row:hover { background: var(--cm-hover); }
 .cm-row.selected { background: var(--cm-selected); border-left-color: var(--cm-accent); }
 .cm-row .cm-check { margin: 3px 0 0; }

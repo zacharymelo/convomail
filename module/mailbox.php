@@ -150,6 +150,8 @@ $matcher = new ConvomailMatcher($db);
 $matched = $matcher->mapEmails($emails);
 $resolver = new ConvomailProjectResolver($db);
 $resolved = $resolver->resolvePage($messages, $matched, $myemails);
+// Rows from a known contact or third party are marked (with the name in the tooltip)
+$knownnames = $matcher->names($matched);
 
 // File replies to project threads on their project (at most 10 per page view, so the page stays quick)
 $filed = array();
@@ -404,13 +406,18 @@ foreach ($messages as $m) {
 	$via = $showto ? array() : (ConvomailMatcher::replyToOthers($m) ? $m['from'] : array());
 	$people = $showto ? $m['to'] : ConvomailMatcher::senders($m);
 	$r = $resolved[$m['uid']] ?? null;
-	$classes = 'cm-row'.($m['seen'] ? '' : ' unread').($m['uid'] === $openuid ? ' selected' : '').($m['flagged'] ? ' flagged' : '');
+	$known = $showto ? '' : ConvomailMatcher::senderName($m, $matched, $knownnames);
+	$classes = 'cm-row'.($m['seen'] ? '' : ' unread').($m['uid'] === $openuid ? ' selected' : '').($m['flagged'] ? ' flagged' : '').($known !== '' ? ' cm-row-contact' : '');
 	$href = $selfbase.$listparam.'&uid='.((int) $m['uid']);
 	print '<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-href="'.dol_escape_htmltag($href).'">';
 	print '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
 	print '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
 	print '<a class="cm-row-main" draggable="false" href="'.dol_escape_htmltag($href).'">';
-	print '<span class="cm-row-top"><span class="cm-from">'.dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
+	print '<span class="cm-row-top"><span class="cm-from">';
+	if ($known !== '') {
+		print '<span class="fas fa-address-card cm-contact-mark" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailRowFromContact', $known)).'"></span> ';
+	}
+	print dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
 	if (!empty($via)) {
 		print ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
 	}

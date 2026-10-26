@@ -38,7 +38,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '1.0.0';
+		$this->version = '1.0.90';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'email';
 
@@ -47,7 +47,8 @@ class modConvomail extends DolibarrModules
 			'login' => 0,
 			'substitutions' => 0,
 			'menus' => 0,
-			'hooks' => array('data' => array('elementproperties', 'thirdpartycard', 'contactcard', 'projectcard', 'actioncard', 'usercard'), 'entity' => '0'),
+			// toprightmenu: the unread indicator of the top bar (ActionsConvomail::printTopRightMenu)
+			'hooks' => array('data' => array('elementproperties', 'thirdpartycard', 'contactcard', 'projectcard', 'actioncard', 'usercard', 'toprightmenu'), 'entity' => '0'),
 		);
 
 		$this->dirs = array("/convomail/temp");
@@ -78,6 +79,7 @@ class modConvomail extends DolibarrModules
 			8 => array('CONVOMAIL_TOOL_SUPPLIER_QUOTE', 'chaine', '1', 'Record a supplier quote from an email', 0, 'current', 0),
 			9 => array('CONVOMAIL_TOOL_INVOICE', 'chaine', '1', 'Create a customer invoice from an email', 0, 'current', 0),
 			10 => array('CONVOMAIL_TOOL_LINK', 'chaine', '1', 'Link an email to an existing record', 0, 'current', 0),
+			11 => array('CONVOMAIL_UNREAD_INDICATOR', 'chaine', '1', 'Unread emails indicator in the top bar', 0, 'current', 0),
 		);
 
 		// Mail accounts tab on the user card
@@ -296,16 +298,20 @@ class modConvomail extends DolibarrModules
 
 			// The "From this email" tools start on for installs made before each of them; only once, since a
 			// switch turned off is a missing constant and must stay off (0.12.90: the first 0.13 dev build)
-			$toolsince = array('CONVOMAIL_TOOL_PROPOSAL' => '0.12.92', 'CONVOMAIL_TOOL_SUPPLIER_QUOTE' => '0.12.92', 'CONVOMAIL_TOOL_INVOICE' => '0.13.1', 'CONVOMAIL_TOOL_LINK' => '0.14.0');
+			$toolsince = array('CONVOMAIL_TOOL_PROPOSAL' => '0.12.92', 'CONVOMAIL_TOOL_SUPPLIER_QUOTE' => '0.12.92', 'CONVOMAIL_TOOL_INVOICE' => '0.13.1', 'CONVOMAIL_TOOL_LINK' => '0.14.0',
+				'CONVOMAIL_UNREAD_INDICATOR' => '1.0.90');
 			foreach ($this->const as $c) {
 				$since = $toolsince[$c[0]] ?? '0.12.90';
-				if (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 && version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), $since, '<') && !getDolGlobalString($c[0])) {
+				$onbydefault = (strpos($c[0], 'CONVOMAIL_TOOL_') === 0 || $c[0] === 'CONVOMAIL_UNREAD_INDICATOR');
+				if ($onbydefault && version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), $since, '<') && !getDolGlobalString($c[0])) {
 					dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
 				}
 			}
 
 			$this->delete_menus();
 			$this->insert_menus();
+			// Hook contexts added by a newer version (core stores them when the module is enabled)
+			dolibarr_set_const($this->db, 'MAIN_MODULE_'.strtoupper($this->name).'_HOOKS', json_encode($this->module_parts['hooks']['data']), 'chaine', 0, '', (int) $this->module_parts['hooks']['entity']);
 			// Names, descriptions and connection of the "Log replies automatically" collectors follow the new version
 			if (isModEnabled('emailcollector') && is_object($user)) {
 				dol_include_once('/convomail/class/convomailcollector.class.php');

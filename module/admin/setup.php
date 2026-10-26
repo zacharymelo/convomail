@@ -169,6 +169,10 @@ print '</select> <input type="submit" class="button smallpaddingimp" value="'.$l
 print '</form>';
 print '</td><td class="opacitymedium">'.$langs->trans('ConvomailPollIntervalDesc').'</td></tr>';
 
+print '<tr class="oddeven"><td>'.$langs->trans('ConvomailUnreadIndicator').'</td>';
+print '<td>'.ajax_constantonoff('CONVOMAIL_UNREAD_INDICATOR').'</td>';
+print '<td class="opacitymedium">'.$langs->trans('ConvomailUnreadIndicatorDesc').'</td></tr>';
+
 print '<tr class="oddeven"><td>'.$langs->trans('ConvomailAddSignature').'</td>';
 print '<td>'.ajax_constantonoff('CONVOMAIL_ADD_SIGNATURE').'</td>';
 print '<td class="opacitymedium">'.$langs->trans('ConvomailAddSignatureDesc').'</td></tr>';
