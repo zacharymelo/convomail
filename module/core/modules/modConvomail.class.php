@@ -36,6 +36,9 @@ class modConvomail extends DolibarrModules
 		$this->family = "crm";
 		$this->module_position = '50';
 
+		$this->editor_name = 'Zach Melo';
+		$this->editor_url = 'https://zachmelo.com';
+
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
 		$this->version = '1.0.94';
