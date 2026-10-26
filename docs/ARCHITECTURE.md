@@ -222,7 +222,8 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 2. POST `action=send`:
    - the account must be the user's own and enabled;
    - the body is read with `restricthtml` (rich editor) or raw and escaped (plain textarea);
-   - attachments are uploaded to a per-send temp dir (forwards re-fetch the original parts);
+   - attachments are uploaded to a per-send temp dir; the original message's parts the user ticked (`fwdparts[]`: all ticked for a forward, none for a reply) are re-fetched from IMAP into it;
+   - a forward's quote keeps inline raster images as `data:` images (`ConvomailRenderer::cleanBody(…, true, true)`, 1 MB each, 4 MB together, no SVG), which core embeds like pasted images (`dedupePastedImages()`, UPSTREAM 10); a reply's quote turns them into `[name]`;
    - files picked with the optional Document Browser module come as `dbfile[]` keys. Each goes through `DocBrowserService::resolve()` (the record's own access checks; one refused key stops the send) and `copyForMail()` into the same temp dir. Then `split()` turns the largest picks into share links when the total, uploads included, is over `DOCBROWSER_MAX_ATTACH_MB`. `shareLinks()` + `linksBlock()` go into the body above the signature or quote (`convomail_insert_before_signature()`), so the agenda copy has them too.
 3. `ConvomailMatcher::matchRecipients()` gives the contacts and, if unambiguous, the third party. `buildTrackId()` makes the tracking id.
 4. `ConvomailTransport::send()`:

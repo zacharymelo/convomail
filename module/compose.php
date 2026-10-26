@@ -216,7 +216,8 @@ if ($action == '') {
 			$subject = preg_match('/^(re|aw|sv):/i', $basesubject) ? $basesubject : 'Re: '.$basesubject;
 		}
 
-		$quotedhtml = $srcrenderer->cleanBody(false, true);
+		// A forward keeps the images shown in the text (sent embedded, as pasted images); a reply quotes them as [name]
+		$quotedhtml = $srcrenderer->cleanBody(false, true, $mode === 'forward' && $editorishtml);
 		if ($editorishtml) {
 			$message = '<br><br><div class="convomail-quote">'.dol_escape_htmltag($intro).'</div>';
 			$message .= '<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">'.$quotedhtml.'</blockquote>';
@@ -370,8 +371,8 @@ if ($action == 'send') {
 		}
 	}
 
-	// Forward: re-attach the original attachments the user kept ticked
-	if (!$error && $srcmessage && $mode === 'forward') {
+	// Forward or reply: attach the original attachments the user ticked
+	if (!$error && $srcmessage) {
 		$keep = GETPOST('fwdparts', 'array');
 		foreach ($srcrenderer->attachments() as $att) {
 			if (!in_array((string) $att['id'], $keep, true)) {
@@ -620,12 +621,14 @@ if (!empty($templates) && $editorishtml) {
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
 
 print '<tr><td>'.$langs->trans('MailFile').'</td><td>';
-if ($srcmessage && $mode === 'forward') {
+// The original message's attachments: ticked for a forward, offered unticked for a reply
+if ($srcmessage && $srcrenderer->attachments()) {
+	print '<div class="opacitymedium">'.$langs->trans($mode === 'forward' ? 'ConvomailOriginalAttachmentsForward' : 'ConvomailOriginalAttachmentsReply').'</div>';
 	$keep = ($action == '') ? null : GETPOST('fwdparts', 'array');
 	foreach ($srcrenderer->attachments() as $att) {
 		$name = $att['name'] !== '' ? $att['name'] : $langs->trans('ConvomailUnnamedPart', $att['id']);
-		$checked = ($keep === null || in_array((string) $att['id'], $keep, true));
-		print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).'</label><br>';
+		$checked = ($keep === null) ? ($mode === 'forward') : in_array((string) $att['id'], $keep, true);
+		print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).(!empty($att['size']) ? ' <span class="opacitymedium">'.dol_print_size((int) $att['size'], 1, 1).'</span>' : '').'</label><br>';
 	}
 }
 print '<input type="file" name="attachments[]" multiple>';

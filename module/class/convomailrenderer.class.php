@@ -25,6 +25,12 @@ dol_include_once('/convomail/class/hordemailboxclient.class.php');
  */
 class ConvomailRenderer
 {
+	/** Largest inline image put into a forward, in bytes */
+	const EMBED_MAX_BYTES = 1048576;
+
+	/** Inline images put into a forward, in bytes altogether */
+	const EMBED_MAX_TOTAL = 4194304;
+
 	/** @var ConvomailMailboxClient */
 	private $client;
 
@@ -104,9 +110,12 @@ class ConvomailRenderer
 	 * @param  bool   $allowImages Keep remote images
 	 * @param  bool   $forStorage  For an agenda event or a quote: inline images become [name] text, because
 	 *                             attachment.php links only work while the message is in this user's mailbox
+	 * @param  bool   $embedImages With $forStorage, for a forward: inline raster images become data: images
+	 *                             instead (sent embedded, as pasted images are), within EMBED_MAX_BYTES each and
+	 *                             EMBED_MAX_TOTAL together; the others stay [name] text
 	 * @return string
 	 */
-	public function cleanBody($allowImages = false, $forStorage = false)
+	public function cleanBody($allowImages = false, $forStorage = false, $embedImages = false)
 	{
 		$part = $this->bodyPart();
 		if (!$part) {
@@ -135,12 +144,46 @@ class ConvomailRenderer
 			$this->blockedImages = (bool) preg_match('#<img[^>]+src\s*=\s*["\']?\s*(https?:)?//#i', $text);
 		}
 		if ($forStorage) {
-			return preg_replace_callback('#<img\b[^>]*\bsrc\s*=\s*"cid:[^"]*"[^>]*>#i', function ($m) {
+			$total = 0;
+			return preg_replace_callback('#<img\b[^>]*\bsrc\s*=\s*"cid:([^"]*)"[^>]*>#i', function ($m) use ($embedImages, &$total) {
+				$data = $embedImages ? $this->inlineImageData(rawurldecode($m[1]), $total) : '';
+				if ($data !== '') {
+					return str_replace('cid:'.$m[1], $data, $m[0]);
+				}
 				$alt = preg_match('#\balt\s*=\s*"([^"]*)"#i', $m[0], $a) ? $a[1] : '';
 				return $alt !== '' ? '['.$alt.']' : '';
 			}, $clean);
 		}
 		return $this->rewriteCidLinks($clean);
+	}
+
+	/**
+	 * An inline image of the message as a data: URI, for a forward; '' when there is none, it is not a
+	 * raster image (SVG can carry script), or it would go over the limits
+	 *
+	 * @param  string $cid   Content-ID the body refers to
+	 * @param  int    $total Bytes embedded so far (updated)
+	 * @return string
+	 */
+	private function inlineImageData($cid, &$total)
+	{
+		$types = array('image/png', 'image/jpeg', 'image/gif', 'image/webp');
+		foreach ($this->message['parts'] as $part) {
+			if ($part['cid'] === '' || strtolower($part['cid']) !== strtolower($cid) || !in_array(strtolower($part['type']), $types, true)) {
+				continue;
+			}
+			if ((int) ($part['size'] ?? 0) > self::EMBED_MAX_BYTES * 1.4) {	// base64 in the structure
+				return '';
+			}
+			$content = $this->client->fetchPart($this->folder, $this->uid, $part['id']);
+			$bytes = ($content !== false) ? strlen((string) $content['data']) : 0;
+			if (!$bytes || $bytes > self::EMBED_MAX_BYTES || $total + $bytes > self::EMBED_MAX_TOTAL) {
+				return '';
+			}
+			$total += $bytes;
+			return 'data:'.strtolower($part['type']).';base64,'.base64_encode((string) $content['data']);
+		}
+		return '';
 	}
 
 	/**
