@@ -1,3 +1,6 @@
 module/vendor/
 bin/*.zip
 .DS_Store
+
+# Working notes and drafts, kept locally
+docs/open-tracking/
