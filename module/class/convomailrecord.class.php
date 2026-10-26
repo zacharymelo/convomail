@@ -366,7 +366,7 @@ class ConvomailRecord
 		if ($type === 'invoice_supplier') {
 			$h .= self::row($langs->trans('Supplier'), self::picker('socid', $v['socid'], $socname, 'societe', 'supplier'), true);
 			if ($readable && $read === null) {
-				$button = '<button type="button" class="button smallpaddingimp" data-cm-invoice-read="1">'.img_picto('', 'fa-file-invoice', 'class="pictofixedwidth"').$langs->trans('ConvomailReadButton').'</button>';
+				$button = '<button type="button" class="button smallpaddingimp" data-cm-invoice-read="1" data-cm-busy="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadBusy')).'" data-cm-busy-failed="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadBusyFailed')).'">'.img_picto('', 'fa-file-invoice', 'class="pictofixedwidth"').$langs->trans('ConvomailReadButton').'</button>';
 				$h .= self::row('', $button, false, $langs->transnoentitiesnoconv('ConvomailReadButtonHelp'));
 			}
 			$h .= self::row($langs->trans('ConvomailSupplierNumber').self::readBadge($read, 'ref_supplier'), '<input type="text" name="ref_supplier" class="minwidth150" maxlength="180" value="'.dol_escape_htmltag($v['ref_supplier']).'">', true, $langs->transnoentitiesnoconv('ConvomailSupplierNumberHelp'));
@@ -423,7 +423,7 @@ class ConvomailRecord
 				$h .= '<div class="'.($note['level'] === 'warning' ? 'warning' : 'info').'">'.dol_escape_htmltag($note['text']).'</div>';
 			}
 			if (!empty($read['aioffer'])) {
-				$h .= '<div class="cm-rp-readai"><button type="button" class="button smallpaddingimp" data-cm-invoice-read="2">'.img_picto('', 'ai', 'class="pictofixedwidth"').$langs->trans('ConvomailReadAiButton').'</button>';
+				$h .= '<div class="cm-rp-readai"><button type="button" class="button smallpaddingimp" data-cm-invoice-read="2" data-cm-busy="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadAiBusy')).'" data-cm-busy-failed="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadBusyFailed')).'">'.img_picto('', 'ai', 'class="pictofixedwidth"').$langs->trans('ConvomailReadAiButton').'</button>';
 				$h .= ' <span class="classfortooltip" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailReadAiButtonHelp')).'">'.img_help(0, '').'</span></div>';
 			}
 			$h .= '</div>';

@@ -193,25 +193,35 @@
 	}
 
 	/**
-	 * Open the panel of a type ('file' or a record kind) under the buttons; extra: query string to add (kind switch)
+	 * Open the panel of a type ('file' or a record kind) under the buttons; extra: query string to add (kind switch).
+	 * busy: the button that asked for it (Fill from the invoice, Read with AI): the panel stays on screen, locked, with
+	 * a status line under that button until the new one arrives, and comes back as it was if that fails.
 	 */
-	function openRecordPanel(view, type, extra) {
+	function openRecordPanel(view, type, extra, busy) {
 		var line = qs('.cm-recordline', view);
 		var slot = qs('.cm-recordpanel', view);
-		closeRecordPanel(view);
+		var status = busy ? startBusy(busy) : null;
+		if (!status) {
+			closeRecordPanel(view);
+		}
 		// A button of the line (File, Link) or the Create menu, for a kind picked in it
 		var opener = qs(':scope > [data-cm-record="' + type + '"]', line) || qs('[data-cm-createmenu]', line);
 		if (opener) {
 			opener.classList.add('cm-active');
 		}
 		slot.setAttribute('data-type', type);
-		slot.classList.add('loading');
+		if (!status) {
+			slot.classList.add('loading');
+		}
 		var url = line.getAttribute('data-url') + '&action=panel&type=' + encodeURIComponent(type)
 			+ '&token=' + encodeURIComponent(line.getAttribute('data-token')) + (extra || '');
 		fetch(url, { credentials: 'same-origin' })
 			.then(function (r) { return r.ok ? r.text() : Promise.reject(new Error(r.status)); })
 			.then(function (html) {
 				slot.classList.remove('loading');
+				if (status) {
+					status.stop();
+				}
 				if (slot.getAttribute('data-type') !== type || !slot.isConnected) {
 					return;	// closed, another panel or another message opened meanwhile
 				}
@@ -229,9 +239,75 @@
 			})
 			.catch(function () {
 				slot.classList.remove('loading');
+				if (status) {
+					status.fail();	// the panel as it was, with the error under the button
+					return;
+				}
 				closeRecordPanel(view);
 				notify('Error', false);
 			});
+	}
+
+	/**
+	 * Lock a panel while the server works for one of its buttons: the form dimmed and not clickable, the button
+	 * disabled with a spinner, a status line under it (data-cm-busy) with the seconds elapsed after a few.
+	 * Returns {stop, fail}: fail() unlocks the form and says it did not work (data-cm-busy-failed).
+	 */
+	function startBusy(button) {
+		var form = button.closest('form.cm-rp');
+		if (!form) {
+			return null;
+		}
+		qsa('.cm-rp-busy', form).forEach(function (old) { old.remove(); });	// a failure line of an earlier try
+		// Its own block of the form (not dimmed), just above the part holding the button
+		var block = button;
+		while (block.parentNode && block.parentNode !== form) {
+			block = block.parentNode;
+		}
+		var line = document.createElement('div');
+		line.className = 'cm-rp-busy';
+		line.setAttribute('role', 'status');
+		line.setAttribute('aria-live', 'polite');
+		var spin = document.createElement('span');
+		spin.className = 'cm-spinner';
+		spin.setAttribute('aria-hidden', 'true');
+		var text = document.createElement('span');
+		var label = button.getAttribute('data-cm-busy') || '…';
+		text.textContent = label;
+		line.appendChild(spin);
+		line.appendChild(text);
+		form.insertBefore(line, block.parentNode === form ? block : null);
+		line.scrollIntoView({ block: 'nearest' });
+		form.classList.add('loading', 'cm-rp-working');
+		form.setAttribute('aria-busy', 'true');
+		button.disabled = true;
+		button.classList.add('cm-btn-working');
+		var started = Date.now();
+		var timer = setInterval(function () {
+			var secs = Math.round((Date.now() - started) / 1000);
+			if (secs >= 3) {
+				text.textContent = label + ' ' + secs + ' s';
+			}
+		}, 1000);
+		function unlock() {
+			clearInterval(timer);
+			form.classList.remove('loading', 'cm-rp-working');
+			form.removeAttribute('aria-busy');
+			button.disabled = false;
+			button.classList.remove('cm-btn-working');
+		}
+		return {
+			stop: function () {
+				unlock();
+				line.remove();
+			},
+			fail: function () {
+				unlock();
+				spin.remove();
+				line.classList.add('cm-rp-busy-failed');
+				text.textContent = button.getAttribute('data-cm-busy-failed') || 'Error';
+			}
+		};
 	}
 
 	function recordMessages(form, res) {
@@ -397,7 +473,7 @@
 			var rform = read.closest('form.cm-rp');
 			var rcarry = '&readinvoice=' + (read.getAttribute('data-cm-invoice-read') === '2' ? '2' : '1') + '&carry_socid=' + encodeURIComponent(rform.elements.socid ? rform.elements.socid.value : '')
 				+ '&carry_ref=' + encodeURIComponent(rform.elements.ref_supplier ? rform.elements.ref_supplier.value : '');
-			openRecordPanel(rform.closest('.cm-view'), rform.getAttribute('data-type'), rcarry);
+			openRecordPanel(rform.closest('.cm-view'), rform.getAttribute('data-type'), rcarry, read);
 			return;
 		}
 		if (ev.target.closest('[data-cm-rp-close]')) {

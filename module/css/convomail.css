@@ -280,6 +280,14 @@
 .cm-recordpanel.loading { min-height: 40px; opacity: .5; }
 .cm-rp { margin: 0 0 8px; padding: 8px 12px 10px; border: 1px solid var(--cm-border); border-left: 3px solid var(--cm-accent); border-radius: 4px; background: var(--colorbackbody, #fff); font-size: .92em; }
 .cm-rp.loading { opacity: .6; pointer-events: none; }
+.cm-rp.cm-rp-working { opacity: 1; }
+.cm-rp.cm-rp-working > *:not(.cm-rp-head):not(.cm-rp-busy) { opacity: .55; }
+.cm-rp.cm-rp-working .cm-rp-head { pointer-events: auto; }	/* the close button still works */
+.cm-rp-busy { display: flex; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 10px; border-radius: 4px; background: var(--colorbacktitle1, #f4f4f4); font-weight: bold; }
+.cm-rp-busy-failed { background: #fff7d6; font-weight: normal; }
+.cm-spinner { width: 14px; height: 14px; flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cm-spin .8s linear infinite; }
+@keyframes cm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cm-spinner { animation-duration: 2.4s; } }
 .cm-rp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin-bottom: 6px; font-weight: 600; }
 .cm-rp-title { flex: 1 1 auto; }
 .cm-rp-close { border: 0; background: transparent; font-size: 1.4em; line-height: 1; cursor: pointer; color: var(--cm-muted); padding: 0 4px; }

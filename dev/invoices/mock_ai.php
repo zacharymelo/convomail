@@ -2,7 +2,8 @@
 // OpenAI-style chat endpoint for the "Read with AI" checks: answers from a canned set and keeps the last request.
 // Dev only. Runs inside the dolibarr container: php -S 127.0.0.1:8099 /tmp/cm-invoices/mock_ai.php  (ai_setup.php starts it)
 // The answer is chosen by the file /tmp/cm-ai-mock/mode: good (default), fenced, hostile, prose, error, http500,
-// tokens (number and VAT number copied as they arrived, masked or not, plus an invented placeholder).
+// tokens (number and VAT number copied as they arrived, masked or not, plus an invented placeholder),
+// slow (the good answer after 8 seconds, to see the panel's progress line).
 $dir = '/tmp/cm-ai-mock';
 @mkdir($dir, 0700, true);
 $body = (string) file_get_contents('php://input');
@@ -17,6 +18,10 @@ $good = array(
 	'vatlines' => array(array('rate' => 20, 'net' => 100, 'vat' => 20), array('rate' => 5.5, 'net' => 200, 'vat' => 11)),
 );
 switch ($mode) {
+	case 'slow':
+		sleep(8);
+		$content = json_encode($good);
+		break;
 	case 'http500':
 		http_response_code(500);
 		print 'Internal error';
