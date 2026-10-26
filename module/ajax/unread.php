@@ -12,9 +12,11 @@
  * \ingroup convomail
  * \brief   Unread emails of the top-bar indicator (ConvomailUnread), asked for after the page has loaded
  *
- * GET token, refresh (1: ignore the one-minute cache). JSON {ok, mode, total, plus, accounts, items} with items
- * [{from, email, contact, subject, date, account, url}], or {ok: false, error}. Plain text only: the script
- * writes every value as text.
+ * GET token, refresh (1: ignore the one-minute cache). JSON {ok, mode, total, plus, accounts, items} with accounts
+ * [{id, label, count, plus, error, maxuid}] and items [{from, email, contact, subject, date, account, url}], or
+ * {ok: false, error}. Plain text only: the script writes every value as text.
+ * POST token, action=markread, maxuid[<account id>]=<uid>: marks what is counted as read, up to those UIDs
+ * (ConvomailUnread::markAllRead()), then answers the new count as above, with marked and errors.
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -64,7 +66,20 @@ if (!ConvomailUnread::enabled() || ConvomailUnread::mode($user) === 'off') {
 // The mail servers can be slow: other pages of the user must not wait for this one
 convomail_release_session();
 
-$summary = (new ConvomailUnread($db))->summary($user, (bool) GETPOSTINT('refresh'));
+$unread = new ConvomailUnread($db);
+$marked = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && GETPOST('action', 'aZ09') === 'markread') {
+	$maxuids = array();
+	foreach ((array) GETPOST('maxuid', 'array') as $accid => $uid) {
+		$maxuids[(int) $accid] = (int) $uid;
+	}
+	$marked = $unread->markAllRead($user, $maxuids);
+}
+$summary = $unread->summary($user, $marked !== null || (bool) GETPOSTINT('refresh'));
+if ($marked !== null) {
+	$summary['marked'] = $marked['marked'];
+	$summary['errors'] = $marked['errors'];
+}
 unset($summary['key']);
 $summary['ok'] = true;
 print json_encode($summary);

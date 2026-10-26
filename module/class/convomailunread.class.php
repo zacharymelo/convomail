@@ -40,6 +40,9 @@ class ConvomailUnread
 	/** Unread envelopes read per mailbox (the newest); over that, a count from contacts is a lower bound */
 	const LIMIT = 200;
 
+	/** Unread emails "Mark all as read" handles per mailbox at most (the newest) */
+	const MARK_LIMIT = 1000;
+
 	/** Emails in the shortlist */
 	const SHORTLIST = 8;
 
@@ -145,7 +148,7 @@ class ConvomailUnread
 			$client->close();
 			$label = (string) ($acc->label ?: $acc->email);
 			if ($read === false) {
-				$result['accounts'][] = array('id' => $id, 'label' => $label, 'count' => 0, 'plus' => false, 'error' => $error !== '' ? $error : 'Error');
+				$result['accounts'][] = array('id' => $id, 'label' => $label, 'count' => 0, 'plus' => false, 'error' => $error !== '' ? $error : 'Error', 'maxuid' => 0);
 				continue;
 			}
 			$messages = $read['messages'];
@@ -164,7 +167,9 @@ class ConvomailUnread
 			}
 			$result['total'] += $count;
 			$result['plus'] = $result['plus'] || $plus;
-			$result['accounts'][] = array('id' => $id, 'label' => $label, 'count' => $count, 'plus' => $plus, 'error' => '');
+			// The newest unread message read: "Mark all as read" stops there, so mail that arrives later stays unread
+			$maxuid = $read['messages'] ? max(array_map('intval', array_column($read['messages'], 'uid'))) : 0;
+			$result['accounts'][] = array('id' => $id, 'label' => $label, 'count' => $count, 'plus' => $plus, 'error' => '', 'maxuid' => $maxuid);
 		}
 
 		usort($candidates, function ($a, $b) {
@@ -191,6 +196,52 @@ class ConvomailUnread
 			}
 		}
 		return $result;
+	}
+
+	/**
+	 * Mark as read what the indicator counts, in the counted mailboxes: unread emails from contacts (or all of them,
+	 * in "all" mode) up to the newest one the user saw counted ($maxuids, by mailbox), so mail that arrived since
+	 * stays unread. The read flag is the mail server's: it shows in every mail app.
+	 *
+	 * @param  User                                       $u       User
+	 * @param  array<int,int>                             $maxuids Newest counted UID by mailbox id (summary()'s accounts[].maxuid)
+	 * @return array{marked:int,errors:array<int,string>}
+	 */
+	public function markAllRead(User $u, array $maxuids)
+	{
+		$out = array('marked' => 0, 'errors' => array());
+		$mode = self::mode($u);
+		if ($mode === 'off') {
+			return $out;
+		}
+		foreach ($this->mailboxes($u) as $id => $b) {
+			$maxuid = (int) ($maxuids[$id] ?? 0);
+			if (!$b['counted'] || $maxuid <= 0) {
+				continue;
+			}
+			$acc = $b['account'];
+			$client = new ConvomailHordeMailboxClient($acc);
+			$client->setTimeout(30);
+			$read = $client->unreadMessages('INBOX', self::MARK_LIMIT);
+			if ($read !== false) {
+				$messages = array_values(array_filter($read['messages'], function ($m) use ($maxuid) {
+					return (int) $m['uid'] <= $maxuid;
+				}));
+				if ($mode === 'contacts') {
+					$messages = $this->fromContacts($messages);
+				}
+				$uids = array_map('intval', array_column($messages, 'uid'));
+				if ($uids && $client->setFlag('INBOX', $uids, '\\Seen', true)) {
+					$out['marked'] += count($uids);
+				}
+			}
+			if ($client->getError() !== '') {
+				$out['errors'][] = (string) ($acc->label ?: $acc->email).': '.$client->getError();
+			}
+			$client->close();
+		}
+		self::clearCache($u);
+		return $out;
 	}
 
 	/**

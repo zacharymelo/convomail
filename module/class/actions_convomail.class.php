@@ -73,6 +73,9 @@ class ActionsConvomail
 			'inbox'    => $langs->transnoentitiesnoconv('ConvomailUnreadOpenInbox'),
 			'settings' => $langs->transnoentitiesnoconv('ConvomailUnreadSettings'),
 			'more'     => $langs->transnoentitiesnoconv('ConvomailUnreadMore', '%s'),
+			'markall'  => $langs->transnoentitiesnoconv('ConvomailUnreadMarkAll'),
+			'marking'  => $langs->transnoentitiesnoconv('ConvomailUnreadMarking'),
+			'markconfirm' => $langs->transnoentitiesnoconv($contacts ? 'ConvomailUnreadMarkConfirmContacts' : 'ConvomailUnreadMarkConfirmAll', '%s'),
 		);
 		$h = '<div class="inline-block cm-topunread-wrap">';
 		$h .= '<a class="cm-topunread login-dropdown-a nofocusvisible" href="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1).'?role=inbox').'"';

@@ -154,10 +154,60 @@
 			var inbox = el('a', '', count > items.length ? t('more', count - items.length) : t('inbox'));
 			inbox.href = link.href;
 			foot.appendChild(inbox);
+			if (count > 0) {
+				var markall = el('button', 'cm-topunread-markall', t('markall'));
+				markall.type = 'button';
+				markall.addEventListener('click', function (ev) {
+					ev.preventDefault();
+					markAllRead(markall, count);
+				});
+				foot.appendChild(markall);
+			}
 			var settings = el('a', 'cm-topunread-settings', t('settings'));
 			settings.href = link.getAttribute('data-settings');
 			foot.appendChild(settings);
 			menu.appendChild(foot);
+		}
+
+		// Mark what is counted as read on the mail server, up to the newest message counted in each mailbox
+		function markAllRead(button, count) {
+			if (!data || !window.confirm(t('markconfirm', count + (data.plus ? '+' : '')))) {
+				return;
+			}
+			var fd = new FormData();
+			fd.append('token', link.getAttribute('data-token'));
+			fd.append('action', 'markread');
+			(data.accounts || []).forEach(function (a) {
+				if (a.maxuid > 0) {
+					fd.append('maxuid[' + a.id + ']', a.maxuid);
+				}
+			});
+			button.disabled = true;
+			button.textContent = t('marking');
+			busy = true;
+			fetch(link.getAttribute('data-url'), { method: 'POST', body: fd, credentials: 'same-origin', headers: { Accept: 'application/json' } })
+				.then(function (r) {
+					return (r.headers.get('Content-Type') || '').indexOf('json') !== -1 ? r.json() : null;
+				})
+				.then(function (d) {
+					busy = false;
+					failed = !d || !d.ok;
+					if (!failed) {
+						data = d;
+					}
+					render();
+					fillMenu();
+					if (d && d.errors && d.errors.length) {
+						menu.insertBefore(el('div', 'cm-topunread-empty', t('error')), menu.children[1] || null);
+					}
+					// The mailbox page, when open, shows the rows read
+					window.dispatchEvent(new CustomEvent('convomail:unread-marked'));
+				})
+				.catch(function () {
+					busy = false;
+					button.disabled = false;
+					button.textContent = t('markall');
+				});
 		}
 
 		function openMenu() {

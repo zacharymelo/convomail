@@ -16,6 +16,10 @@
 .cm-topunread-when { flex: none; opacity: .65; font-size: 12px; }
 .cm-topunread-contact, .cm-topunread-account { display: block; font-size: 12px; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-topunread-subject { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cm-topunread-foot { display: flex; justify-content: space-between; padding: 8px 12px; }
+.cm-topunread-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; }
+.cm-topunread-markall { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: var(--colortextlink, #1f5fb6); }
+.cm-topunread-markall:hover { text-decoration: underline; }
+.cm-topunread-markall:disabled { opacity: .6; cursor: default; text-decoration: none; }
 .cm-topunread-menu .cm-topunread-foot a { color: var(--colortextlink, #1f5fb6) !important; text-decoration: none; }
+.cm-topunread-settings { margin-left: auto; }
 .cm-topunread-menu .cm-topunread-foot a:hover { text-decoration: underline; }

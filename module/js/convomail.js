@@ -830,6 +830,13 @@
 				.catch(function () { /* the list stays as it was */ });
 		}
 
+		// "Mark all as read" in the top bar: show the rows read (and the folder counts) without a reload
+		window.addEventListener('convomail:unread-marked', function () {
+			if (!qs('.cm-check:checked', rowsBox)) {
+				refreshRows();
+			}
+		});
+
 		/*
 		 * New-mail checks (ajax/poll.php): every data-poll-interval seconds while the tab is visible. New mail
 		 * slides into the list when that disturbs nothing (first page, no search, nothing ticked or dragged);
