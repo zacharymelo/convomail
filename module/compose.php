@@ -371,10 +371,10 @@ if ($action == 'send') {
 		}
 	}
 
-	// Forward or reply: attach the original attachments the user ticked
+	// Forward or reply: attach the original attachments, and images of its text, that the user ticked
 	if (!$error && $srcmessage) {
 		$keep = GETPOST('fwdparts', 'array');
-		foreach ($srcrenderer->attachments() as $att) {
+		foreach (array_merge($srcrenderer->attachments(), $srcrenderer->inlineImages()) as $att) {
 			if (!in_array((string) $att['id'], $keep, true)) {
 				continue;
 			}
@@ -385,7 +385,7 @@ if ($action == 'send') {
 				continue;
 			}
 			dol_mkdir($upload_dir_tmp);
-			$safename = dol_sanitizeFileName($att['name'] !== '' ? $att['name'] : 'part-'.$att['id']);
+			$safename = dol_sanitizeFileName(convomail_part_filename($att));
 			file_put_contents($upload_dir_tmp.'/'.$safename, $content['data']);
 			$files[] = array('path' => $upload_dir_tmp.'/'.$safename, 'mime' => $att['type'] ?: dol_mimetype($safename), 'name' => $safename);
 		}
@@ -621,14 +621,32 @@ if (!empty($templates) && $editorishtml) {
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
 
 print '<tr><td>'.$langs->trans('MailFile').'</td><td>';
-// The original message's attachments: ticked for a forward, offered unticked for a reply
-if ($srcmessage && $srcrenderer->attachments()) {
-	print '<div class="opacitymedium">'.$langs->trans($mode === 'forward' ? 'ConvomailOriginalAttachmentsForward' : 'ConvomailOriginalAttachmentsReply').'</div>';
+// The original message's attachments: ticked for a forward, offered unticked for a reply. Then the images of its
+// text: a forward keeps those it could put in the quote in place (unticked here, to not send them twice) and ticks
+// the others (too large, SVG) so they are not lost; a reply offers them unticked
+if ($srcmessage) {
 	$keep = ($action == '') ? null : GETPOST('fwdparts', 'array');
-	foreach ($srcrenderer->attachments() as $att) {
-		$name = $att['name'] !== '' ? $att['name'] : $langs->trans('ConvomailUnnamedPart', $att['id']);
-		$checked = ($keep === null) ? ($mode === 'forward') : in_array((string) $att['id'], $keep, true);
-		print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).(!empty($att['size']) ? ' <span class="opacitymedium">'.dol_print_size((int) $att['size'], 1, 1).'</span>' : '').'</label><br>';
+	$groups = array(
+		array('ConvomailOriginalAttachments'.($mode === 'forward' ? 'Forward' : 'Reply'), $srcrenderer->attachments(), false),
+		array('ConvomailOriginalImages'.($mode === 'forward' ? 'Forward' : 'Reply'), $srcrenderer->inlineImages(), true),
+	);
+	foreach ($groups as $group) {
+		if (empty($group[1])) {
+			continue;
+		}
+		print '<div class="opacitymedium">'.$langs->trans($group[0]).'</div>';
+		foreach ($group[1] as $att) {
+			$name = convomail_part_filename($att);
+			$intext = $group[2] && in_array(strtolower((string) $att['cid']), $srcrenderer->embeddedCids, true);
+			$default = ($mode === 'forward') && !$intext;
+			$checked = ($keep === null) ? $default : in_array((string) $att['id'], $keep, true);
+			print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name);
+			print (!empty($att['size']) ? ' <span class="opacitymedium">'.dol_print_size((int) $att['size'], 1, 1).'</span>' : '');
+			if ($group[2] && $mode === 'forward') {
+				print ' <span class="opacitymedium">('.$langs->trans($intext ? 'ConvomailImageKeptInText' : 'ConvomailImageNotInText').')</span>';
+			}
+			print '</label><br>';
+		}
 	}
 }
 print '<input type="file" name="attachments[]" multiple>';

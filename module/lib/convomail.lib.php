@@ -153,6 +153,22 @@ function convomail_page_sizes()
 }
 
 /**
+ * File name of a message part: its own, else "image-<part>.png" style from its type
+ *
+ * @param  array<string,mixed> $part Part (name, id, type)
+ * @return string
+ */
+function convomail_part_filename(array $part)
+{
+	if ((string) ($part['name'] ?? '') !== '') {
+		return (string) $part['name'];
+	}
+	$ext = array('image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp', 'image/svg+xml' => 'svg', 'application/pdf' => 'pdf');
+	$type = strtolower((string) ($part['type'] ?? ''));
+	return (strpos($type, 'image/') === 0 ? 'image' : 'part').'-'.str_replace('.', '-', (string) $part['id']).(isset($ext[$type]) ? '.'.$ext[$type] : '');
+}
+
+/**
  * Choices of the new-mail check interval, in seconds (0 = no checks)
  *
  * @return int[]

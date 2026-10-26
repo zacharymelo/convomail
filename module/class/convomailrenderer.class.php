@@ -49,6 +49,12 @@ class ConvomailRenderer
 	/** @var bool True when the HTML had external images that were removed */
 	public $blockedImages = false;
 
+	/** @var string[] Content-IDs (lowercase) of the images cleanBody() put into a forward's quote */
+	public $embeddedCids = array();
+
+	/** @var array{data:string,charset:string}|false|null Body part content, fetched once */
+	private $bodyContent = null;
+
 	/**
 	 * @param ConvomailMailboxClient $client            Connected mailbox client
 	 * @param string                 $folder            Folder
@@ -118,11 +124,8 @@ class ConvomailRenderer
 	public function cleanBody($allowImages = false, $forStorage = false, $embedImages = false)
 	{
 		$part = $this->bodyPart();
-		if (!$part) {
-			return '';
-		}
-		$content = $this->client->fetchPart($this->folder, $this->uid, $part['id']);
-		if ($content === false) {
+		$content = $this->bodyContent();
+		if (!$part || $content === false) {
 			return '';
 		}
 		$text = self::toUtf8($content['data'], $content['charset'] ?: $part['charset']);
@@ -148,6 +151,7 @@ class ConvomailRenderer
 			return preg_replace_callback('#<img\b[^>]*\bsrc\s*=\s*"cid:([^"]*)"[^>]*>#i', function ($m) use ($embedImages, &$total) {
 				$data = $embedImages ? $this->inlineImageData(rawurldecode($m[1]), $total) : '';
 				if ($data !== '') {
+					$this->embeddedCids[] = strtolower(rawurldecode($m[1]));
 					return str_replace('cid:'.$m[1], $data, $m[0]);
 				}
 				$alt = preg_match('#\balt\s*=\s*"([^"]*)"#i', $m[0], $a) ? $a[1] : '';
@@ -208,20 +212,84 @@ class ConvomailRenderer
 	}
 
 	/**
-	 * Parts shown as downloadable attachments (not the body, not inline images the body displays)
+	 * Body part content, fetched once
+	 *
+	 * @return array{data:string,charset:string}|false
+	 */
+	private function bodyContent()
+	{
+		if ($this->bodyContent === null) {
+			$part = $this->bodyPart();
+			$this->bodyContent = $part ? $this->client->fetchPart($this->folder, $this->uid, $part['id']) : false;
+		}
+		return $this->bodyContent;
+	}
+
+	/**
+	 * Content-IDs (lowercase) the HTML body shows as images (src="cid:...")
+	 *
+	 * @return string[]
+	 */
+	private function shownCids()
+	{
+		$part = $this->bodyPart();
+		$content = $this->bodyContent();
+		if (!$part || $part['type'] !== 'text/html' || $content === false) {
+			return array();
+		}
+		preg_match_all('#\bcid:([^"\'\s>)]+)#i', (string) $content['data'], $m);
+		return array_values(array_unique(array_map(function ($cid) {
+			return strtolower(rawurldecode($cid));
+		}, $m[1])));
+	}
+
+	/**
+	 * Whether a part is an image the body shows in its text (a Content-ID the HTML refers to)
+	 *
+	 * @param  array<string,mixed> $part  Part
+	 * @param  string[]            $shown shownCids()
+	 * @return bool
+	 */
+	private static function isShownImage(array $part, array $shown)
+	{
+		return $part['cid'] !== '' && $part['disposition'] !== 'attachment' && strpos($part['type'], 'image/') === 0
+			&& in_array(strtolower($part['cid']), $shown, true);
+	}
+
+	/**
+	 * Images the body shows in its text, each with its download URL
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function inlineImages()
+	{
+		$shown = $this->shownCids();
+		$list = array();
+		foreach ($this->message['parts'] as $part) {
+			if (self::isShownImage($part, $shown)) {
+				$part['url'] = $this->attachmentBaseUrl.'&part='.urlencode($part['id']);
+				$list[] = $part;
+			}
+		}
+		return $list;
+	}
+
+	/**
+	 * Parts shown as downloadable attachments (not the body, not the images the body shows in its text;
+	 * an image with a Content-ID the text never refers to is an attachment)
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function attachments()
 	{
 		$body = $this->bodyPart();
+		$shown = $this->shownCids();
 		$list = array();
 		foreach ($this->message['parts'] as $part) {
 			if ($body && $part['id'] === $body['id']) {
 				continue;
 			}
-			$isinline = ($part['cid'] !== '' && $part['disposition'] !== 'attachment' && strpos($part['type'], 'image/') === 0);
-			if ($isinline) {
+			if (self::isShownImage($part, $shown)) {
 				continue;
 			}
 			if ($part['disposition'] === 'attachment' || $part['name'] !== '' || !in_array($part['type'], array('text/plain', 'text/html'), true)) {
