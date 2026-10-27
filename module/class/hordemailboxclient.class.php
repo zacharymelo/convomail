@@ -208,7 +208,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 			$lines[] = 'Server: '.implode(' ', $caps);
 
-			$used = array_slice(self::newestFirst($imap->search($folder)['match']), 0, $count);
+			$used = array_slice($this->newestFirst($imap, $folder, $imap->search($folder)['match']->ids, true), 0, $count);
 			$lines[] = 'Module order (newest arrival first): '.implode(',', $used);
 			$bydate = $imap->search($folder, null, array('sort' => array(Horde_Imap_Client::SORT_REVERSE, Horde_Imap_Client::SORT_DATE)));
 			$lines[] = 'Server sort by Date header:          '.implode(',', array_slice($bydate['match']->ids, 0, $count));
@@ -279,7 +279,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		}
 
 		try {
-			$uids = self::newestFirst($imap->search($folder, $query)['match']);
+			$uids = $imap->search($folder, $query)['match']->ids;
 		} catch (Horde_Imap_Client_Exception $e) {
 			if ($searchBody || in_array($e->getCode(), array(Horde_Imap_Client_Exception::DISCONNECT, Horde_Imap_Client_Exception::SERVER_READERROR), true)) {
 				throw $e;
@@ -287,6 +287,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			// Some servers (GreenMail, older ones) refuse grouped criteria: one simple search per header and word
 			$uids = $this->searchHeadersOneByOne($imap, $folder, $words);
 		}
+		$uids = $this->newestFirst($imap, $folder, $uids);
 		if ($cachefile !== '' && @file_put_contents($cachefile, json_encode($uids)) !== false) {
 			dolChmod($cachefile);
 		}
@@ -354,18 +355,90 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
-	 * UIDs newest first. UIDs grow in the order messages arrive in a folder (RFC 3501 2.3.1.1), so this is
-	 * arrival order on every server, the order desktop clients default to. Server-side SORT is not used:
-	 * its results vary between servers and the Horde version bundled here can lose their order.
+	 * UIDs newest first by arrival: the time the server received each message (INTERNALDATE), then the UID.
+	 * A message moved out of a folder and back (Spam then Not spam, Archive then Inbox) keeps its arrival time
+	 * but gets a new, higher UID, so UID order alone would put it on top. Server-side SORT is not used: its
+	 * results vary between servers and the Horde version bundled here can lose their order.
+	 * A UID's arrival time never changes, so the times are kept per mailbox folder (see arrivalCacheFile()) and
+	 * only those of messages not seen before are fetched.
 	 *
-	 * @param  Horde_Imap_Client_Ids $ids Search result
+	 * @param  Horde_Imap_Client_Socket $imap   Connection
+	 * @param  string                   $folder Folder
+	 * @param  int[]                    $uids   UIDs: a search result, or the whole folder
+	 * @param  bool                     $whole  $uids is the whole folder: the times of messages gone are dropped
+	 * @param  array<int,int>|null      $times  Set to the arrival time by UID (0 when the server gave none)
 	 * @return int[]
 	 */
-	private static function newestFirst(Horde_Imap_Client_Ids $ids)
+	private function newestFirst($imap, $folder, array $uids, $whole = false, &$times = null)
 	{
-		$uids = $ids->ids;
-		rsort($uids, SORT_NUMERIC);
+		$uids = array_values(array_unique(array_map('intval', $uids)));
+		$times = array();
+		if (empty($uids)) {
+			return $uids;
+		}
+		$validity = (string) ($imap->status($folder, Horde_Imap_Client::STATUS_UIDVALIDITY)['uidvalidity'] ?? '');
+		$file = $this->arrivalCacheFile($folder);
+		$known = array();
+		if ($file !== '' && is_readable($file)) {
+			$cached = json_decode((string) @file_get_contents($file), true);
+			if (is_array($cached) && (string) ($cached['uidvalidity'] ?? '') === $validity && is_array($cached['arrival'] ?? null)) {
+				$known = $cached['arrival'];
+			}
+		}
+		$missing = array_values(array_filter($uids, function ($uid) use ($known) {
+			return !isset($known[$uid]);
+		}));
+		if ($missing) {
+			$query = new Horde_Imap_Client_Fetch_Query();
+			$query->imapDate();
+			foreach (array_chunk($missing, 5000) as $chunk) {
+				$fetched = $imap->fetch($folder, $query, array('ids' => new Horde_Imap_Client_Ids($chunk)));
+				foreach ($chunk as $uid) {
+					$time = 0;
+					if ($fetched[$uid]) {
+						try {
+							$time = (int) $fetched[$uid]->getImapDate()->getTimestamp();
+						} catch (Exception $e) {
+							$time = 0;
+						}
+					}
+					$known[$uid] = max(0, $time);
+				}
+			}
+		}
+		foreach ($uids as $uid) {
+			$times[$uid] = (int) $known[$uid];
+		}
+		if ($file !== '' && ($missing || ($whole && count($known) > count($uids)))) {
+			if (@file_put_contents($file, json_encode(array('uidvalidity' => $validity, 'arrival' => $whole ? $times : $known))) !== false) {
+				dolChmod($file);
+			}
+		}
+		usort($uids, function ($a, $b) use ($times) {
+			return array($times[$b], $b) <=> array($times[$a], $a);
+		});
 		return $uids;
+	}
+
+	/**
+	 * File keeping the arrival times of a folder of this mailbox (shared by its users), '' if there is nowhere
+	 * to keep them
+	 *
+	 * @param  string $folder Folder
+	 * @return string
+	 */
+	private function arrivalCacheFile($folder)
+	{
+		global $conf;
+
+		if (empty($conf->convomail->dir_output) || empty($this->account->id)) {
+			return '';
+		}
+		$dir = $conf->convomail->dir_output.'/temp/arrival';
+		if (!is_dir($dir) && dol_mkdir($dir) < 0) {
+			return '';
+		}
+		return $dir.'/'.((int) $this->account->id).'-'.md5($folder).'.json';
 	}
 
 	/**
@@ -902,7 +975,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 
 			$searchText = trim($searchText);
 			if ($searchText === '') {
-				$uids = self::newestFirst($imap->search($folder)['match']);
+				$uids = $this->newestFirst($imap, $folder, $imap->search($folder)['match']->ids, true);
 			} else {
 				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
 			}
@@ -919,13 +992,14 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
-	 * UIDs of a folder, newest first: all of them, or those matching a search. For the Combined Inbox, which
-	 * fetches the envelopes of the ones it shows (envelopes()) and keeps the list a minute.
+	 * UIDs of a folder, newest arrival first (newestFirst()): all of them, or those matching a search, with their
+	 * arrival times. For the Combined Inbox, which fetches the envelopes of the ones it shows (envelopes()) and
+	 * keeps the list a minute.
 	 *
 	 * @param  string                                $folder     Folder
 	 * @param  string                                $searchText Search text ('' for all)
 	 * @param  bool                                  $searchBody Also search the message text
-	 * @return array{uids:int[],maxuid:int}|false              maxuid: the newest UID of the folder, -1 on a search
+	 * @return array{uids:int[],arrival:array<int,int>,maxuid:int}|false maxuid: the highest UID of the folder, -1 on a search
 	 */
 	public function folderUids($folder, $searchText = '', $searchBody = false)
 	{
@@ -933,12 +1007,11 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$imap = $this->connect();
 			$searchText = trim($searchText);
 			if ($searchText === '') {
-				$uids = self::newestFirst($imap->search($folder)['match']);
+				$uids = $this->newestFirst($imap, $folder, $imap->search($folder)['match']->ids, true, $times);
 			} else {
-				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
+				$uids = $this->newestFirst($imap, $folder, $this->searchUids($imap, $folder, $searchText, $searchBody), false, $times);
 			}
-			$uids = array_map('intval', $uids);
-			return array('uids' => $uids, 'maxuid' => ($searchText === '') ? ($uids ? max($uids) : 0) : -1);
+			return array('uids' => $uids, 'arrival' => $times, 'maxuid' => ($searchText === '') ? ($uids ? max($uids) : 0) : -1);
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
 			return false;
@@ -947,7 +1020,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 
 	/**
 	 * Summaries of some messages without their text (envelope, flags, structure, threading headers; no snippet),
-	 * each with "arrival", the time the server received it, which follows the UID order
+	 * each with "arrival", the time the server received it
 	 *
 	 * @param  string                               $folder Folder
 	 * @param  int[]                                $uids   UIDs
@@ -1010,7 +1083,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 			$query = new Horde_Imap_Client_Search_Query();
 			$query->flag(Horde_Imap_Client::FLAG_SEEN, false);
-			$uids = array_slice(self::newestFirst($imap->search($folder, $query)['match']), 0, max(1, (int) $limit));
+			$uids = array_slice($this->newestFirst($imap, $folder, $imap->search($folder, $query)['match']->ids), 0, max(1, (int) $limit));
 			$fetchquery = new Horde_Imap_Client_Fetch_Query();
 			$fetchquery->envelope();
 			$fetchquery->flags();

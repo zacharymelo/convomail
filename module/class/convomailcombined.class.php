@@ -13,9 +13,9 @@
  * \brief   Combined Inbox: the Inboxes of several mailboxes in one list, newest first
  *
  * Each user chooses the mailboxes (their own ones by default; ConvomailUnread::mailboxes() says which they may
- * read). The list holds envelopes only, no message text. Rows are merged by arrival time, mailbox by mailbox in
- * UID order, so a page is described by a cursor per mailbox: "older" carries on below the oldest row each mailbox
- * gave, "newer" above the newest, and new mail arriving meanwhile shifts nothing. Each mailbox's UID list and the
+ * read). The list holds envelopes only, no message text. Rows are merged by arrival time, each mailbox's in its
+ * own order (arrival time, then UID), so a page is described by a cursor per mailbox: "older" carries on below the
+ * oldest row each mailbox gave, "newer" above the newest, and new mail arriving meanwhile shifts nothing. Each mailbox's UID list and the
  * envelopes already read are kept a minute per user, so moving through the pages stays quick.
  */
 
@@ -93,30 +93,30 @@ class ConvomailCombined
 	}
 
 	/**
-	 * @param  string         $value "3:120,5:88"
-	 * @return array<int,int>        UID by mailbox id
+	 * @param  string                        $value "3:1793099104.120,5:1793098000.88"
+	 * @return array<int,array{0:int,1:int}>        Position (arrival time, UID) by mailbox id
 	 */
 	public static function parseCursor($value)
 	{
 		$out = array();
 		foreach (explode(',', (string) $value) as $pair) {
-			if (preg_match('/^(\d+):(\d+)$/', trim($pair), $m)) {
-				$out[(int) $m[1]] = (int) $m[2];
+			if (preg_match('/^(\d+):(\d+)\.(\d+)$/', trim($pair), $m)) {
+				$out[(int) $m[1]] = array((int) $m[2], (int) $m[3]);
 			}
 		}
 		return $out;
 	}
 
 	/**
-	 * @param  array<int,int> $cursor UID by mailbox id
-	 * @return string                 "3:120,5:88"
+	 * @param  array<int,array{0:int,1:int}> $cursor Position (arrival time, UID) by mailbox id
+	 * @return string                                "3:1793099104.120,5:1793098000.88"
 	 */
 	public static function cursorString(array $cursor)
 	{
 		$pairs = array();
 		ksort($cursor);
-		foreach ($cursor as $id => $uid) {
-			$pairs[] = ((int) $id).':'.((int) $uid);
+		foreach ($cursor as $id => $pos) {
+			$pairs[] = ((int) $id).':'.((int) $pos[0]).'.'.((int) $pos[1]);
 		}
 		return implode(',', $pairs);
 	}
@@ -124,18 +124,18 @@ class ConvomailCombined
 	/**
 	 * One page of the Combined Inbox, newest first
 	 *
-	 * Going older ($before, or nothing for the newest page): per mailbox the rows below that UID. Going newer
-	 * ($after, when $before is empty): per mailbox the rows from that UID up, the oldest $limit of them in all.
-	 * Rows of a mailbox always come in UID order (a mailbox's rows on a page follow one another), merged with the
-	 * other mailboxes by arrival time.
+	 * Rows have a position: (arrival time, UID), the order of their mailbox's list (newestFirst() in the client).
+	 * Going older ($before, or nothing for the newest page): per mailbox the rows below that position. Going newer
+	 * ($after, when $before is empty): per mailbox the rows from that position up, the oldest $limit of them in all.
+	 * A mailbox's rows on a page follow one another in its own order, merged with the other mailboxes by arrival.
 	 *
-	 * @param  User                $u          User
-	 * @param  array<int,int>      $before     Cursor going older (parseCursor())
-	 * @param  array<int,int>      $after      Cursor going newer
-	 * @param  int                 $limit      Rows
-	 * @param  string              $search     Search text ('' for all)
-	 * @param  bool                $searchBody Also search the message text
-	 * @param  bool                $refresh    Read the mailboxes again (no cache)
+	 * @param  User                          $u          User
+	 * @param  array<int,array{0:int,1:int}> $before     Cursor going older (parseCursor())
+	 * @param  array<int,array{0:int,1:int}> $after      Cursor going newer
+	 * @param  int                           $limit      Rows
+	 * @param  string                        $search     Search text ('' for all)
+	 * @param  bool                          $searchBody Also search the message text
+	 * @param  bool                          $refresh    Read the mailboxes again (no cache)
 	 * @return array{rows:array<int,array<string,mixed>>,accounts:array<int,array{label:string,total:int,maxuid:int,error:string}>,total:int,older:string,newer:string,hasolder:bool,hasnewer:bool}
 	 */
 	public function page(User $u, array $before, array $after, $limit, $search = '', $searchBody = false, $refresh = false)
@@ -152,6 +152,7 @@ class ConvomailCombined
 
 		$result = array('rows' => array(), 'accounts' => array(), 'total' => 0, 'older' => '', 'newer' => '', 'hasolder' => false, 'hasnewer' => false);
 		$lists = array();
+		$pos = array();	// position (arrival time, UID) by mailbox and UID
 		foreach ($boxes as $id => $acc) {
 			$label = (string) ($acc->label ?: $acc->email);
 			if (isset($this->unreachable[$id])) {
@@ -163,12 +164,15 @@ class ConvomailCombined
 				$client = $this->client($acc, $searchBody);
 				$read = $client->folderUids(self::FOLDER, $search, $searchBody);
 				$cache['lists'][$id] = $read === false
-					? array('uids' => array(), 'maxuid' => 0, 'error' => $client->getError() !== '' ? $client->getError() : 'Error')
-					: array('uids' => $read['uids'], 'maxuid' => $read['maxuid'], 'error' => '');
+					? array('uids' => array(), 'arrival' => array(), 'maxuid' => 0, 'error' => $client->getError() !== '' ? $client->getError() : 'Error')
+					: array('uids' => $read['uids'], 'arrival' => $read['arrival'], 'maxuid' => $read['maxuid'], 'error' => '');
 				$changed = true;
 			}
 			$list = $cache['lists'][$id];
 			$lists[$id] = array_map('intval', $list['uids']);
+			foreach ($lists[$id] as $uid) {
+				$pos[$id][$uid] = array((int) ($list['arrival'][$uid] ?? 0), $uid);
+			}
 			$result['accounts'][$id] = array('label' => $label, 'total' => count($lists[$id]), 'maxuid' => (int) $list['maxuid'], 'error' => (string) $list['error']);
 			$result['total'] += count($lists[$id]);
 		}
@@ -178,14 +182,14 @@ class ConvomailCombined
 		$queues = array();
 		foreach ($lists as $id => $uids) {
 			if ($newer) {
-				$from = $after[$id] ?? PHP_INT_MAX;
-				$q = array_reverse(array_values(array_filter($uids, function ($uid) use ($from) {
-					return $uid >= $from;
+				$from = $after[$id] ?? null;	// none: nothing newer from this mailbox
+				$q = array_reverse(array_values(array_filter($uids, function ($uid) use ($from, $pos, $id) {
+					return $from !== null && $pos[$id][$uid] >= $from;
 				})));
 			} else {
-				$below = $before[$id] ?? PHP_INT_MAX;
-				$q = array_values(array_filter($uids, function ($uid) use ($below) {
-					return $uid < $below;
+				$below = $before[$id] ?? null;	// none: from its newest
+				$q = array_values(array_filter($uids, function ($uid) use ($below, $pos, $id) {
+					return $below === null || $pos[$id][$uid] < $below;
 				}));
 			}
 			$queues[$id] = array_slice($q, 0, $limit);
@@ -222,20 +226,18 @@ class ConvomailCombined
 		$heads = array_fill_keys(array_keys($queues), 0);
 		while (count($taken) < $limit) {
 			$pick = null;
-			$pickm = null;
 			foreach ($queues as $id => $q) {
 				if (!isset($q[$heads[$id]])) {
 					continue;
 				}
-				$m = $cache['env'][$id][$q[$heads[$id]]];
-				if ($pick === null || self::compare($m, $id, $pickm, $pick) * ($newer ? -1 : 1) > 0) {
+				if ($pick === null || self::compare($pos[$id][$q[$heads[$id]]], $id, $pos[$pick][$queues[$pick][$heads[$pick]]], $pick) * ($newer ? -1 : 1) > 0) {
 					$pick = $id;
-					$pickm = $m;
 				}
 			}
 			if ($pick === null) {
 				break;
 			}
+			$pickm = $cache['env'][$pick][$queues[$pick][$heads[$pick]]];
 			$pickm['accountid'] = $pick;
 			$pickm['account'] = $result['accounts'][$pick]['label'];
 			$taken[] = $pickm;
@@ -244,31 +246,36 @@ class ConvomailCombined
 		$result['rows'] = $newer ? array_reverse($taken) : $taken;
 
 		// Cursors of the next pages: per mailbox below the oldest row it gave, and from just above the newest
+		// (the next position after (arrival, UID) is (arrival, UID + 1))
 		$older = array();
 		$newercur = array();
 		foreach ($lists as $id => $uids) {
-			$mine = array_column(array_filter($result['rows'], function ($m) use ($id) {
-				return (int) $m['accountid'] === (int) $id;
-			}), 'uid');
+			$mine = array();
+			foreach ($result['rows'] as $m) {
+				if ((int) $m['accountid'] === (int) $id) {
+					$mine[] = $pos[$id][(int) $m['uid']];
+				}
+			}
+			$top = $uids ? $pos[$id][$uids[0]] : array(0, 0);	// its newest
 			if ($mine) {
 				$older[$id] = min($mine);
-				$newercur[$id] = max($mine) + 1;
+				$newercur[$id] = self::next(max($mine));
 			} elseif ($newer) {
 				// None of its rows here: they are all newer than this page
-				$older[$id] = $after[$id] ?? (($uids ? max($uids) : 0) + 1);
+				$older[$id] = $after[$id] ?? self::next($top);
 				$newercur[$id] = $older[$id];
 			} elseif (isset($before[$id])) {
 				$older[$id] = $before[$id];
 				$newercur[$id] = $before[$id];
 			} else {
 				// None of its rows here, from the newest: they are all older than this page
-				$newercur[$id] = ($uids ? max($uids) : 0) + 1;
+				$newercur[$id] = self::next($top);
 			}
 			foreach ($uids as $uid) {
-				if (!isset($older[$id]) || $uid < $older[$id]) {
+				if (!isset($older[$id]) || $pos[$id][$uid] < $older[$id]) {
 					$result['hasolder'] = true;
 				}
-				if ($uid >= $newercur[$id]) {
+				if ($pos[$id][$uid] >= $newercur[$id]) {
 					$result['hasnewer'] = true;
 				}
 			}
@@ -283,17 +290,26 @@ class ConvomailCombined
 	}
 
 	/**
+	 * @param  array{0:int,1:int} $p Position (arrival time, UID)
+	 * @return array{0:int,1:int}    The position just after it
+	 */
+	private static function next(array $p)
+	{
+		return array($p[0], $p[1] + 1);
+	}
+
+	/**
 	 * Order of two rows: >0 when $a is newer. By arrival time, then mailbox and UID so the order is stable.
 	 *
-	 * @param  array<string,mixed> $a   Row
-	 * @param  int                 $aid Its mailbox
-	 * @param  array<string,mixed> $b   Row
-	 * @param  int                 $bid Its mailbox
+	 * @param  array{0:int,1:int} $a   Position of a row (arrival time, UID)
+	 * @param  int                $aid Its mailbox
+	 * @param  array{0:int,1:int} $b   Position of a row
+	 * @param  int                $bid Its mailbox
 	 * @return int
 	 */
 	private static function compare(array $a, $aid, array $b, $bid)
 	{
-		return array((int) $a['arrival'], -(int) $aid, (int) $a['uid']) <=> array((int) $b['arrival'], -(int) $bid, (int) $b['uid']);
+		return array($a[0], -(int) $aid, $a[1]) <=> array($b[0], -(int) $bid, $b[1]);
 	}
 
 	/**
