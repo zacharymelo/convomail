@@ -481,6 +481,23 @@ class ConvomailView
 	}
 
 	/**
+	 * Whether a folder is the mailbox's Junk folder: there the Spam button becomes Not spam
+	 *
+	 * @param  string                         $folder  Folder
+	 * @param  array<int,array<string,mixed>> $folders The mailbox's folders (ConvomailMailboxClient::listFolders())
+	 * @return bool
+	 */
+	public static function isJunkFolder($folder, array $folders)
+	{
+		foreach ($folders as $f) {
+			if ($f['name'] === $folder) {
+				return $f['role'] === 'junk';
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * HTML of one message: toolbar, subject, people, project line, attachments, sandboxed body
 	 *
 	 * @param  ConvomailAccount       $account Account
@@ -549,6 +566,9 @@ class ConvomailView
 		$h .= '<span class="cm-sep"></span>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
+		// Spam, or Not spam in the Junk folder: the ! key presses it
+		$injunk = self::isJunkFolder($folder, $opts['folders'] ?? array());
+		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="unread" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkUnread')).' (u)">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailMarkUnread').'</span></button>';
 		if (!empty($opts['folders'])) {

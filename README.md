@@ -179,7 +179,7 @@ Notes:
 - **Search:** searches the sender, recipients and subject, and every word must match ("dana quote"). It's fast even on large folders, because mail servers answer it from their header cache. Tick **In text** to search the message text too. That is much slower on most servers, which then read every message, and it waits up to two minutes. When nothing matches, a link offers the text search. Results are kept for a few minutes while the folder doesn't change, so moving through the pages of results is instant. A search never blocks the rest of Dolibarr while the mail server works.
 - **Resizable:** drag the lines between the columns to change their widths, and the line above the conversation to change its height. Arrow keys work on a focused line, double-click puts it back, and the sizes are kept in your browser.
 - **Right:** the message you click opens in the reading pane without leaving the list. Its conversation (see below) stays at the bottom of the pane while the message scrolls above it. The address bar follows, so reloading or sharing the link opens the same message.
-- **On a phone:** the account and **Compose email** share one line, the folders are one row you scroll sideways (subfolders show their path), and search has its own line. A message opens on its own page, with a row of icons for Reply, Reply all, Forward, Archive, Delete, Flag and Unread; forms put their labels above full-width fields.
+- **On a phone:** the account and **Compose email** share one line, the folders are one row you scroll sideways (subfolders show their path), and search has its own line. A message opens on its own page, with a row of icons for Reply, Reply all, Forward, Archive, Delete, Spam, Flag and Unread; forms put their labels above full-width fields.
 
 **Actions**, on the selected rows (tick several) or the open message:
 
@@ -189,11 +189,14 @@ Notes:
 | Reply / Reply all / Forward | r / a / f |
 | Archive (to the Archive folder, created if missing) | e |
 | Delete (to Trash, created if missing) | # or Delete |
+| Spam (to the Junk folder, created if missing); in Junk, **Not spam** (back to the Inbox) | ! |
 | Flag / unflag | s, or click the star |
 | Mark as unread | u |
 | Mark as read, Move to a folder | toolbar |
 
 Nothing is deleted for good from Dolibarr: Delete moves to Trash, and emptying Trash is left to your mail client.
+
+**Spam:** besides the move, Spam and Not spam tag the email `$Junk` or `$NotJunk`, as Thunderbird does. Whether the mail server learns from it depends on the provider: Gmail treats a move into its Spam folder as a report (and gets no tags), Fastmail trains on filing into Spam, and a self-hosted Dovecot server learns only when its admin has set that up (IMAPSieve with rspamd or SpamAssassin). Microsoft 365 takes the move but doesn't count it as a report the way Outlook's Report button does.
 
 **Reading a message:** From, To, Cc and Date, with known contacts and third parties linked; the project line (see below); attachments to download. Opening a message marks it read on the server.
 
@@ -219,7 +222,7 @@ For users who work in several mailboxes (their own and a shared sales@, say), th
 - **The list:** the messages in the order the mail servers received them, each with a small label naming its mailbox, with the same contact marks, project chips, open status and attachment clips as a mailbox's own list. Only what the list shows is read from the servers (no message text), and the list is kept a minute per user, so moving through the pages is quick; **Refresh** reads the mailboxes again.
 - **Pages:** **Older** carries on from where each mailbox left off, so mail that arrives while you page doesn't shift anything, and **Newer** goes back the same way. The count adds up the Inboxes.
 - **Everything happens in the email's own mailbox:** opening, read and unread, flag, archive and delete (to that mailbox's Archive and Trash), and the reading pane with its conversation and "From this email" tools. **Reply** and **Forward** go out from the mailbox the email arrived in.
-- **Moving:** the **Move to** menu lists each mailbox's folders, and the folder column shows each mailbox's Inbox, Archive, Junk and Trash to drop emails on. An email moves only within its own mailbox: ticked emails from another mailbox stay where they are, and a note says so.
+- **Moving:** the **Move to** menu lists each mailbox's folders, and the folder column shows each mailbox's Inbox, Archive, Junk and Trash to drop emails on. **Spam** sends an email to its own mailbox's Junk folder. An email moves only within its own mailbox: ticked emails from another mailbox stay where they are, and a note says so.
 - **Mark all as read** marks every unread email of the combined Inboxes as read, up to the newest one shown (after a confirmation). Mail that arrived since stays unread.
 - **New mail** is checked in every mailbox, as in a single mailbox; each Inbox count follows, and the tab title shows the total.
 - **Search** runs in each mailbox and merges the results.

@@ -12,9 +12,10 @@
  * \ingroup convomail
  * \brief   Mailbox actions on one or several messages. POST only, CSRF token required. Answers JSON.
  *
- * POST: token, accountid, folder, uids[] (or uid), action = read|unread|flag|unflag|move|archive|delete|log,
+ * POST: token, accountid, folder, uids[] (or uid), action = read|unread|flag|unflag|move|archive|delete|junk|notjunk|log,
  *       dest (move), projectid / socid / contactids (log)
  * Nothing is ever deleted for good: "delete" moves to the Trash folder.
+ * "junk" moves to the Junk folder and "notjunk" back to the Inbox, with the $Junk / $NotJunk keywords.
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -89,7 +90,7 @@ $client = new ConvomailHordeMailboxClient($account);
 $result = array('ok' => true, 'action' => $action, 'uids' => $uids, 'removed' => array(), 'message' => '');
 
 // Read state or place changes: the top-bar unread count is worked out again
-if (in_array($action, array('read', 'unread', 'move', 'archive', 'delete'), true)) {
+if (in_array($action, array('read', 'unread', 'move', 'archive', 'delete', 'junk', 'notjunk'), true)) {
 	dol_include_once('/convomail/class/convomailunread.class.php');
 	ConvomailUnread::clearCache($user);
 }
@@ -131,6 +132,28 @@ switch ($action) {
 		$result['message'] = $result['ok'] ? $langs->trans('ConvomailMovedTo', count($uids), $dest) : '';
 		break;
 
+	case 'junk':
+	case 'notjunk':
+		// Spam goes to the Junk folder (made if the server has none); not spam goes back to the Inbox.
+		// The keywords are set first so they travel with the message.
+		$dest = ($action === 'junk') ? $client->findFolderByRole('junk', 'Junk') : 'INBOX';
+		if ($dest === '') {
+			convomail_json(array('ok' => false, 'error' => $client->getError()), 500);
+		}
+		$client->setJunkKeywords($folder, $uids, $action === 'junk');
+		if ($dest === $folder) {
+			$result['message'] = $langs->trans($action === 'junk' ? 'ConvomailMarkedSpam' : 'ConvomailMarkedNotSpam', count($uids));
+			break;
+		}
+		ConvomailAccount::clearSessionCache();	// a folder may have been created, counts change
+		$result['ok'] = $client->moveMessages($folder, $uids, $dest);
+		$result['removed'] = $result['ok'] ? $uids : array();
+		$result['message'] = $result['ok'] ? $langs->trans($action === 'junk' ? 'ConvomailMovedToSpam' : 'ConvomailMovedToInbox', count($uids)) : '';
+		if ($result['ok'] && $dest === ConvomailCombined::FOLDER) {
+			ConvomailCombined::clearCache($user);	// back in an Inbox: the Combined Inbox lists it again
+		}
+		break;
+
 	case 'log':
 		$projectid = GETPOSTINT('projectid');
 		$socid = GETPOSTINT('socid');
@@ -161,7 +184,7 @@ if (!$result['ok']) {
 	convomail_json($result, 500);
 }
 // The Combined Inbox shows the change on its next page without reading the mailbox again
-if ($folder === ConvomailCombined::FOLDER && $action !== 'log') {
+if ($folder === ConvomailCombined::FOLDER && ($result['removed'] || in_array($action, array('read', 'unread', 'flag', 'unflag'), true))) {
 	ConvomailCombined::patchCache($user, (int) $account->id, $result['removed'] ?: $uids, $result['removed'] ? 'remove' : $action);
 }
 convomail_json($result);

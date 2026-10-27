@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 DPG Supply - convomail
  *
- * Mailbox behaviour: open a message in the reading pane, actions (read, flag, move, archive, delete,
+ * Mailbox behaviour: open a message in the reading pane, actions (read, flag, move, archive, delete, spam,
  * log to project), the "From this email" panel, selection and keyboard shortcuts. Also sizes the sandboxed message iframe; the iframe
  * itself never runs scripts.
  */
@@ -1719,6 +1719,8 @@
 				press('[data-cm-key="a"]');
 			} else if (key === 'f') {
 				press('[data-cm-key="f"]');
+			} else if (key === '!') {
+				press('[data-cm-key="!"]');	// Spam, or Not spam in the Junk folder
 			} else if ((key === '#' || key === 'Delete') && cur) {
 				ev.preventDefault();
 				run('delete', [cur]);

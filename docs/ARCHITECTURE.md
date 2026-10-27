@@ -325,6 +325,7 @@ Keys: unique `(fk_account, msgid)`, unique `track_key`, `fk_actioncomm`.
 POST `ajax/action.php` with `uids[]` and `action`:
 - `read`, `unread`, `flag`, `unflag`: `setFlag()`.
 - `move` (`dest` must be a listed folder), `archive`, `delete` (to Archive / Trash, created if missing; refused when already there): `moveMessages()`.
+- `junk`, `notjunk`: `setJunkKeywords()` first (adds `$Junk` or `$NotJunk`, removes the other; skipped on Gmail, `X-GM-EXT-1`, where the move is the report and keywords would become labels, and where PERMANENTFLAGS has no `\*`; failures ignored), then to the Junk folder (by role, `Junk` created if missing) or `INBOX`; already there, only the keywords change. The buttons and the `!` key show **Spam**, or **Not spam** in the Junk folder (`ConvomailView::isJunkFolder()`); the Combined Inbox clears its cache when an email goes back to an Inbox.
 - `log`.
 
 The response is JSON `{ok, removed, message, events}`; the JS updates rows and the pane.

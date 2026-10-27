@@ -225,6 +225,7 @@ print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="unread" tit
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="flag" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).'">'.img_picto('', 'fa-archive').'</button>';
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).'">'.img_picto('', 'fa-trash').'</button>';
+print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="junk" title="'.dol_escape_htmltag($langs->trans('ConvomailSpamHelp')).'">'.img_picto('', 'fa-ban').'</button>';
 // Move: a folder of each mailbox; only the ticked emails of that mailbox go there
 print '<select class="cm-move flat" data-cm-bulk="move" title="'.dol_escape_htmltag($langs->trans('ConvomailCombinedMoveHelp')).'"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailMoveTo')).'</option>';
 foreach ($boxes as $id => $acc) {

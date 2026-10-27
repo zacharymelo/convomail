@@ -1404,6 +1404,41 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * Mark messages as spam or not spam with the $Junk / $NotJunk keywords (as Thunderbird does), which some
+	 * servers' filters learn from. Best effort: skipped on Gmail (moving to its Spam folder is what reports it,
+	 * and keywords would show up there as labels) and where the folder doesn't keep keywords.
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @param  bool   $junk   Spam (true) or not spam (false)
+	 * @return void
+	 */
+	public function setJunkKeywords($folder, array $uids, $junk)
+	{
+		$uids = array_values(array_filter(array_map('intval', $uids)));
+		if (empty($uids)) {
+			return;
+		}
+		try {
+			$imap = $this->connect();
+			if ($imap->queryCapability('X-GM-EXT-1')) {
+				return;
+			}
+			$permflags = $imap->status($folder, Horde_Imap_Client::STATUS_PERMFLAGS)['permflags'] ?? array();
+			if (!in_array('\\*', $permflags, true)) {
+				return;
+			}
+			$imap->store($folder, array(
+				'ids' => new Horde_Imap_Client_Ids($uids),
+				'add' => array($junk ? '$Junk' : '$NotJunk'),
+				'remove' => array($junk ? '$NotJunk' : '$Junk'),
+			));
+		} catch (Exception $e) {
+			// The move still happens without them
+		}
+	}
+
+	/**
 	 * Folder with a role (trash, archive, sent...), created under $createName if the server has none
 	 *
 	 * @param  string $role       Role
