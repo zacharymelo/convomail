@@ -29,7 +29,7 @@ class InterfaceConvomailTrigger extends DolibarrTriggers
 		$this->family = 'crm';
 		$this->description = 'Triggers for the convomail module';
 		$this->version = '1.2.0';
-		$this->picto = 'email';
+		$this->picto = 'fa-envelope';
 	}
 
 	/**

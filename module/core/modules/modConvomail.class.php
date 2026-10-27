@@ -43,7 +43,7 @@ class modConvomail extends DolibarrModules
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
 		$this->version = '1.2.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
-		$this->picto = 'email';
+		$this->picto = 'fa-envelope';	// not 'email': themes draw its fa-at faded (opacity 0.7); also the top menu icon (MAIN_MODULE_CONVOMAIL_ICON)
 
 		$this->module_parts = array(
 			'triggers' => 1,
@@ -83,6 +83,8 @@ class modConvomail extends DolibarrModules
 			9 => array('CONVOMAIL_TOOL_INVOICE', 'chaine', '1', 'Create a customer invoice from an email', 0, 'current', 0),
 			10 => array('CONVOMAIL_TOOL_LINK', 'chaine', '1', 'Link an email to an existing record', 0, 'current', 0),
 			11 => array('CONVOMAIL_UNREAD_INDICATOR', 'chaine', '1', 'Unread emails indicator in the top bar', 0, 'current', 0),
+			// Top menu icon: without it the theme draws a generic sticky note over the menu picto
+			12 => array('MAIN_MODULE_CONVOMAIL_ICON', 'chaine', $this->picto, 'Top menu icon of Convomail', 0, 'allentities', 1),
 		);
 
 		// Mail accounts tab on the user card
@@ -168,7 +170,7 @@ class modConvomail extends DolibarrModules
 			'fk_menu'  => 'fk_mainmenu=convomail',
 			'type'     => 'left',
 			'titre'    => 'ConvomailFolderInbox',
-			'prefix'   => img_picto('', 'email', 'class="paddingright pictofixedwidth"'),
+			'prefix'   => img_picto('', $this->picto, 'class="paddingright pictofixedwidth"'),
 			'mainmenu' => 'convomail',
 			'leftmenu' => 'convomail_inbox',
 			'url'      => '/convomail/mailbox.php?role=inbox',
@@ -313,6 +315,9 @@ class modConvomail extends DolibarrModules
 
 			$this->delete_menus();
 			$this->insert_menus();
+			// Top menu icon (1.2.0), and a new theme CSS revision so browsers don't keep the old one
+			dolibarr_set_const($this->db, 'MAIN_MODULE_CONVOMAIL_ICON', $this->picto, 'chaine', 0, 'Top menu icon of Convomail', 0);
+			dolibarr_set_const($this->db, 'MAIN_IHM_PARAMS_REV', getDolGlobalInt('MAIN_IHM_PARAMS_REV') + 1, 'chaine', 0, '', $conf->entity);
 			// Hook contexts added by a newer version (core stores them when the module is enabled)
 			dolibarr_set_const($this->db, 'MAIN_MODULE_'.strtoupper($this->name).'_HOOKS', json_encode($this->module_parts['hooks']['data']), 'chaine', 0, '', (int) $this->module_parts['hooks']['entity']);
 			// Names, descriptions and connection of the "Log replies automatically" collectors follow the new version
