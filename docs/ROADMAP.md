@@ -6,7 +6,7 @@ The plan for the module and for proposing webmail to Dolibarr core. Update it wh
 
 Users leave Dolibarr to send email from another client, and the link between a conversation and its customer, contact and project is lost. Convomail keeps email in Dolibarr: each user's own mailbox, with every message that matters on the agenda.
 
-## Where it stands (1.1.0)
+## Where it stands (1.2.0)
 
 | Phase | Scope | Version |
 |---|---|---|
@@ -61,9 +61,9 @@ Users leave Dolibarr to send email from another client, and the link between a c
 | Top bar | Unread emails in the top bar: from Dolibarr contacts and third parties by default (or all, or off), mailboxes chosen per user, a shortlist that opens each email, Mark all as read up to the newest counted; emails from contacts marked in the list (ARCHITECTURE 6.2c) | 1.1.0 |
 | Open tracking | The team's own views are left out: Convomail's tracking image is removed from incoming mail and quotes, and loads from a signed-in Dolibarr browser, a recent sign-in address, the admin's networks or the server are not counted. Each load gets a kind (direct, Gmail, Yahoo, Apple Mail Privacy Protection, scanner, team; scanners not counted), shown as a breakdown with the latest loads; addresses compared, never stored (6.6) | 1.1.0 |
 | Combined Inbox | The Inboxes of chosen mailboxes in one list (`mailbox.php?view=combined`): envelopes merged by arrival, a cursor per mailbox for older/newer pages, a one-minute per-user cache, every action in the row's own mailbox (moves stay within it), replies from the mailbox the email came to, new-mail checks and search across mailboxes, Mark all as read, a notice for an unreachable mailbox (6.2d) | 1.1.0 |
-| Spam | **Spam** / **Not spam** buttons and the `!` key: to the mailbox's Junk folder or back to the Inbox, tagged `$Junk` / `$NotJunk` for servers that learn from them; in the Combined Inbox too (6.7) | next |
+| Spam | **Spam** / **Not spam** buttons and the `!` key: to the mailbox's Junk folder or back to the Inbox, tagged `$Junk` / `$NotJunk` for servers that learn from them; in the Combined Inbox too (6.7). Lists in arrival order (INTERNALDATE, then UID; times cached per folder), so an email moved back keeps its place; Combined Inbox cursors are (arrival, UID) positions (4, 6.2d) | 1.2.0 |
 
-**Tested:** Dolibarr 23.0 (everything), 24.0 (by the owner, on their test instance, 1.0.9x test builds) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. The 0.17.0 and 0.18.0 features were also checked by the owner on their test instance (test builds 0.16.91–0.16.93, 0.17.90–0.17.92). See [Test debt](#test-debt).
+**Tested:** Dolibarr 23.0 (everything), 24.0 (by the owner, on their test instance, 1.0.9x and 1.1.91 test builds) and 20.0 (install, mailbox, compose, File / Create panels: `dev/compat/`), PHP 8.2, GreenMail, Chromium, light theme. The 0.17.0 and 0.18.0 features were also checked by the owner on their test instance (test builds 0.16.91–0.16.93, 0.17.90–0.17.92). See [Test debt](#test-debt).
 
 ## Next
 
