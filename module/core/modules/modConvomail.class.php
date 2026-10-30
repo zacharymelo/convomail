@@ -41,7 +41,7 @@ class modConvomail extends DolibarrModules
 
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = "Send email from Dolibarr through each user's own mailbox and log every message to the agenda";
-		$this->version = '1.2.0';
+		$this->version = '1.2.1';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'fa-envelope';	// not 'email': themes draw its fa-at faded (opacity 0.7); also the top menu icon (MAIN_MODULE_CONVOMAIL_ICON)
 
