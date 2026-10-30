@@ -708,6 +708,15 @@
 			}
 			return list;
 		}
+		// The reading pane and the shortcuts: the open message, and the ticked rows with it
+		function openAndTicked() {
+			var list = qsa('.cm-check:checked', rowsBox).map(function (c) { return keyOf(c.closest('.cm-row')); });
+			var cur = currentKey();
+			if (cur && list.indexOf(cur) === -1) {
+				list.unshift(cur);
+			}
+			return list;
+		}
 		function folderOf(key) {
 			var row = rowByKey(key);
 			return (row && row.getAttribute('data-folder')) || app.getAttribute('data-folder');
@@ -807,11 +816,22 @@
 		function removeRows(keys) {
 			var cur = currentKey();
 			var next = null;
+			var going = function (el) { return el && el.classList.contains('cm-row') && keys.indexOf(keyOf(el)) !== -1; };
 			keys.forEach(function (key) {
 				var row = rowByKey(key);
 				if (row) {
 					if (key === cur) {
-						var sib = row.nextElementSibling || row.previousElementSibling;
+						// The next row that stays: its neighbours may be going too
+						var sib = row.nextElementSibling;
+						while (going(sib)) {
+							sib = sib.nextElementSibling;
+						}
+						if (!sib) {
+							sib = row.previousElementSibling;
+							while (going(sib)) {
+								sib = sib.previousElementSibling;
+							}
+						}
 						next = sib && sib.classList.contains('cm-row') ? keyOf(sib) : null;
 					}
 					row.remove();
@@ -1670,7 +1690,7 @@
 				if (action === 'log') {
 					extra = { projectid: btn.getAttribute('data-projectid'), socid: btn.getAttribute('data-socid'), contactids: btn.getAttribute('data-contactids') || '' };
 				}
-				run(action, [currentKey()], extra);
+				run(action, action === 'log' ? [currentKey()] : openAndTicked(), extra);
 				return;
 			}
 			if (ev.target.closest('[data-cm-showimages]')) {
@@ -1683,18 +1703,20 @@
 		pane.addEventListener('change', function (ev) {
 			var sel = ev.target.closest('select[data-cm-action="move"]');
 			if (sel && sel.value) {
-				moveTo(sel, [currentKey()], parseKey(currentKey()).acc);
+				moveTo(sel, openAndTicked(), parseKey(currentKey()).acc);
 			}
 		});
 
 		// Keyboard shortcuts
 		document.addEventListener('keydown', function (ev) {
 			var t = ev.target;
-			if ((t && t.closest && t.closest('input, textarea, select, [contenteditable], .cm-resize, .cm-rp, .cm-createmenu')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
+			// Not .cm-check: focus stays on a row's checkbox after ticking it
+			if ((t && t.closest && t.closest('input:not(.cm-check), textarea, select, [contenteditable], .cm-resize, .cm-rp, .cm-createmenu')) || ev.metaKey || ev.ctrlKey || ev.altKey) {
 				return;
 			}
 			var list = rows();
 			var cur = currentKey();
+			var targets = openAndTicked();
 			var idx = list.findIndex(function (r) { return keyOf(r) === cur; });
 			var key = ev.key;
 			var press = function (selector) {
@@ -1721,19 +1743,19 @@
 				press('[data-cm-key="f"]');
 			} else if (key === '!') {
 				press('[data-cm-key="!"]');	// Spam, or Not spam in the Junk folder
-			} else if ((key === '#' || key === 'Delete') && cur) {
+			} else if ((key === '#' || key === 'Delete') && targets.length) {
 				ev.preventDefault();
-				run('delete', [cur]);
-			} else if (key === 'e' && cur) {
+				run('delete', targets);
+			} else if (key === 'e' && targets.length) {
 				ev.preventDefault();
-				run('archive', [cur]);
-			} else if (key === 's' && cur) {
+				run('archive', targets);
+			} else if (key === 's' && targets.length) {
 				ev.preventDefault();
-				var row = rowByKey(cur);
-				run(row && row.classList.contains('flagged') ? 'unflag' : 'flag', [cur]);
-			} else if (key === 'u' && cur) {
+				var row = rowByKey(targets[0]);
+				run(row && row.classList.contains('flagged') ? 'unflag' : 'flag', targets);
+			} else if (key === 'u' && targets.length) {
 				ev.preventDefault();
-				run('unread', [cur]);
+				run('unread', targets);
 			}
 		});
 

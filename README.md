@@ -181,7 +181,7 @@ Notes:
 - **Right:** the message you click opens in the reading pane without leaving the list. Its conversation (see below) stays at the bottom of the pane while the message scrolls above it. The address bar follows, so reloading or sharing the link opens the same message.
 - **On a phone:** the account and **Compose email** share one line, the folders are one row you scroll sideways (subfolders show their path), and search has its own line. A message opens on its own page, with a row of icons for Reply, Reply all, Forward, Archive, Delete, Spam, Flag and Unread; forms put their labels above full-width fields.
 
-**Actions**, on the selected rows (tick several) or the open message:
+**Actions**, on the selected rows (tick several) or the open message. The buttons above the list act on the ticked rows, or on the open message when none is ticked. The buttons of the open message and the shortcuts act on the open message and the ticked rows together:
 
 | Action | Shortcut |
 |---|---|
