@@ -29,6 +29,10 @@ if (!$res) {
 	die("Include of main fails");
 }
 
+/**
+ * @var Translate $langs
+ */
+
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';
 dol_include_once('/convomail/class/convomailview.class.php');
 
@@ -179,7 +183,7 @@ if ($action == 'thirdpartycreated') {
 			print '<span class="opacitymedium">'.dol_escape_htmltag($addr).'</span></td></tr>';
 		}
 		if ($message !== false && !$logged) {
-			print '<tr><td class="titlefieldcreate" colspan="2"><label><input type="checkbox" name="logit" value="1" checked> '.$langs->trans('ConvomailLogThisEmailOn', dol_escape_htmltag($soc->name)).'</label></td></tr>';
+			print '<tr><td class="titlefieldcreate" colspan="2"><label><input type="checkbox" name="logit" value="1" checked> '.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailLogThisEmailOn', $soc->name)).'</label></td></tr>';
 		}
 		print '</table>';
 		print '<div class="center"><input type="submit" class="button button-save" value="'.dol_escape_htmltag($langs->trans('Save')).'"> ';

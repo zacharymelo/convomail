@@ -105,40 +105,145 @@ class ConvomailMatcher
 	public function mapEmails(array $emails)
 	{
 		$map = array();
-		$emails = array_values(array_unique(array_filter(array_map('strtolower', array_map('trim', $emails)))));
+		$emails = self::normalizeEmails($emails);
 		if (empty($emails)) {
 			return $map;
 		}
-		$in = array();
-		foreach ($emails as $email) {
-			$in[] = "'".$this->db->escape($email)."'";
-		}
-		$inlist = implode(',', $in);
 
-		$sql = "SELECT sp.rowid, sp.fk_soc, LOWER(sp.email) as email FROM ".MAIN_DB_PREFIX."socpeople as sp";
-		$sql .= " WHERE LOWER(sp.email) IN (".$inlist.") AND sp.statut = 1";
-		$sql .= " AND sp.entity IN (".getEntity('contact').")";
-		$resql = $this->db->query($sql);
-		if ($resql) {
-			while ($obj = $this->db->fetch_object($resql)) {
-				if (!isset($map[$obj->email])) {
-					$map[$obj->email] = array('contactid' => (int) $obj->rowid, 'socid' => (int) $obj->fk_soc);
-				}
-			}
+		foreach ($this->findEmails('socpeople', true, $emails) as $email => $row) {
+			$map[$email] = array('contactid' => (int) $row->rowid, 'socid' => (int) $row->fk_soc);
 		}
-
-		$sql = "SELECT s.rowid, LOWER(s.email) as email FROM ".MAIN_DB_PREFIX."societe as s";
-		$sql .= " WHERE LOWER(s.email) IN (".$inlist.") AND s.status = 1";
-		$sql .= " AND s.entity IN (".getEntity('societe').")";
-		$resql = $this->db->query($sql);
-		if ($resql) {
-			while ($obj = $this->db->fetch_object($resql)) {
-				if (!isset($map[$obj->email])) {
-					$map[$obj->email] = array('contactid' => 0, 'socid' => (int) $obj->rowid);
-				}
-			}
+		$rest = array_values(array_diff($emails, array_keys($map)));
+		foreach ($this->findEmails('societe', true, $rest) as $email => $row) {
+			$map[$email] = array('contactid' => 0, 'socid' => (int) $row->rowid);
 		}
 		return $map;
+	}
+
+	/**
+	 * Addresses already recorded anywhere in Dolibarr: on a contact or a third party, active or not,
+	 * or on a user of this instance. Used before offering to create a third party or a contact, so the
+	 * offer is not made for someone already there (which would create a duplicate).
+	 *
+	 * @param  string[] $emails Bare addresses
+	 * @return array<string,string> Lowercase address => where it was found: 'contact', 'thirdparty' or 'user'
+	 */
+	public function knownEmails(array $emails)
+	{
+		$known = array();
+		$emails = self::normalizeEmails($emails);
+		$sources = array('contact' => 'socpeople', 'thirdparty' => 'societe', 'user' => 'user');
+		foreach ($sources as $label => $table) {
+			$rest = array_values(array_diff($emails, array_keys($known)));
+			if (empty($rest)) {
+				break;
+			}
+			foreach ($this->findEmails($table, false, $rest) as $email => $row) {
+				$known[$email] = $label;
+			}
+		}
+		return $known;
+	}
+
+	/**
+	 * Every address an email field holds, lowercase, whatever separates them: spaces (including
+	 * non-breaking and zero-width ones pasted from web pages or documents), commas, semicolons,
+	 * angle brackets, quotes or a mailto: prefix
+	 *
+	 * @param  string   $field Stored email field
+	 * @return string[]
+	 */
+	private static function addressesIn($field)
+	{
+		$field = dol_strtolower($field);
+		$separators = '\s<>,;:"\'';
+		if (utf8_valid($field)) {
+			$separators .= '\p{Z}\x{200B}-\x{200D}\x{2060}\x{FEFF}';
+			$found = preg_match_all('/[^'.$separators.']+@[^'.$separators.']+/u', $field, $m);
+		} else {
+			$found = preg_match_all('/[^'.$separators.'\x80-\xFF]+@[^'.$separators.'\x80-\xFF]+/', $field, $m);
+		}
+		return $found ? $m[0] : array();
+	}
+
+	/**
+	 * Lowercase, trimmed, valid-looking and distinct addresses
+	 *
+	 * @param  string[] $emails Addresses
+	 * @return string[]
+	 */
+	private static function normalizeEmails(array $emails)
+	{
+		$out = array();
+		foreach ($emails as $email) {
+			$email = dol_strtolower(trim((string) $email));
+			if ($email !== '' && strpos($email, '@') !== false) {
+				$out[$email] = $email;
+			}
+		}
+		return array_values($out);
+	}
+
+	/**
+	 * Rows of a table whose email field holds one of the addresses, first row per address
+	 *
+	 * First pass: the field is exactly the address, ignoring case and surrounding spaces. Second pass, for the
+	 * addresses still missing: fields holding several addresses ("a@x.gr; b@x.gr", "Name <a@x.gr>"), found with
+	 * LIKE and checked address by address, so "nick@x.gr" does not match "anick@x.gr".
+	 *
+	 * @param  string   $table      'socpeople', 'societe' or 'user'
+	 * @param  bool     $activeonly Only active records
+	 * @param  string[] $emails     Normalized addresses
+	 * @return array<string,object> Lowercase address => row (rowid, email, and fk_soc for socpeople)
+	 */
+	private function findEmails($table, $activeonly, array $emails)
+	{
+		$found = array();
+		if (empty($emails) || !in_array($table, array('socpeople', 'societe', 'user'), true)) {
+			return $found;
+		}
+		foreach (array('exact', 'like') as $pass) {
+			$rest = array_values(array_diff($emails, array_keys($found)));
+			if (empty($rest)) {
+				break;
+			}
+			$sql = "SELECT t.rowid, t.email".($table === 'socpeople' ? ", t.fk_soc" : "");
+			$sql .= " FROM ".MAIN_DB_PREFIX.$table." as t";
+			$sql .= " WHERE t.entity IN (".getEntity($table === 'socpeople' ? 'contact' : $table).")";
+			if ($activeonly) {
+				$sql .= ($table === 'societe' ? " AND t.status = 1" : " AND t.statut = 1");
+			}
+			if ($pass === 'exact') {
+				$sql .= " AND LOWER(TRIM(t.email)) IN (";
+				foreach ($rest as $i => $email) {
+					$sql .= ($i > 0 ? "," : "")."'".$this->db->escape($email)."'";
+				}
+				$sql .= ")";
+			} else {
+				$sql .= " AND (";
+				foreach ($rest as $i => $email) {
+					$sql .= ($i > 0 ? " OR " : "")."LOWER(t.email) LIKE '%".$this->db->escape($this->db->escapeforlike($email))."%'";
+				}
+				$sql .= ")";
+			}
+			$sql .= " ORDER BY t.rowid ASC";
+			$sql .= $this->db->plimit(500);
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				dol_syslog(__METHOD__.' '.$this->db->lasterror(), LOG_ERR);
+				return $found;
+			}
+			while ($obj = $this->db->fetch_object($resql)) {
+				$field = is_string($obj->email) ? $obj->email : '';
+				$addresses = ($pass === 'exact') ? array(dol_strtolower(trim($field))) : self::addressesIn($field);
+				foreach (array_intersect($addresses, $rest) as $email) {
+					if (!isset($found[$email])) {
+						$found[$email] = $obj;
+					}
+				}
+			}
+		}
+		return $found;
 	}
 
 	/**

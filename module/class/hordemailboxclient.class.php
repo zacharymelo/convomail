@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -13,6 +21,8 @@
  * \brief   IMAP implementation of ConvomailMailboxClient over Horde_Imap_Client (bytestream fork, LGPL-2.1)
  */
 dol_include_once('/convomail/class/mailboxclientinterface.class.php');
+dol_include_once('/convomail/class/convomailsearch.class.php');
+dol_include_once('/convomail/class/convomailcharset.class.php');
 
 /**
  * Class ConvomailHordeMailboxClient
@@ -27,6 +37,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 
 	/** @var string */
 	private $error = '';
+
+	/** @var string[] Headers fetched raw with the envelope: threading, and the ones whose text Horde may decode wrongly */
+	private const RAW_HEADERS = array('References', 'In-Reply-To', 'Subject', 'From', 'To', 'Cc', 'Reply-To');
 
 	/** @var int Seconds to wait for the server; set before the first call (see setTimeout()) */
 	private $timeout = 15;
@@ -254,17 +267,38 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 		}
 
-		$words = array_slice(array_values(array_filter(preg_split('/\s+/u', $searchText))), 0, 6);
-		$query = new Horde_Imap_Client_Search_Query();
+		// Filters (from:, subject:, since:, until:) on one query: plain criteria the server ANDs, no grouping
+		$parsed = ConvomailSearch::parse($searchText);
+		$filter = null;
+		if ($parsed['from'] !== '' || $parsed['subject'] !== '' || $parsed['since'] !== '' || $parsed['until'] !== '') {
+			$filter = self::searchQuery();
+			if ($parsed['from'] !== '') {
+				$filter->headerText('From', $parsed['from']);
+			}
+			if ($parsed['subject'] !== '') {
+				$filter->headerText('Subject', $parsed['subject']);
+			}
+			// Dates of the Date header (SENTSINCE / SENTBEFORE), whole days: until is the last day included
+			$utc = new DateTimeZone('UTC');
+			if ($parsed['since'] !== '') {
+				$filter->dateSearch(new DateTime($parsed['since'], $utc), Horde_Imap_Client_Search_Query::DATE_SINCE);
+			}
+			if ($parsed['until'] !== '') {
+				$filter->dateSearch((new DateTime($parsed['until'], $utc))->modify('+1 day'), Horde_Imap_Client_Search_Query::DATE_BEFORE);
+			}
+		}
+
+		$words = array_slice(array_values(array_filter(preg_split('/\s+/u', $parsed['words']))), 0, 6);
+		$query = self::searchQuery();
 		$perword = array();
 		foreach ($words as $word) {
-			$wordquery = new Horde_Imap_Client_Search_Query();
+			$wordquery = self::searchQuery();
 			if ($searchBody) {
 				$wordquery->text($word, false);	// headers and body
 			} else {
 				$headers = array();
 				foreach (array('From', 'To', 'Cc', 'Subject') as $header) {
-					$h = new Horde_Imap_Client_Search_Query();
+					$h = self::searchQuery();
 					$h->headerText($header, $word);
 					$headers[] = $h;
 				}
@@ -272,26 +306,53 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			}
 			$perword[] = $wordquery;
 		}
-		if (count($perword) === 1) {
-			$query = $perword[0];
+		$all = $filter ? array_merge($perword, array($filter)) : $perword;
+		if (count($all) === 1) {
+			$query = $all[0];
 		} else {
-			$query->andSearch($perword);
+			$query->andSearch($all);
 		}
 
 		try {
 			$uids = $imap->search($folder, $query)['match']->ids;
 		} catch (Horde_Imap_Client_Exception $e) {
-			if ($searchBody || in_array($e->getCode(), array(Horde_Imap_Client_Exception::DISCONNECT, Horde_Imap_Client_Exception::SERVER_READERROR), true)) {
+			if ($searchBody || empty($words) || in_array($e->getCode(), array(Horde_Imap_Client_Exception::DISCONNECT, Horde_Imap_Client_Exception::SERVER_READERROR), true)) {
 				throw $e;
 			}
-			// Some servers (GreenMail, older ones) refuse grouped criteria: one simple search per header and word
+			// Some servers (GreenMail, older ones) refuse grouped criteria: one simple search per header and word,
+			// then the filters on their own (plain criteria, no grouping)
 			$uids = $this->searchHeadersOneByOne($imap, $folder, $words);
+			if ($filter && !empty($uids)) {
+				$filtered = $imap->search($folder, $filter);
+				$filteredids = array();
+				if (isset($filtered['match']) && $filtered['match'] instanceof Horde_Imap_Client_Ids) {
+					foreach ($filtered['match']->ids as $uid) {
+						if (is_numeric($uid)) {
+							$filteredids[] = (int) $uid;
+						}
+					}
+				}
+				$uids = array_values(array_intersect($uids, $filteredids));
+			}
 		}
 		$uids = $this->newestFirst($imap, $folder, $uids);
 		if ($cachefile !== '' && @file_put_contents($cachefile, json_encode($uids)) !== false) {
 			dolChmod($cachefile);
 		}
 		return $uids;
+	}
+
+	/**
+	 * Empty search query whose text criteria are sent as UTF-8: Horde's default is US-ASCII, which refuses
+	 * any non-ASCII word (a Greek name or subject) with "String contains non-ASCII characters"
+	 *
+	 * @return Horde_Imap_Client_Search_Query
+	 */
+	private static function searchQuery()
+	{
+		$query = new Horde_Imap_Client_Search_Query();
+		$query->charset('UTF-8', false);
+		return $query;
 	}
 
 	/**
@@ -309,7 +370,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		foreach ($words as $word) {
 			$matches = array();
 			foreach (array('From', 'To', 'Cc', 'Subject') as $header) {
-				$q = new Horde_Imap_Client_Search_Query();
+				$q = self::searchQuery();
 				$q->headerText($header, $word);
 				foreach ($imap->search($folder, $q)['match']->ids as $uid) {
 					$matches[(int) $uid] = true;
@@ -899,6 +960,92 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * Addresses of a header, with names decoded from the header as sent
+	 *
+	 * The envelope is built by the server, which may already have lost the bytes of a name: names are read from the
+	 * raw header when it is there, from the envelope otherwise (decoded again when Horde could not decode them).
+	 *
+	 * @param  Horde_Mail_Rfc822_List|null $list        Address list from the envelope
+	 * @param  string                      $rawheaders  Raw header block
+	 * @param  string                      $name        Header name
+	 * @param  string                      $bodycharset Charset of the message body
+	 * @return array<int,array{name:string,email:string}>
+	 */
+	private static function headerAddresses($list, $rawheaders, $name, $bodycharset)
+	{
+		$out = self::addresses($list);
+		$names = array();
+		$raw = self::rawHeader($rawheaders, $name);
+		if ($raw !== null && $raw !== '') {
+			// Encoded words become plain tokens before parsing, so a comma or quote inside a name cannot split it
+			$decoded = array();
+			$tokenised = $raw;
+			if (preg_match_all('/=\?[^?\s]+\?[BbQq]\?[^?\s]*\?=(?:\s+=\?[^?\s]+\?[BbQq]\?[^?\s]*\?=)*/', $raw, $runs, PREG_OFFSET_CAPTURE)) {
+				// From the end, so earlier offsets stay valid
+				foreach (array_reverse($runs[0]) as $run) {
+					$token = 'CmWord'.count($decoded).'x';
+					$decoded[$token] = ConvomailCharset::decodeHeader($run[0], $bodycharset);
+					$tokenised = substr_replace($tokenised, $token, $run[1], strlen($run[0]));
+				}
+			}
+			try {
+				$parser = new Horde_Mail_Rfc822();
+				foreach (self::addresses($parser->parseAddressList($tokenised)) as $a) {
+					$personal = strtr(ConvomailCharset::redecode($a['name'], $bodycharset), $decoded);
+					if ($personal !== '') {
+						$names[$a['email']] = $personal;
+					}
+				}
+			} catch (Exception $e) {
+				$names = array();
+			}
+		}
+		foreach ($out as $i => $a) {
+			$out[$i]['name'] = $names[$a['email']] ?? ConvomailCharset::redecode($a['name'], $bodycharset);
+		}
+		return $out;
+	}
+
+	/**
+	 * File name of a part, decoded again when Horde could not decode it (charsets mbstring lacks, raw 8-bit bytes)
+	 *
+	 * @param  mixed  $part        Part (Horde_Mime_Part)
+	 * @param  string $bodycharset Charset of the message body
+	 * @return string              UTF-8
+	 */
+	private static function partName($part, $bodycharset)
+	{
+		return ($part instanceof Horde_Mime_Part) ? ConvomailCharset::redecode((string) $part->getName(), $bodycharset) : '';
+	}
+
+	/**
+	 * Charset of the first text part of a message
+	 *
+	 * @param  mixed  $structure Message structure (Horde_Mime_Part)
+	 * @return string            Charset, '' when none
+	 */
+	private static function bodyCharset($structure)
+	{
+		$text = ($structure instanceof Horde_Mime_Part) ? self::firstTextPart($structure) : null;
+		return $text ? (string) $text[1]->getCharset() : '';
+	}
+
+	/**
+	 * Raw value of a header in a header block
+	 *
+	 * @param  string      $rawheaders Header block
+	 * @param  string      $name       Header name
+	 * @return string|null             Unfolded value, null when absent
+	 */
+	private static function rawHeader($rawheaders, $name)
+	{
+		if (preg_match('/^'.preg_quote($name, '/').':[ \t]*(.*(?:\r?\n[ \t]+.*)*)/mi', $rawheaders, $m)) {
+			return trim((string) preg_replace('/\r?\n[ \t]+/', ' ', $m[1]));
+		}
+		return null;
+	}
+
+	/**
 	 * Summary fields shared by listMessages() and fetchMessage()
 	 *
 	 * @param  int                      $uid   UID
@@ -940,17 +1087,27 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$inreplyto = $m[1];
 		}
 
+		// Horde decodes headers with mbstring only: redo those in other charsets (windows-1253...) or raw 8-bit
+		$headertext = ($refstext !== '') ? $refstext : $data->getHeaderText('0');
+		$rawheaders = is_string($headertext) ? $headertext : '';
+		$bodycharset = self::bodyCharset($structure);
+		$subject = (string) $envelope->subject;
+		$raw = self::rawHeader($rawheaders, 'Subject');
+		if ($raw !== null && ConvomailCharset::headerNeedsDecoding($raw)) {
+			$subject = ConvomailCharset::decodeHeader($raw, $bodycharset);
+		}
+
 		return array(
 			'uid'             => (int) $uid,
 			'references'      => $references,
 			'snippet'         => '',
 			'msgid'           => trim((string) $envelope->message_id, " <>"),
-			'subject'         => (string) $envelope->subject,
+			'subject'         => $subject,
 			'date'            => $date,
-			'from'            => self::addresses($envelope->from),
-			'to'              => self::addresses($envelope->to),
-			'cc'              => self::addresses($envelope->cc),
-			'reply_to'        => self::addresses($envelope->reply_to),
+			'from'            => self::headerAddresses($envelope->from, $rawheaders, 'From', $bodycharset),
+			'to'              => self::headerAddresses($envelope->to, $rawheaders, 'To', $bodycharset),
+			'cc'              => self::headerAddresses($envelope->cc, $rawheaders, 'Cc', $bodycharset),
+			'reply_to'        => self::headerAddresses($envelope->reply_to, $rawheaders, 'Reply-To', $bodycharset),
 			'in_reply_to'     => $inreplyto,
 			'seen'            => in_array('\\seen', $flags, true),
 			'answered'        => in_array('\\answered', $flags, true),
@@ -1040,7 +1197,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$fetchquery->size();
 			$fetchquery->structure();
 			$fetchquery->imapDate();
-			$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
+			$fetchquery->headers('refs', self::RAW_HEADERS, array('peek' => true));
 			$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($uids)));
 			foreach ($uids as $uid) {
 				$data = $fetched[$uid];
@@ -1120,7 +1277,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		$fetchquery->flags();
 		$fetchquery->size();
 		$fetchquery->structure();
-		$fetchquery->headers('refs', array('References', 'In-Reply-To'), array('peek' => true));
+		$fetchquery->headers('refs', self::RAW_HEADERS, array('peek' => true));
 		$fetched = $imap->fetch($folder, $fetchquery, array('ids' => new Horde_Imap_Client_Ids($uids)));
 		$textparts = array();	// uid => array(part id, Horde_Mime_Part)
 		foreach ($uids as $uid) {
@@ -1227,6 +1384,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 
 			$message['parts'] = array();
 			$structure = $data->getStructure();
+			$bodycharset = self::bodyCharset($structure);
 			foreach ($structure->contentTypeMap() as $id => $type) {
 				$part = $structure->getPart($id);
 				if (!$part || $part->getPrimaryType() === 'multipart') {
@@ -1236,7 +1394,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 					'id'          => (string) $id,
 					'type'        => strtolower((string) $type),
 					'charset'     => (string) $part->getCharset(),
-					'name'        => (string) $part->getName(),
+					'name'        => self::partName($part, $bodycharset),
 					'disposition' => (string) $part->getDisposition(),
 					'cid'         => trim((string) $part->getContentId(), " <>"),
 					'size'        => (int) $part->getBytes(true),
@@ -1291,7 +1449,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				'data'    => (string) $part->getContents(),
 				'type'    => strtolower((string) $part->getType()),
 				'charset' => (string) $part->getCharset(),
-				'name'    => (string) $part->getName(),
+				'name'    => self::partName($part, self::bodyCharset($structure)),
 			);
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
@@ -1398,14 +1556,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 					}
 					$part->setContents($raw);
 					$text = (string) $part->getContents();
-					$charset = strtolower((string) $part->getCharset());
-					if ($charset !== '' && $charset !== 'utf-8' && $charset !== 'us-ascii') {
-						$converted = Horde_String::convertCharset($text, $charset, 'UTF-8');
-						$text = is_string($converted) ? $converted : $text;
-					}
-					if (!mb_check_encoding($text, 'UTF-8')) {
-						$text = mb_convert_encoding($text, 'UTF-8', 'ISO-8859-1');
-					}
+					$text = ConvomailCharset::toUtf8($text, (string) $part->getCharset());
 					if ($part->getSubType() === 'html') {
 						$text = preg_replace('#<(style|script|head)[^>]*>.*?</\1>#is', ' ', $text);
 						$text = html_entity_decode(strip_tags(preg_replace('#<br\s*/?>|</p>#i', "\n", $text)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -1586,4 +1737,3 @@ class ConvomailTraceMaskFilter extends php_user_filter
 		return PSFS_PASS_ON;
 	}
 }
-

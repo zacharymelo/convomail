@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -509,6 +517,7 @@ class ConvomailView
 	 */
 	public static function render(ConvomailAccount $account, $client, $folder, $uid, array $opts = array())
 	{
+		/** @var Translate $langs */
 		global $db, $user, $langs;
 
 		$langs->loadLangs(array('convomail@convomail', 'mails', 'companies', 'projects'));
@@ -605,8 +614,10 @@ class ConvomailView
 
 		// The person this message is with is not in Dolibarr: create the third party, or add them as a contact
 		// (of the third party using their domain, else of one picked on core's form: a Gmail sender of a known company)
+		// Not offered for an address recorded on an inactive contact or third party, or on a user: creating one would duplicate it
 		$person = self::correspondent($message, $myemails);
-		if ($person && !isset($matched[strtolower($person['email'])]) && isModEnabled('societe')) {
+		if ($person && !isset($matched[dol_strtolower(trim($person['email']))]) && isModEnabled('societe')
+			&& empty($matcher->knownEmails(array($person['email'])))) {
 			$actions = '';
 			$known = $matcher->thirdPartyForDomain((string) substr((string) strrchr($person['email'], '@'), 1), $user);
 			$cancompany = $user->hasRight('societe', 'creer');
@@ -617,7 +628,7 @@ class ConvomailView
 					$params['socid'] = $known['socid'];
 				}
 				$contacturl = DOL_URL_ROOT.'/contact/card.php?'.http_build_query($params);
-				$label = $known ? $langs->trans('ConvomailAddContactTo', dol_escape_htmltag($known['name'])) : $langs->trans('ConvomailAddContactPick');
+				$label = $known ? dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailAddContactTo', $known['name'])) : $langs->trans('ConvomailAddContactPick');
 				$actions .= ' <a class="cm-btn cm-primary" href="'.dol_escape_htmltag($contacturl).'">'.img_picto('', 'contact', 'class="pictofixedwidth"').$label.'</a>';
 			}
 			if ($cancompany) {
@@ -625,7 +636,7 @@ class ConvomailView
 			}
 			if ($actions !== '') {
 				$h .= '<div class="cm-unknownline">'.img_picto('', 'fa-user-plus', 'class="pictofixedwidth opacitymedium"');
-				$h .= $langs->trans('ConvomailNotInDolibarr', dol_escape_htmltag($person['name'] !== '' ? $person['name'] : $person['email'])).$actions.'</div>';
+				$h .= dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailNotInDolibarr', $person['name'] !== '' ? $person['name'] : $person['email'])).$actions.'</div>';
 			}
 		}
 
@@ -676,7 +687,7 @@ class ConvomailView
 		if (!empty($attachments)) {
 			$h .= '<div class="cm-attachments">';
 			foreach ($attachments as $att) {
-				$name = $att['name'] !== '' ? $att['name'] : $langs->trans('ConvomailUnnamedPart', $att['id']);
+				$name = $att['name'] !== '' ? $att['name'] : $langs->transnoentitiesnoconv('ConvomailUnnamedPart', is_string($att['id']) ? $att['id'] : '');
 				$h .= '<a class="cm-attachment" href="'.dol_escape_htmltag($att['url']).'">'.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name).' <span class="opacitymedium">'.dol_print_size($att['size'], 1, 1).'</span></a>';
 			}
 			$h .= '</div>';

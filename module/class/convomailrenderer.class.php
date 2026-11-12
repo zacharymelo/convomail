@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -97,17 +105,7 @@ class ConvomailRenderer
 	 */
 	private static function toUtf8($data, $charset)
 	{
-		$charset = strtolower(trim($charset));
-		if ($charset !== '' && $charset !== 'utf-8' && $charset !== 'us-ascii') {
-			$converted = Horde_String::convertCharset($data, $charset, 'UTF-8');
-			if (is_string($converted) && $converted !== '') {
-				$data = $converted;
-			}
-		}
-		if (!mb_check_encoding($data, 'UTF-8')) {
-			$data = mb_convert_encoding($data, 'UTF-8', 'ISO-8859-1');
-		}
-		return $data;
+		return ConvomailCharset::toUtf8((string) $data, (string) $charset);
 	}
 
 	/**

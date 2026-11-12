@@ -647,7 +647,10 @@
 		if (searchform) {
 			searchform.addEventListener('submit', function () {
 				var rows = qs('.cm-rows');
-				if (rows && searchform.elements.search.value.trim() !== '') {
+				var filtering = ['fsender', 'fsubject', 'fsince', 'funtil'].some(function (name) {
+					return searchform.elements[name] && searchform.elements[name].value.trim() !== '';
+				});
+				if (rows && (filtering || searchform.elements.search.value.trim() !== '')) {
 					rows.classList.add('cm-searching');
 					rows.setAttribute('data-searching', searchform.getAttribute('data-searching'));
 				}

@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -36,8 +44,10 @@ $folder      = ConvomailCombined::FOLDER;
 $before      = ConvomailCombined::parseCursor(GETPOST('before', 'alphanohtml'));
 $after       = ConvomailCombined::parseCursor(GETPOST('after', 'alphanohtml'));
 $pos         = max(0, GETPOSTINT('pos'));
-$search      = trim(GETPOST('search', 'alphanohtml'));
-$searchbody  = ($search !== '' && GETPOSTINT('searchbody')) ? 1 : 0;
+dol_include_once('/convomail/class/convomailsearch.class.php');
+$search      = ConvomailSearch::fromRequest();
+$searchparsed = ConvomailSearch::parse($search);
+$searchbody  = ($searchparsed['words'] !== '' && GETPOSTINT('searchbody')) ? 1 : 0;
 $refresh     = GETPOSTINT('refresh');
 $openaccount = GETPOSTINT('openaccount');
 $openuid     = GETPOSTINT('uid');
@@ -241,8 +251,10 @@ print '</select>';
 print '<button type="button" class="cm-btn cm-markall" data-cm-markall="1">'.img_picto('', 'fa-check-double', 'class="pictofixedwidth"').$langs->trans('ConvomailCombinedMarkAll').'</button>';
 print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="cm-search" data-searching="'.dol_escape_htmltag($langs->trans('ConvomailSearching')).'">';
 print '<input type="hidden" name="view" value="combined">';
-print '<input type="search" name="search" value="'.dol_escape_htmltag($search).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchHelp')).'">';
+// The box shows the free words; the filters are in the Filter panel
+print '<input type="search" name="search" value="'.dol_escape_htmltag($searchparsed['words']).'" placeholder="'.dol_escape_htmltag($langs->trans('ConvomailSearchFolder')).'" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchHelp')).'">';
 print '<label class="cm-searchbody" title="'.dol_escape_htmltag($langs->trans('ConvomailSearchBodyHelp')).'"><input type="checkbox" name="searchbody" value="1"'.($searchbody ? ' checked' : '').'> '.$langs->trans('ConvomailSearchBody').'</label>';
+print ConvomailSearch::panelHtml($searchparsed, $base);
 print '</form>';
 print '<span class="cm-paging">';
 print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="cm-pagesize">';
@@ -276,7 +288,7 @@ foreach ($page['accounts'] as $id => $info) {
 print '<div class="cm-rows" role="list">';
 if (empty($messages)) {
 	print '<div class="cm-empty">'.$langs->trans($search !== '' ? 'ConvomailNoMatch' : 'ConvomailNoMessage');
-	if ($search !== '' && !$searchbody) {
+	if ($searchparsed['words'] !== '' && !$searchbody) {
 		print '<br><a href="'.dol_escape_htmltag($base.'&search='.urlencode($search).'&searchbody=1').'">'.$langs->trans('ConvomailSearchInTextToo').'</a>';
 	}
 	print '</div>';
