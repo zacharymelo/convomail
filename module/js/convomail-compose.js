@@ -161,8 +161,8 @@
 				var failed = !res.ok || /^\s*(Error\b|Quota or allowed period exceeded)/.test(res.text);
 				var html = failed ? '' : cleanAiHtml(res.text);
 				if (!html) {
-					var box = document.createElement('div');
-					box.innerHTML = res.text;
+					// Parsed in an inert document: markup in the error text never runs
+					var box = new DOMParser().parseFromString(res.text, 'text/html').body;
 					throw new Error(normalized(box.textContent) || 'Error');
 				}
 				var rest = parts.rest.innerHTML.trim();
@@ -334,13 +334,17 @@
 				}
 			});
 			subject.form.querySelectorAll('[name="cancel"]').forEach(function (b) { b.formNoValidate = true; });
-			// To may stay empty when "To user(s)" has someone
+			// To may stay empty when another recipient field has someone (Cc- or Bcc-only mail)
 			var to = field('sendto');
-			var touser = field('sendtouser');
-			if (to && touser) {
-				var syncRequired = function () { to.required = touser.value.trim() === ''; };
-				touser.addEventListener('input', syncRequired);
-				touser.addEventListener('change', syncRequired);
+			var others = ['sendtouser', 'sendtocc', 'sendtoccuser', 'sendtobcc', 'sendtobccuser'].map(field).filter(Boolean);
+			if (to && others.length) {
+				var syncRequired = function () {
+					to.required = !others.some(function (input) { return input.value.trim() !== ''; });
+				};
+				others.forEach(function (input) {
+					input.addEventListener('input', syncRequired);
+					input.addEventListener('change', syncRequired);
+				});
 				syncRequired();
 			}
 		}

@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -358,7 +366,8 @@ if ($action == 'send') {
 	}
 
 	$recipients = array_merge(ConvomailMatcher::parseAddresses($mailto), ConvomailMatcher::parseAddresses($mailcc), ConvomailMatcher::parseAddresses($mailbcc));
-	if (empty(ConvomailMatcher::parseAddresses($mailto))) {
+	// At least one recipient in To, Cc or Bcc
+	if (empty($recipients)) {
 		setEventMessages($langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('MailTo')), null, 'errors');
 		$error++;
 	}
@@ -411,6 +420,11 @@ if ($action == 'send') {
 			$safename = dol_sanitizeFileName(convomail_part_filename($att));
 			file_put_contents($upload_dir_tmp.'/'.$safename, $content['data']);
 			dolChmod($upload_dir_tmp.'/'.$safename);
+			// Same antivirus check as uploads and the filer
+			if (!convomail_virus_free($upload_dir_tmp.'/'.$safename, $safename)) {
+				$error++;
+				continue;
+			}
 			$files[] = array('path' => $upload_dir_tmp.'/'.$safename, 'mime' => $att['type'] ?: dol_mimetype($safename), 'name' => $safename);
 		}
 	}

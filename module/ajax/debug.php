@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -19,8 +27,6 @@
  *   classes   — Class loading and method availability
  *   messages  — Last 20 logged messages with their agenda events
  *   hooks     — Registered hook contexts
- *   imap      — How a folder of your default mail account is ordered (?mode=imap&folder=INBOX)
- *   imaptrace — Your last IMAP exchanges with the mail server (recorded while Debug mode is on)
  *   all       — Every diagnostic
  *
  * No SQL mode in released builds: an arbitrary query would read every secret of the database (SMTP and API keys,
@@ -70,7 +76,7 @@ print "Timestamp: ".date('Y-m-d H:i:s T')."\n";
 print "Dolibarr: ".(defined('DOL_VERSION') ? DOL_VERSION : 'unknown')."\n";
 print "PHP: ".PHP_VERSION."\n";
 print "Mode: $mode\n";
-print "Usage: ?mode=overview|settings|classes|messages|hooks|imap|imaptrace|all\n";
+print "Usage: ?mode=overview|settings|classes|messages|hooks|all\n";
 print str_repeat('=', 60)."\n\n";
 
 if ($mode === 'overview' || $run_all) {

@@ -5,6 +5,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -271,8 +279,14 @@ class modConvomail extends DolibarrModules
 			return -1;
 		}
 
+		// Sent messages are logged with the core "Send Email" event type, which is inactive by default.
+		// Remembered when Convomail activates it, so remove() puts it back as it was.
+		$resql = $this->db->query("SELECT active FROM ".MAIN_DB_PREFIX."c_actioncomm WHERE code = 'AC_EMAIL'");
+		$obj = ($resql && $resql !== true) ? $this->db->fetch_object($resql) : null;
+		if ($obj && empty($obj->active)) {
+			dolibarr_set_const($this->db, 'CONVOMAIL_ACTIVATED_AC_EMAIL', '1', 'chaine', 0, 'Convomail activated the Send Email event type', 0);
+		}
 		$sql = array(
-			// Sent messages are logged with the core "Send Email" event type, which is inactive by default
 			"UPDATE ".MAIN_DB_PREFIX."c_actioncomm SET active = 1 WHERE code = 'AC_EMAIL'",
 		);
 
@@ -339,6 +353,18 @@ class modConvomail extends DolibarrModules
 	 */
 	public function remove($options = '')
 	{
-		return $this->_remove(array(), $options);
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+		$sql = array();
+		// The "Send Email" event type goes back to inactive only if Convomail activated it (see init())
+		$restore = getDolGlobalInt('CONVOMAIL_ACTIVATED_AC_EMAIL');
+		if ($restore) {
+			$sql[] = "UPDATE ".MAIN_DB_PREFIX."c_actioncomm SET active = 0 WHERE code = 'AC_EMAIL'";
+		}
+		$result = $this->_remove($sql, $options);
+		if ($result > 0 && $restore) {
+			dolibarr_del_const($this->db, 'CONVOMAIL_ACTIVATED_AC_EMAIL', 0);
+		}
+		return $result;
 	}
 }

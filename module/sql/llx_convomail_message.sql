@@ -6,7 +6,7 @@ CREATE TABLE llx_convomail_message(
     entity          INTEGER       NOT NULL DEFAULT 1,
     fk_account      INTEGER       NOT NULL,
     folder          VARCHAR(255),
-    uid             INTEGER,
+    uid             BIGINT,
     msgid           VARCHAR(255)  NOT NULL,
     in_reply_to     VARCHAR(255),
     direction       SMALLINT      NOT NULL DEFAULT 1,
