@@ -981,3 +981,115 @@ function convomail_log_read($db, $user, $account)
 		dol_syslog(__FUNCTION__.' '.$event->error, LOG_WARNING);
 	}
 }
+
+/**
+ * The draft a compose form replaces when saved again, or removes once sent: only a draft in the Drafts folder of an
+ * account the user may send with
+ *
+ * @param  DoliDB $db        Database
+ * @param  User   $user      User
+ * @param  int    $accountid Account the draft is in
+ * @param  string $folder    Folder
+ * @param  int    $uid       UID
+ * @return array{0:ConvomailAccount,1:string,2:int}|null
+ */
+function convomail_draft_target($db, $user, $accountid, $folder, $uid)
+{
+	if ($accountid <= 0 || $folder === '' || $uid <= 0) {
+		return null;
+	}
+	$account = convomail_get_usable_account($db, $user, $accountid);
+	if (!$account || !$account->canSend($user)) {
+		return null;
+	}
+	dol_include_once('/convomail/class/hordemailboxclient.class.php');
+	$client = new ConvomailHordeMailboxClient($account);
+	$drafts = $client->findFolderByRole('drafts');
+	$client->close();
+	return ($drafts !== '' && $drafts === $folder) ? array($account, $folder, (int) $uid) : null;
+}
+
+/**
+ * Object for the substitutions of a template (__THIRDPARTY_NAME__, __PROJECT_REF__...): project first, then contact,
+ * then third party, each only if the user may see it
+ *
+ * @param  DoliDB $db        Database
+ * @param  User   $user      User
+ * @param  int    $projectid Project
+ * @param  int    $contactid Contact
+ * @param  int    $socid     Third party
+ * @return CommonObject|null
+ */
+function convomail_substitution_object($db, $user, $projectid, $contactid, $socid)
+{
+	if ($projectid > 0 && isModEnabled('project')) {
+		require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
+		$p = new Project($db);
+		if ($p->fetch($projectid) > 0 && $p->restrictedProjectArea($user, 'read') > 0) {
+			$p->fetch_thirdparty();
+			return $p;
+		}
+	}
+	if ($contactid > 0) {
+		require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
+		$c = new Contact($db);
+		if ($c->fetch($contactid) > 0) {
+			return $c;
+		}
+	}
+	if ($socid > 0) {
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$s = new Societe($db);
+		if ($s->fetch($socid) > 0) {
+			return $s;
+		}
+	}
+	return null;
+}
+
+/**
+ * Addresses of a message field, as typed in a compose field
+ *
+ * @param  array<string,mixed> $message Message of fetchMessage()
+ * @param  string              $key     to, cc, bcc, from, reply_to
+ * @return string                       "Name <address>, ..."
+ */
+function convomail_message_addresses(array $message, $key)
+{
+	/** @var array<int,array{name:string,email:string}> $list */
+	$list = is_array($message[$key] ?? null) ? $message[$key] : array();
+	return convomail_format_addresses($list, true);
+}
+
+/**
+ * Messages set by setEventMessages() during this request, taken out of the session (for a JSON answer)
+ *
+ * @return array{mesgs:string[],warnings:string[],errors:string[]}
+ */
+function convomail_take_event_messages()
+{
+	$out = array('mesgs' => array(), 'warnings' => array(), 'errors' => array());
+	$events = (isset($_SESSION['dol_events']) && is_array($_SESSION['dol_events'])) ? $_SESSION['dol_events'] : array();
+	foreach (array_keys($out) as $kind) {
+		foreach ((array) ($events[$kind] ?? array()) as $text) {
+			if (is_string($text)) {
+				$out[$kind][] = $text;
+			}
+		}
+	}
+	unset($_SESSION['dol_events']);
+	return $out;
+}
+
+/**
+ * A text field of a message (subject...), '' when missing
+ *
+ * @param  array<string,mixed> $message Message of fetchMessage()
+ * @param  string              $key     Field
+ * @return string
+ */
+function convomail_message_text(array $message, $key)
+{
+	$value = $message[$key] ?? '';
+	return is_string($value) ? $value : '';
+}
