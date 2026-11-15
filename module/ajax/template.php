@@ -43,6 +43,11 @@ if (!$res) {
 	exit;
 }
 
+/**
+ * @var DoliDB $db
+ * @var User $user
+ */
+
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
@@ -75,26 +80,7 @@ if (!is_object($template) || empty($template->id)) {
 }
 
 // Object used for substitutions: project first, then contact, then third party
-$object = null;
-if (GETPOSTINT('projectid') > 0) {
-	$p = new Project($db);
-	if ($p->fetch(GETPOSTINT('projectid')) > 0 && $p->restrictedProjectArea($user, 'read') > 0) {
-		$p->fetch_thirdparty();
-		$object = $p;
-	}
-}
-if (!$object && GETPOSTINT('contactid') > 0) {
-	$c = new Contact($db);
-	if ($c->fetch(GETPOSTINT('contactid')) > 0) {
-		$object = $c;
-	}
-}
-if (!$object && GETPOSTINT('socid') > 0) {
-	$s = new Societe($db);
-	if ($s->fetch(GETPOSTINT('socid')) > 0) {
-		$object = $s;
-	}
-}
+$object = convomail_substitution_object($db, $user, GETPOSTINT('projectid'), GETPOSTINT('contactid'), GETPOSTINT('socid'));
 
 $substitutions = getCommonSubstitutionArray($langs, 0, null, $object);
 complete_substitutions_array($substitutions, $langs, $object);
