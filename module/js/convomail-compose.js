@@ -671,5 +671,64 @@
 		if (aipanel) {
 			bindAiTools(aipanel);
 		}
+
+		bindSaves();
 	});
+
+	// Save draft and Save as template: the form is posted in the background, so it stays as it is with its files.
+	// A draft saved again replaces the previous one (the page keeps its place in draftaccountid/draftfolder/draftuid),
+	// except an opened draft, whose page reloads on the new one.
+	function bindSaves() {
+		var box = document.querySelector('.cm-compose-buttons');
+		var status = document.getElementById('cm-save-status');
+		if (!box || !status || typeof FormData !== 'function' || typeof fetch !== 'function') {
+			return;	// the buttons post the form; the page then opens what was saved
+		}
+		var form = box.closest('form');
+		var show = function (lines, isError) {
+			status.textContent = '';
+			status.className = 'cm-save-status ' + (isError ? 'error' : 'opacitymedium');
+			(lines || []).forEach(function (line, i) {
+				if (i) {
+					status.appendChild(document.createElement('br'));
+				}
+				// Messages come as HTML from the server's translations: shown as text
+				var tmp = document.createElement('div');
+				tmp.innerHTML = line;
+				status.appendChild(document.createTextNode(tmp.textContent));
+			});
+		};
+		box.querySelectorAll('button[name="cmsave"]').forEach(function (btn) {
+			btn.addEventListener('click', function (ev) {
+				// An opened draft saved again is replaced, and its attachments are offered from it: the page then opens
+				// the new draft instead (a normal post)
+				var mode = form.querySelector('[name="mode"]');
+				if (btn.value === 'draft' && mode && mode.value === 'draft') {
+					return;
+				}
+				ev.preventDefault();
+				if (window.CKEDITOR && CKEDITOR.instances.message) {
+					CKEDITOR.instances.message.updateElement();
+				}
+				var data = new FormData(form);
+				data.set('cmsave', btn.value);
+				data.set('cmajax', '1');
+				var buttons = box.querySelectorAll('button[name="cmsave"]');
+				buttons.forEach(function (b) { b.disabled = true; });
+				show([box.getAttribute('data-saving')], false);
+				fetch(form.getAttribute('action'), { method: 'POST', body: data, credentials: 'same-origin' })
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						if (res && res.ok && res.draft && btn.value === 'draft') {
+							form.querySelector('[name="draftaccountid"]').value = res.draft.accountid;
+							form.querySelector('[name="draftfolder"]').value = res.draft.folder;
+							form.querySelector('[name="draftuid"]').value = res.draft.uid;
+						}
+						show(res && res.ok ? res.messages : (res && res.errors && res.errors.length ? res.errors : ['?']), !(res && res.ok));
+					})
+					.catch(function (e) { show([String(e)], true); })
+					.then(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+			});
+		});
+	}
 })();
