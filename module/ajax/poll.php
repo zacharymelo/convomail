@@ -124,7 +124,7 @@ $others = array();
 $nocount = array();
 $cached = $_SESSION['convomail_folders_'.((int) $account->id)]['folders'] ?? array();
 foreach ((array) $cached as $f) {
-	if (in_array($f['role'] ?? '', array('sent', 'trash', 'drafts'), true)) {
+	if (in_array($f['role'] ?? '', array('sent', 'trash', 'drafts', 'templates'), true)) {
 		$nocount[] = (string) $f['name'];
 	} elseif (count($others) < 40) {
 		$others[] = (string) $f['name'];
