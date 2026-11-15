@@ -252,6 +252,9 @@
 .cm-ai-change { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cm-ai-status { margin-top: 8px; font-size: .92em; }
 .cm-ai-status.error { color: var(--colortexterror, #a00); }
+/* Save draft / Save as template result, under the buttons of the compose page */
+.cm-save-status { margin-top: 6px; min-height: 1.2em; font-size: .92em; }
+.cm-save-status.error { color: var(--colortexterror, #a00); }
 .cm-ai-busy .cm-ai-status::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cm-spin .8s linear infinite; vertical-align: -1px; }
 @keyframes cm-spin { to { transform: rotate(360deg); } }
 
