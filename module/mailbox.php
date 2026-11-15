@@ -12,7 +12,7 @@
  * \ingroup convomail
  * \brief   Three-pane mailbox: folders | message list | reading pane
  *
- * GET parameters: view (combined: the Combined Inbox, tpl/combined.tpl.php), accountid, folder, role (inbox|sent|drafts|junk|trash|archive),
+ * GET parameters: view (combined: the Combined Inbox, tpl/combined.tpl.php), accountid, folder, role (inbox|sent|drafts|templates|junk|trash|archive),
  *                 search (free words plus filters from:, subject:, since:, until:, see ConvomailSearch), searchbody (also search message text),
  *                 fsender, fsubject, fsince, funtil (fields of the Filter panel, folded into search),
  *                 page, limit (page size, remembered), refresh, uid (open message), showimages
@@ -169,7 +169,7 @@ if ((int) getDolUserInt('CONVOMAIL_LAST_ACCOUNT') !== (int) $account->id || getD
 
 $list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody);
 $messages = ($list !== false) ? $list['messages'] : array();
-$showto = in_array($currentrole, array('sent', 'drafts'), true);
+$showto = in_array($currentrole, array('sent', 'drafts', 'templates'), true);
 
 // Who the correspondents are, and which project each message belongs to
 $myemails = ConvomailView::myEmails($db, $user, $account);
@@ -283,7 +283,7 @@ if ($canmanagefolders) {
 	print '<div class="cm-folder-root" data-cm-root="1">'.img_picto('', 'fa-level-up-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailFolderMoveTop').'</div>';
 }
 print '<nav class="cm-folderlist'.($hastree ? ' cm-has-tree' : '').'">';
-$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
+$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'templates' => 'fa-file-alt', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
 // Folders come in tree order (ConvomailHordeMailboxClient::folderTree()): each is followed by its subfolders,
 // indented by depth; a folder with subfolders can be collapsed (js/convomail.js, kept in this browser)
 foreach ($folders as $f) {
@@ -319,7 +319,7 @@ foreach ($folders as $f) {
 		}
 		print '</span>';
 	}
-	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts'), true)) {
+	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts', 'templates'), true)) {
 		print '<span class="cm-count" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($f['name']).'">'.((int) $f['unseen']).'</span>';
 	}
 	print '</a>';
