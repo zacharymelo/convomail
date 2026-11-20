@@ -1,9 +1,24 @@
-/* Copyright (C) 2026 DPG Supply - convomail
+/* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  * Mailbox behaviour: open a message in the reading pane, actions (read, flag, move, archive, delete, spam,
  * log to project), the "From this email" panel, selection and keyboard shortcuts. Also sizes the sandboxed message iframe; the iframe
  * itself never runs scripts.
  */
+ 
 (function () {
 	'use strict';
 
@@ -100,7 +115,10 @@
 		}
 		// Plain text: older Dolibarr (20) shows the notice's HTML as tags. Parsed apart from the page (nothing loads or runs)
 		text = new DOMParser().parseFromString(String(text).replace(/<br\s*\/?>/gi, ' '), 'text/html').body.textContent.trim();
-		if (window.jQuery && jQuery.jnotify) {
+		// Dolibarr's own notice tool where it exists (Dolibarr 25: it follows the instance's notification setup), else jnotify
+		if (window.Dolibarr && Dolibarr.tools && typeof Dolibarr.tools.setEventMessage === 'function') {
+			Dolibarr.tools.setEventMessage(text, ok ? 'mesgs' : 'errors', !ok);
+		} else if (window.jQuery && jQuery.jnotify) {
 			jQuery.jnotify(text, ok ? 'ok' : 'error', ok ? 3000 : true);
 		} else if (!ok) {
 			window.alert(text);
@@ -819,7 +837,8 @@
 		function removeRows(keys) {
 			var cur = currentKey();
 			var next = null;
-			var going = function (el) { return el && el.classList.contains('cm-row') && keys.indexOf(keyOf(el)) !== -1; };
+			// Skipped: rows going too, and the date headings between rows
+			var going = function (el) { return el && (!el.classList.contains('cm-row') || keys.indexOf(keyOf(el)) !== -1); };
 			keys.forEach(function (key) {
 				var row = rowByKey(key);
 				if (row) {
@@ -886,6 +905,12 @@
 								paging.appendChild(document.importNode(n, true));
 							}
 						});
+					}
+					// The "25 messages" of the list head
+					var count = qs('.cm-list-count', app);
+					var freshCount = new DOMParser().parseFromString(html, 'text/html').querySelector('.cm-list-count');
+					if (count && freshCount) {
+						count.textContent = freshCount.textContent;
 					}
 				})
 				.catch(function () { /* the list stays as it was */ });
@@ -1048,7 +1073,8 @@
 				hideNotice();
 				check();
 			}
-			function fail(message, halt, session) {
+			// retryin: seconds before asking again after a refusal that may pass (module re-enabled, permissions changed)
+			function fail(message, halt, session, retryin) {
 				failures++;
 				if (session) {
 					stopped = true;
@@ -1056,6 +1082,8 @@
 				} else if (halt || failures >= 3) {
 					stopped = true;
 					showNotice(t('stopped', message), [{ label: t('retry'), run: retry }], true);
+				} else if (retryin) {
+					schedule(retryin * 1000);
 				} else {
 					schedule(interval * Math.pow(2, failures));
 				}
@@ -1082,7 +1110,7 @@
 					.then(function (data) {
 						busy = false;
 						if (!data.ok) {
-							fail(data.error || 'Error', !!data.halt, !!data.session);
+							fail(data.error || 'Error', !!data.halt, !!data.session, parseInt(data.retryin, 10) || 0);
 							return;
 						}
 						failures = 0;
@@ -1615,6 +1643,17 @@
 				return;
 			}
 			var key = keyOf(row);
+			var rowAction = ev.target.closest('[data-cm-row-action]');
+			if (rowAction) {
+				// Buttons of the row under the mouse: they act on that row only
+				ev.preventDefault();
+				var act = rowAction.getAttribute('data-cm-row-action');
+				if (act === 'toggleread') {
+					act = row.classList.contains('unread') ? 'read' : 'unread';
+				}
+				run(act, [key]);
+				return;
+			}
 			if (ev.target.closest('.cm-star')) {
 				ev.preventDefault();
 				run(row.classList.contains('flagged') ? 'unflag' : 'flag', [key]);
@@ -1735,6 +1774,14 @@
 			} else if (key === 'ArrowUp' || key === 'k') {
 				var p = list[Math.max(0, idx - 1)];
 				if (p) { ev.preventDefault(); openMessage(keyOf(p)); }
+			} else if (key === 'n') {
+				// Next unread row below the open one, from the top when there is none below
+				var unread = list.filter(function (r, i) { return i > idx && r.classList.contains('unread'); })[0]
+					|| list.filter(function (r) { return r.classList.contains('unread') && keyOf(r) !== cur; })[0];
+				if (unread) {
+					ev.preventDefault();
+					openMessage(keyOf(unread));
+				}
 			} else if (key === 'Enter' && idx === -1 && list.length) {
 				ev.preventDefault();
 				openMessage(keyOf(list[0]));
@@ -1761,6 +1808,27 @@
 				run('unread', targets);
 			}
 		});
+
+		// Display menu of the list head: a choice (order, list or table, density) is saved at once (the page comes back with it)
+		qsa('form.cm-display input[name="density"], form.cm-display input[name="listview"], form.cm-display select[name="sortby"]', app).forEach(function (field) {
+			field.addEventListener('change', function () {
+				field.form.submit();
+			});
+		});
+		var displayMenu = qs('details.cm-display-menu', app);
+		if (displayMenu) {
+			document.addEventListener('click', function (ev) {
+				if (displayMenu.open && !displayMenu.contains(ev.target)) {
+					displayMenu.open = false;
+				}
+			});
+		}
+		// A picture that cannot be loaded (no right to see it, file gone) leaves the initials under it
+		app.addEventListener('error', function (ev) {
+			if (ev.target && ev.target.classList && ev.target.classList.contains('cm-avatar-img')) {
+				ev.target.remove();
+			}
+		}, true);
 
 		var selected = qs('.cm-row.selected', rowsBox);
 		if (selected) {
@@ -1791,7 +1859,7 @@
 			} catch (e) { /* private window: sizes last for this page only */ }
 		}
 		function apply() {
-			[['col1', '--cm-col1', 'px'], ['col2', '--cm-col2', 'px'], ['conv', '--cm-conv-h', '%']].forEach(function (v) {
+			[['col1', '--cm-col1', 'px'], ['col2', '--cm-col2', 'px'], ['conv', '--cm-conv-h', '%'], ['listh', '--cm-listh', 'px']].forEach(function (v) {
 				if (layout[v[0]]) {
 					app.style.setProperty(v[1], (v[2] === '%' ? layout[v[0]] * 100 : layout[v[0]]) + v[2]);
 				} else {
@@ -1820,6 +1888,20 @@
 				};
 			}
 			var col = handle.getAttribute('data-col');
+			if (col === '2' && app.classList.contains('cm-view-table')) {
+				// Table view: the handle lies between the list and the reading pane under it
+				var list = qs('.cm-list', app);
+				return {
+					kind: 'row',
+					size: list.getBoundingClientRect().height,
+					set: function (h) {
+						layout.listh = Math.round(clamp(h, 120, Math.max(120, app.clientHeight - 160)));
+					},
+					reset: function () { delete layout.listh; },
+					sign: 1,
+					keys: { ArrowDown: 1, ArrowUp: -1 }
+				};
+			}
 			var el = qs(col === '1' ? '.cm-folders' : '.cm-list', app);
 			var other = qs(col === '1' ? '.cm-list' : '.cm-folders', app);
 			return {
@@ -1835,6 +1917,10 @@
 		}
 
 		apply();
+		var listHandle = qs('.cm-resize[data-col="2"]', app);
+		if (listHandle && app.classList.contains('cm-view-table')) {
+			listHandle.setAttribute('aria-orientation', 'horizontal');
+		}
 
 		app.addEventListener('pointerdown', function (ev) {
 			var handle = ev.target.closest('.cm-resize');
@@ -1865,6 +1951,14 @@
 			handle.addEventListener('pointercancel', end);
 		});
 		app.addEventListener('dblclick', function (ev) {
+			// Drafts and Templates: a double click on a row opens it on the compose page
+			var row = ev.target.closest('.cm-row');
+			var rows = row && row.closest('.cm-rows[data-dblopen]');
+			if (rows && !ev.target.closest('.cm-check, .cm-star, .cm-row-action')) {
+				window.location.href = rows.getAttribute('data-dblopen') + '&accountid=' + encodeURIComponent(row.getAttribute('data-accountid'))
+					+ '&folder=' + encodeURIComponent(row.getAttribute('data-folder')) + '&uid=' + encodeURIComponent(row.getAttribute('data-uid'));
+				return;
+			}
 			var handle = ev.target.closest('.cm-resize');
 			if (handle) {
 				target(handle).reset();
@@ -1878,7 +1972,7 @@
 				return;
 			}
 			var t = target(handle);
-			var keys = t.kind === 'row' ? { ArrowUp: 1, ArrowDown: -1 } : { ArrowRight: 1, ArrowLeft: -1 };
+			var keys = t.keys || (t.kind === 'row' ? { ArrowUp: 1, ArrowDown: -1 } : { ArrowRight: 1, ArrowLeft: -1 });
 			if (keys[ev.key]) {
 				ev.preventDefault();
 				t.set(t.size + keys[ev.key] * (ev.shiftKey ? 64 : 16));

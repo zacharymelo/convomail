@@ -1,16 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- */
-
-/**
- * \file    class/mailboxclientinterface.class.php
- * \ingroup convomail
- * \brief   What convomail needs from a mailbox protocol. Implemented over IMAP today; JMAP later.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -66,12 +69,14 @@ interface ConvomailMailboxClient
 	 * @param  int    $limit      Page size
 	 * @param  string $searchText Words to search for ('' = all); every word must match
 	 * @param  bool   $searchBody Search the message text too; false = sender, recipients and subject only
+	 * @param  string $sort       Order: '' or date_desc (newest arrival first), date_asc, from_asc, from_desc, to_asc,
+	 *                            to_desc, subject_asc, subject_desc, size_desc, size_asc
 	 * @return array{total:int,maxuid:int,messages:array<int,array<string,mixed>>}|false
 	 *         maxuid: the folder's newest UID (0 when empty, -1 on a search). Each message: uid, msgid,
 	 *         subject, date (timestamp), from, to, cc (lists of array{name,email}), seen, answered, flagged,
 	 *         size, has_attachments. false on error.
 	 */
-	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false);
+	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false, $sort = '');
 
 	/**
 	 * Headers and MIME structure of one message.
@@ -190,6 +195,15 @@ interface ConvomailMailboxClient
 	 * @return bool
 	 */
 	public function setFlag($folder, array $uids, $flag, $on);
+
+	/**
+	 * Delete messages for good (not to Trash): a draft replaced by a newer one, or sent.
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @return bool
+	 */
+	public function deleteMessages($folder, array $uids);
 
 	/**
 	 * Folder with a role (trash, archive, sent...), created if missing and a name is given.

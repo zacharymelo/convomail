@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -12,7 +21,7 @@
  * \ingroup convomail
  * \brief   Three-pane mailbox: folders | message list | reading pane
  *
- * GET parameters: view (combined: the Combined Inbox, tpl/combined.tpl.php), accountid, folder, role (inbox|sent|drafts|junk|trash|archive),
+ * GET parameters: view (combined: the Combined Inbox, tpl/combined.tpl.php), accountid, folder, role (inbox|sent|drafts|templates|junk|trash|archive),
  *                 search (free words plus filters from:, subject:, since:, until:, see ConvomailSearch), searchbody (also search message text),
  *                 fsender, fsubject, fsince, funtil (fields of the Filter panel, folded into search),
  *                 page, limit (page size, remembered), refresh, uid (open message), showimages
@@ -40,11 +49,6 @@ if (!$res) {
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force Conf $conf';
-'@phan-var-force DoliDB $db';
-'@phan-var-force HookManager $hookmanager';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/functions2.lib.php';
 dol_include_once('/convomail/class/convomailview.class.php');
@@ -70,6 +74,12 @@ if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read
 	accessforbidden();
 }
 
+// Order: a column heading of the table view (a link) is remembered for the user, like the page size
+$sortby = GETPOST('sortby', 'aZ09');
+if ($action === '' && in_array($sortby, convomail_sorts(), true) && $sortby !== convomail_sort()) {
+	dol_set_user_param($db, $conf, $user, array('CONVOMAIL_SORT' => ($sortby === 'date_desc' ? '' : $sortby)));
+}
+
 // Page size: a choice from the list toolbar is remembered for the user
 if (in_array($limit, convomail_page_sizes(), true)) {
 	if ($limit !== getDolUserInt('CONVOMAIL_PAGE_SIZE')) {
@@ -77,6 +87,40 @@ if (in_array($limit, convomail_page_sizes(), true)) {
 	}
 } else {
 	$limit = convomail_page_size();
+}
+
+// Display of the list head, remembered for the user: density of the rows, focus mode (no left menu)
+if ($action === 'setdisplay' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+	$display = array();
+	$density = GETPOST('density', 'aZ09');
+	if (in_array($density, array('compact', 'normal', 'comfortable'), true)) {
+		$display['CONVOMAIL_DENSITY'] = ($density === 'normal' ? '' : $density);
+	}
+	$listview = GETPOST('listview', 'aZ09');
+	if (in_array($listview, array('list', 'table'), true)) {
+		$display['CONVOMAIL_VIEW'] = ($listview === 'table' ? 'table' : '');
+	}
+	$sortby = GETPOST('sortby', 'aZ09');
+	if (in_array($sortby, convomail_sorts(), true)) {
+		$display['CONVOMAIL_SORT'] = ($sortby === 'date_desc' ? '' : $sortby);
+	}
+	if (GETPOSTISSET('focus')) {
+		$display['CONVOMAIL_FOCUS'] = GETPOSTINT('focus') ? '1' : '';
+	}
+	if (!empty($display)) {
+		dol_set_user_param($db, $conf, $user, $display);
+	}
+	if (GETPOSTINT('cmajax')) {
+		header('Content-Type: application/json');
+		print json_encode(array('ok' => true, 'density' => convomail_density(), 'focus' => convomail_focus_mode()));
+		exit;
+	}
+	$backtopage = GETPOST('backtopage', 'alpha');	// only a URL of this instance is kept (GETPOST checks backtopage)
+	header('Location: '.($backtopage !== '' ? $backtopage : dol_buildpath('/convomail/mailbox.php', 1)));
+	exit;
+}
+if (convomail_focus_mode()) {
+	$conf->dol_hide_leftmenu = 1;
 }
 
 // Combined Inbox (tpl/combined.tpl.php): asked for, chosen in the mailbox picker, or the last view used
@@ -176,9 +220,12 @@ if ((int) getDolUserInt('CONVOMAIL_LAST_ACCOUNT') !== (int) $account->id || getD
 	dol_set_user_param($db, $conf, $user, $tab);
 }
 
-$list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody);
+$showto = in_array($currentrole, array('sent', 'drafts', 'templates'), true);
+// Rows of Sent, Drafts and Templates show the recipient: "sender" sorts on it there
+$sort = convomail_sort();
+$listsort = $showto ? (string) preg_replace('/^from_/', 'to_', $sort) : $sort;
+$list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody, $listsort);
 $messages = ($list !== false) ? $list['messages'] : array();
-$showto = in_array($currentrole, array('sent', 'drafts'), true);
 
 // Who the correspondents are, and which project each message belongs to
 $myemails = ConvomailView::myEmails($db, $user, $account);
@@ -257,7 +304,7 @@ $total = ($list !== false) ? (int) $list['total'] : 0;
 $first = $total ? $page * $limit + 1 : 0;
 $last = min($total, ($page + 1) * $limit);
 
-print '<div class="cm-app" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
+print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
 	.'" data-ajax-message="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/message.php', 1))
 	.'" data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1))
 	.'" data-page-message="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1))
@@ -281,7 +328,8 @@ print '<aside class="cm-folders">';
 print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="convomail-switcher">';
 print $form->selectarray('accountid', $options, $account->id, 0, 0, 0, '', 0, 0, 0, '', 'cm-account', 0);
 print '</form>';
-if ($user->hasRight('convomail', 'message', 'send')) {
+$cansend = (bool) $user->hasRight('convomail', 'message', 'send');
+if ($cansend) {
 	print '<a class="cm-compose" href="'.dol_buildpath('/convomail/compose.php', 1).'?accountid='.((int) $account->id).'">'.img_picto('', 'fa-pen', 'class="pictofixedwidth"').$langs->trans('ComposeEmail').'</a>';
 }
 $hastree = false;
@@ -292,7 +340,7 @@ if ($canmanagefolders) {
 	print '<div class="cm-folder-root" data-cm-root="1">'.img_picto('', 'fa-level-up-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailFolderMoveTop').'</div>';
 }
 print '<nav class="cm-folderlist'.($hastree ? ' cm-has-tree' : '').'">';
-$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
+$icons = array('inbox' => 'fa-inbox', 'drafts' => 'fa-file', 'templates' => 'fa-file-alt', 'sent' => 'fa-paper-plane', 'archive' => 'fa-archive', 'junk' => 'fa-ban', 'trash' => 'fa-trash', '' => 'fa-folder');
 // Folders come in tree order (ConvomailHordeMailboxClient::folderTree()): each is followed by its subfolders,
 // indented by depth; a folder with subfolders can be collapsed (js/convomail.js, kept in this browser)
 foreach ($folders as $f) {
@@ -328,7 +376,7 @@ foreach ($folders as $f) {
 		}
 		print '</span>';
 	}
-	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts'), true)) {
+	if ($f['unseen'] > 0 && !in_array($f['role'], array('sent', 'trash', 'drafts', 'templates'), true)) {
 		print '<span class="cm-count" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($f['name']).'">'.((int) $f['unseen']).'</span>';
 	}
 	print '</a>';
@@ -359,7 +407,8 @@ print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="unread" tit
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="flag" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).'">'.img_picto('', 'fa-archive').'</button>';
 print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).'">'.img_picto('', 'fa-trash').'</button>';
-if (ConvomailView::isJunkFolder($folder, $folders)) {
+$isjunk = ConvomailView::isJunkFolder($folder, $folders);
+if ($isjunk) {
 	print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="notjunk" title="'.dol_escape_htmltag($langs->trans('ConvomailNotSpamHelp')).'">'.img_picto('', 'fa-check-circle').'</button>';
 } else {
 	print '<button type="button" class="cm-btn cm-iconbtn" data-cm-bulk="junk" title="'.dol_escape_htmltag($langs->trans('ConvomailSpamHelp')).'">'.img_picto('', 'fa-ban').'</button>';
@@ -406,9 +455,21 @@ if ($last < $total) {
 print '</span>';
 print '</div>';
 
+// Folder name and count, Get mail now, Display and Focus mode
+$currentfolder = array('name' => $folder, 'label' => $folder);
+foreach ($folders as $f) {
+	if ($f['name'] === $folder) {
+		$currentfolder = $f;
+	}
+}
+print ConvomailView::listHead(convomail_folder_label($currentfolder), $total, $search !== '', $selfbase.$listparam.'&refresh=1', $selfbase.$listparam.($openuid > 0 ? '&uid='.$openuid : ''), true);
+// Column headings of the table view: a click sorts on the column, again reverses it
+print ConvomailView::tableHead($selfbase.$searchparam, $showto);
+
 // Notice bar of the new-mail checks: new messages when the list can't update in place, or why checking stopped
 print '<div class="cm-notice" role="status" aria-live="polite" hidden></div>';
-print '<div class="cm-rows" role="list">';
+// In Drafts and Templates a double click opens the message on the compose page (Edit draft, Use template)
+print '<div class="cm-rows" role="list"'.($cansend ? ConvomailView::dblOpenAttributes($currentrole) : '').'>';
 if ($listerror !== '') {
 	print '<div class="cm-empty error">'.dol_escape_htmltag($listerror).'</div>';
 } elseif (empty($messages)) {
@@ -419,9 +480,14 @@ if ($listerror !== '') {
 	}
 	print '</div>';
 }
-$todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
+$now = dol_now();
+$todaykey = dol_print_date($now, '%Y%m%d', 'tzuserrel');
 // Sent with the tracking image: opened or not, one query for the page
 $opens = ConvomailTracker::opens($db, (int) $account->id, array_column($messages, 'msgid'));
+// Pictures of the correspondents shown (users, contacts, third parties): three queries for the page
+$avatars = (convomail_density() !== 'compact') ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails(is_array($messages) ? $messages : array(), $showto), $matched, $user) : array();
+// Date headings (Today, Yesterday, This week...) in the list, which is sorted newest first
+ConvomailView::$lastDayGroup = '*';
 foreach ($messages as $m) {
 	print ConvomailView::listRow($m, array(
 		'href'     => $selfbase.$listparam.'&uid='.((int) $m['uid']),
@@ -434,6 +500,10 @@ foreach ($messages as $m) {
 		'projects' => $resolver->projects,
 		'open'     => $opens[$m['msgid'] ?? ''] ?? null,
 		'todaykey' => $todaykey,
+		'avatars'  => $avatars,
+		'junk'     => $isjunk,
+		'dayheadings' => in_array($sort, array('date_desc', 'date_asc'), true),
+		'now'      => $now,
 	));
 }
 print '</div>';

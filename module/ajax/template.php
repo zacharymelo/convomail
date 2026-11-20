@@ -10,9 +10,10 @@
 /**
  * \file    ajax/template.php
  * \ingroup convomail
- * \brief   Subject and body of an email template, with substitutions for the chosen third party / contact / project. JSON.
+ * \brief   Subject and body of an email template, with substitutions for the chosen third party / contact / project; or
+ *          the list of a mailbox's Templates folder. JSON.
  *
- * GET parameters: id (template), socid, contactid, projectid
+ * GET parameters: id (template), socid, contactid, projectid; or accountid (templates of that mailbox, read only)
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -67,6 +68,28 @@ if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'message', 'send
 	exit;
 }
 
+// Templates of a mailbox (its Templates folder, as Thunderbird keeps them), for the picker of the compose page: read
+// only, nothing is created here
+$accountid = GETPOSTINT('accountid');
+if ($accountid > 0) {
+	dol_include_once('/convomail/class/hordemailboxclient.class.php');
+	$account = convomail_get_usable_account($db, $user, $accountid);
+	$folder = '';
+	$list = array();
+	if ($account && $account->canSend($user)) {
+		$client = new ConvomailHordeMailboxClient($account);
+		$folder = $client->findFolderByRole('templates');
+		$found = ($folder !== '') ? $client->listMessages($folder, 0, 100) : false;
+		/** @var array<int,array<string,mixed>> $messages */
+		$messages = ($found && is_array($found['messages'] ?? null)) ? $found['messages'] : array();
+		foreach ($messages as $m) {
+			$list[] = array('uid' => is_numeric($m['uid'] ?? null) ? (int) $m['uid'] : 0, 'subject' => convomail_message_text($m, 'subject'));
+		}
+		$client->close();
+	}
+	convomail_json(array('ok' => true, 'folder' => $folder, 'templates' => $list));
+}
+
 $id = GETPOSTINT('id');
 $allowed = convomail_email_templates($db, $user);
 if (!isset($allowed[$id])) {
@@ -84,31 +107,13 @@ if (!is_object($template) || empty($template->id)) {
 }
 
 // Object used for substitutions: project first, then contact, then third party
-$object = null;
-if (GETPOSTINT('projectid') > 0) {
-	$p = new Project($db);
-	if ($p->fetch(GETPOSTINT('projectid')) > 0 && $p->restrictedProjectArea($user, 'read') > 0) {
-		$p->fetch_thirdparty();
-		$object = $p;
-	}
-}
-if (!$object && GETPOSTINT('contactid') > 0) {
-	$c = new Contact($db);
-	if ($c->fetch(GETPOSTINT('contactid')) > 0) {
-		$object = $c;
-	}
-}
-if (!$object && GETPOSTINT('socid') > 0) {
-	$s = new Societe($db);
-	if ($s->fetch(GETPOSTINT('socid')) > 0) {
-		$object = $s;
-	}
-}
+$object = convomail_substitution_object($db, $user, GETPOSTINT('projectid'), GETPOSTINT('contactid'), GETPOSTINT('socid'));
 
 $substitutions = getCommonSubstitutionArray($langs, 0, null, $object);
 complete_substitutions_array($substitutions, $langs, $object);
 
-$subject = make_substitutions((string) $template->topic, $substitutions, $langs);
+// The subject field is plain text: a value with markup (a third party name...) keeps only its text
+$subject = dol_string_nohtmltag((string) make_substitutions((string) $template->topic, $substitutions, $langs), 1);
 $body = (string) $template->content;
 if (!dol_textishtml($body)) {
 	$body = dol_nl2br(dol_escape_htmltag($body, 0, 1));

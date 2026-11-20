@@ -115,24 +115,9 @@ class ConvomailTransport
 			return -1;
 		}
 
-		$fromaddress = $account->label ? '"'.str_replace('"', '', $account->label).'" <'.$account->email.'>' : '<'.$account->email.'>';
-
-		$filepaths = array();
-		$mimetypes = array();
-		$filenames = array();
-		foreach ((array) ($msg['files'] ?? array()) as $file) {
-			$filepaths[] = $file['path'];
-			$mimetypes[] = $file['mime'];
-			$filenames[] = $file['name'];
-		}
-
-		$inreplyto = trim((string) ($msg['in_reply_to'] ?? ''), " <>");
-
-		$body = (string) $msg['body'];
 		$pixel = '';
 		if (!empty($msg['track_key'])) {
 			$pixel = ConvomailTracker::pixelHtml($msg['track_key']);
-			$body .= $pixel;
 		}
 
 		if ($account->isOAuth()) {
@@ -149,28 +134,7 @@ class ConvomailTransport
 		$saved = $this->overrideSmtpSettings($account);
 		$rawmime = '';
 		try {
-			$mailfile = new CMailFile(
-				(string) $msg['subject'],
-				(string) $msg['to'],
-				$fromaddress,
-				$body,
-				$filepaths,
-				$mimetypes,
-				$filenames,
-				(string) ($msg['cc'] ?? ''),
-				(string) ($msg['bcc'] ?? ''),
-				empty($msg['read_receipt']) ? 0 : 1,
-				1,
-				'',
-				'',
-				(string) ($msg['trackid'] ?? ''),
-				'',
-				self::SEND_CONTEXT,
-				'',
-				(string) ($msg['upload_dir_tmp'] ?? ''),
-				$inreplyto,
-				$inreplyto	// References: parent only in phase 1 (Swift Mailer accepts one id here)
-			);
+			$mailfile = $this->mailFile($account, $msg, $pixel);
 
 			if (!empty($mailfile->error)) {
 				$this->error = $mailfile->error;
@@ -195,7 +159,7 @@ class ConvomailTransport
 					$sentbody = str_replace($pixel, '', (string) $mailfile->message->getBody());
 					$mailfile->message->setBody($sentbody, 'text/html');
 				}
-				$rawmime = $mailfile->message->toString();
+				$rawmime = self::messageText($mailfile);
 			}
 
 			if (!$result) {
@@ -212,6 +176,156 @@ class ConvomailTransport
 		$this->copyToSent($account, $rawmime);
 
 		return 1;
+	}
+
+	/**
+	 * Build a message without sending it, as send() would (same recipients, body, attachments and threading headers),
+	 * for the Drafts folder
+	 *
+	 * @param  ConvomailAccount    $account Account it is from
+	 * @param  array<string,mixed> $msg     Keys of send() (track_key ignored), and context: compose context of a draft
+	 *                                      (array of scalar values, kept in the X-Convomail-Draft header)
+	 * @return string                       Raw message, '' if KO (see $this->error)
+	 */
+	public function buildRaw(ConvomailAccount $account, array $msg)
+	{
+		$this->error = '';
+		$this->errors = array();
+
+		// Swift Mailer builds the message in CMailFile's constructor; nothing is sent
+		$saved = $this->overrideSmtpSettings($account);
+		$raw = '';
+		try {
+			$mailfile = $this->mailFile($account, $msg);
+			if (empty($mailfile->error)) {
+				$this->dedupePastedImages($mailfile);
+				$raw = self::messageText($mailfile);
+			}
+			if ($raw === '') {
+				$this->error = !empty($mailfile->error) ? $mailfile->error : 'The message could not be built';
+				$this->errors = $mailfile->errors;
+			} elseif (!empty($msg['context']) && is_array($msg['context'])) {
+				// The compose context of a draft, as one more header line (header order does not matter)
+				$raw = ConvomailHordeMailboxClient::DRAFT_HEADER.': '.http_build_query($msg['context'], '', '&')."\r\n".$raw;
+			}
+		} finally {
+			$this->restoreSmtpSettings($saved);
+		}
+		return $raw;
+	}
+
+	/**
+	 * Text of a message built by CMailFile in its Swift Mailer mode
+	 *
+	 * @param  CMailFile $mailfile Built message
+	 * @return string              Raw message, '' if none
+	 */
+	private static function messageText($mailfile)
+	{
+		// @phan-suppress-next-line PhanUndeclaredProperty
+		if (is_object($mailfile->message) && method_exists($mailfile->message, 'toString')) {
+			$text = $mailfile->message->toString();
+			return is_string($text) ? $text : '';
+		}
+		return '';
+	}
+
+	/**
+	 * The CMailFile of a message, for send() and buildRaw()
+	 *
+	 * @param  ConvomailAccount    $account Account it is from
+	 * @param  array<string,mixed> $msg     Keys of send()
+	 * @param  string              $pixel   Open-tracking image added to the body, '' for none
+	 * @return CMailFile
+	 */
+	private function mailFile(ConvomailAccount $account, array $msg, $pixel = '')
+	{
+		$body = (string) $msg['body'].$pixel;
+		$fromaddress = $account->label ? '"'.str_replace('"', '', $account->label).'" <'.$account->email.'>' : '<'.$account->email.'>';
+
+		$filepaths = array();
+		$mimetypes = array();
+		$filenames = array();
+		foreach ((array) ($msg['files'] ?? array()) as $file) {
+			$filepaths[] = $file['path'];
+			$mimetypes[] = $file['mime'];
+			$filenames[] = $file['name'];
+		}
+
+		$inreplyto = trim((string) ($msg['in_reply_to'] ?? ''), " <>");
+
+		return new CMailFile(
+			(string) $msg['subject'],
+			(string) $msg['to'],
+			$fromaddress,
+			$body,
+			$filepaths,
+			$mimetypes,
+			$filenames,
+			(string) ($msg['cc'] ?? ''),
+			(string) ($msg['bcc'] ?? ''),
+			empty($msg['read_receipt']) ? 0 : 1,
+			1,
+			'',
+			'',
+			(string) ($msg['trackid'] ?? ''),
+			'',
+			self::SEND_CONTEXT,
+			'',
+			(string) ($msg['upload_dir_tmp'] ?? ''),
+			$inreplyto,
+			$inreplyto	// References: parent only in phase 1 (Swift Mailer accepts one id here)
+		);
+	}
+
+	/**
+	 * Store a message built by buildRaw() in the account's Drafts folder (created if missing), and delete the draft
+	 * it replaces
+	 *
+	 * @param  ConvomailAccount      $account Account
+	 * @param  string                $raw     Raw message
+	 * @param  array{0:ConvomailAccount,1:string,2:int}|null $replace The draft this one replaces: account, folder, UID
+	 * @return array{folder:string,uid:int}|null Where it was stored, null if KO (see $this->error)
+	 */
+	public function store(ConvomailAccount $account, $raw, $replace = null)
+	{
+		$client = new ConvomailHordeMailboxClient($account);
+		$folder = $client->findFolderByRole('drafts', 'Drafts');
+		if ($folder === '') {
+			$this->error = $client->getError();
+			$client->close();
+			return null;
+		}
+		$uid = $client->append($raw, $folder, array('\\Draft', '\\Seen'));
+		$this->error = ($uid < 0) ? $client->getError() : '';
+		$client->close();
+		if ($uid < 0) {
+			return null;
+		}
+		if ($replace) {
+			self::deleteDraft($replace[0], $replace[1], $replace[2]);
+		}
+		return array('folder' => $folder, 'uid' => $uid);
+	}
+
+	/**
+	 * Delete a draft for good (replaced by a newer one, or sent). Best effort: a draft left behind is harmless.
+	 *
+	 * @param  ConvomailAccount $account Account the draft is in
+	 * @param  string           $folder  Folder
+	 * @param  int              $uid     UID
+	 * @return void
+	 */
+	public static function deleteDraft(ConvomailAccount $account, $folder, $uid)
+	{
+		if ($folder === '' || $uid <= 0) {
+			return;
+		}
+		$client = new ConvomailHordeMailboxClient($account);
+		if (!$client->deleteMessages($folder, array((int) $uid))) {
+			dol_syslog(__METHOD__.' '.$client->getError(), LOG_WARNING);
+		}
+		$client->close();
 	}
 
 	/**

@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -17,7 +26,9 @@
  * newest, uidvalidity, unseen (Inbox count)} or {ok: false, error, halt}}}; {ok: false, error, halt} when all failed.
  * JSON {ok, new, newest, uidvalidity, unseen: {folder: count}} or {ok: false, error, halt}. One IMAP STATUS
  * round trip (plus a search limited to the new UIDs when there are some); nothing is fetched or marked read.
- * halt asks the page to stop checking (a sign-in to renew, an account no longer usable).
+ * halt asks the page to stop checking (a sign-in to renew, an account deleted or disabled). A refusal that can be
+ * passing (module being re-enabled, permissions being changed) has no halt but retryin (seconds): the page asks again
+ * soon and stops after three refusals in a row. reason names the refusal (convomail_poll_refusal()).
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -49,13 +60,11 @@ if (!$res) {
 }
 
 /**
+ * @var Conf $conf
  * @var DoliDB $db
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force DoliDB $db';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 dol_include_once('/convomail/class/convomailview.class.php');
 
@@ -74,18 +83,79 @@ function convomail_poll_json($data, $code = 200)
 	exit;
 }
 
+/**
+ * Why the check is refused, or '' when it may go on
+ *
+ * @param  DoliDB                 $db        Database handler
+ * @param  User                   $user      User
+ * @param  int                    $accountid Mailbox asked for (0 for the Combined Inbox)
+ * @param  string                 $folder    Folder asked for ('' for the Combined Inbox)
+ * @param  ConvomailAccount|null  $account   The mailbox when it may be read
+ * @return string Language key: ConvomailPollNoModule, ConvomailPollNoRight, ConvomailPollExternal,
+ *                ConvomailPollAccountGone, ConvomailPollAccountDisabled, ConvomailPollNoAccess, ConvomailPollNoFolder
+ */
+function convomail_poll_refusal($db, $user, $accountid, $folder, &$account)
+{
+	$account = null;
+	if (!isModEnabled('convomail')) {
+		return 'ConvomailPollNoModule';
+	}
+	if (!empty($user->socid)) {
+		return 'ConvomailPollExternal';
+	}
+	if (!$user->hasRight('convomail', 'account', 'read')) {
+		return 'ConvomailPollNoRight';
+	}
+	if ($accountid <= 0) {
+		return '';
+	}
+	$account = convomail_get_usable_account($db, $user, $accountid);
+	if (!$account) {
+		$found = new ConvomailAccount($db);
+		if ($found->fetch($accountid) <= 0) {
+			return 'ConvomailPollAccountGone';
+		}
+		return ((int) $found->status !== ConvomailAccount::STATUS_ENABLED) ? 'ConvomailPollAccountDisabled' : 'ConvomailPollNoAccess';
+	}
+	return $folder === '' ? 'ConvomailPollNoFolder' : '';
+}
+
+/**
+ * Answer a refusal: final for a deleted or disabled mailbox, asked again soon otherwise (a module being re-enabled or
+ * permissions being changed refuse for a moment only)
+ *
+ * @param  string $reason Language key from convomail_poll_refusal()
+ * @return never
+ */
+function convomail_poll_refuse($reason)
+{
+	global $langs;
+	/** @var Translate $langs */
+
+	$final = in_array($reason, array('ConvomailPollAccountGone', 'ConvomailPollAccountDisabled', 'ConvomailPollNoFolder'), true);
+	dol_syslog('convomail poll refused: '.$reason, LOG_INFO);
+	$data = array('ok' => false, 'error' => $langs->transnoentitiesnoconv($reason), 'reason' => $reason, 'halt' => $final);
+	if (!$final) {
+		$data['retryin'] = 20;
+	}
+	convomail_poll_json($data, 403);
+}
+
 $langs->loadLangs(array('convomail@convomail'));
 
 $accountid = GETPOSTINT('accountid');
 $folder    = GETPOST('folder', 'restricthtml');
 $since     = (int) GETPOST('since', 'int');
 
-if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read') || !empty($user->socid)) {
-	convomail_poll_json(array('ok' => false, 'error' => $langs->transnoentitiesnoconv('ConvomailPollForbidden'), 'halt' => true), 403);
+$combinedview = (GETPOST('view', 'aZ09') === 'combined');
+$account = null;
+$refusal = convomail_poll_refusal($db, $user, $combinedview ? 0 : $accountid, $combinedview ? '' : $folder, $account);
+if ($refusal !== '') {
+	convomail_poll_refuse($refusal);
 }
 
 // Combined Inbox: the Inbox of each of its mailboxes, each answering on its own (one that fails leaves the others)
-if (GETPOST('view', 'aZ09') === 'combined') {
+if ($combinedview) {
 	dol_include_once('/convomail/class/convomailcombined.class.php');
 	convomail_release_session();
 	$sinces = array();
@@ -122,9 +192,9 @@ if (GETPOST('view', 'aZ09') === 'combined') {
 	}
 	convomail_poll_json(array('ok' => true, 'accounts' => (object) $answers));
 }
-$account = convomail_get_usable_account($db, $user, $accountid);
-if (!$account || $folder === '') {
-	convomail_poll_json(array('ok' => false, 'error' => $langs->transnoentitiesnoconv('ConvomailPollForbidden'), 'halt' => true), 403);
+
+if (!$account instanceof ConvomailAccount) {
+	convomail_poll_refuse('ConvomailPollNoAccess');
 }
 
 // The folders the page lists, from the session cache of the mailbox page: no IMAP LIST here
@@ -133,7 +203,7 @@ $others = array();
 $nocount = array();
 $cached = $_SESSION['convomail_folders_'.((int) $account->id)]['folders'] ?? array();
 foreach ((array) $cached as $f) {
-	if (in_array($f['role'] ?? '', array('sent', 'trash', 'drafts'), true)) {
+	if (in_array($f['role'] ?? '', array('sent', 'trash', 'drafts', 'templates'), true)) {
 		$nocount[] = (string) $f['name'];
 	} elseif (count($others) < 40) {
 		$others[] = (string) $f['name'];

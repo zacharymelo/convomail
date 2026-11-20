@@ -42,6 +42,11 @@
 .cm-iconbtn { padding: 4px 6px; }
 .cm-sep { width: 1px; height: 18px; background: var(--cm-border); margin: 0 4px; }
 .cm-right { margin-left: auto; }
+.cm-view-toolbar a.cm-right:link, .cm-view-toolbar a.cm-right:visited { color: var(--cm-accent); }
+/* Dolibarr gives that icon a fixed dark colour, unreadable in dark mode */
+.cm-view-toolbar a.cm-right .fas { color: inherit; }
+/* What to do with a draft or a template (reading pane) */
+.cm-hint { margin: 6px 16px; padding: 6px 10px; border-left: 3px solid var(--cm-accent); border-radius: 0 4px 4px 0; background: var(--colorbacktitle1, rgba(0, 0, 0, .03)); }
 .cm-toolbar select.cm-move { max-width: 130px; }
 /* The search box keeps a usable width: below it, it moves to its own line of the toolbar */
 .cm-search { flex: 1 1 240px; min-width: min(100%, 200px); display: flex; align-items: center; gap: 6px; }
@@ -67,18 +72,21 @@
 /* Middle: list */
 .cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .cm-rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-.cm-row { display: grid; grid-template-columns: 22px 22px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 6px 8px 6px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
+.cm-row { position: relative; display: grid; grid-template-columns: 22px 22px auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 7px 8px 7px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
 /* From a known contact or third party: a card icon before the name and a light tint (hover and selection win) */
 .cm-row.cm-row-contact { background: rgba(59, 111, 182, .06); }
 .cm-contact-mark { color: var(--cm-accent); font-size: .9em; }
 .cm-row:hover { background: var(--cm-hover); }
 .cm-row.selected { background: var(--cm-selected); border-left-color: var(--cm-accent); }
+/* On the selected row the theme's text colour, not the link one: dark mode selects in the link's own blue */
+.cm-row.selected a.cm-row-main:link, .cm-row.selected a.cm-row-main:visited { color: var(--colortext, inherit); }
 .cm-row .cm-check { margin: 3px 0 0; }
 .cm-star { border: 0; background: none; padding: 0; cursor: pointer; color: #c9c9c9; line-height: 1.4; }
 .cm-row.flagged .cm-star { color: #e8a317; }
-.cm-row-main { grid-column: 3; display: block; min-width: 0; text-decoration: none; color: inherit; }
+.cm-row-main { grid-column: 4; display: block; min-width: 0; text-decoration: none; color: inherit; }
 .cm-row-main:hover { text-decoration: none; }
-.cm-row-top { display: flex; justify-content: space-between; gap: 8px; }
+.cm-row-top { display: flex; align-items: baseline; gap: 6px; }
+.cm-row-top .cm-from { flex: 1 1 auto; min-width: 0; }
 .cm-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-via { font-weight: normal; font-size: .85em; color: var(--cm-muted); }
 .cm-date { color: var(--cm-muted); font-size: .85em; white-space: nowrap; }
@@ -86,7 +94,7 @@
 .cm-snippet { color: var(--cm-muted); }
 .cm-row.unread .cm-from, .cm-row.unread .cm-subj { font-weight: 700; }
 .cm-row.unread { border-left-color: var(--cm-accent); }
-.cm-row-tags { grid-column: 3; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.cm-row-tags { grid-column: 4; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
 .cm-row-tags:empty { display: none; }
 
 /* Chips */
@@ -252,6 +260,9 @@
 .cm-ai-change { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cm-ai-status { margin-top: 8px; font-size: .92em; }
 .cm-ai-status.error { color: var(--colortexterror, #a00); }
+/* Save draft result, under the buttons of the compose page */
+.cm-save-status { margin-top: 6px; min-height: 1.2em; font-size: .92em; }
+.cm-save-status.error { color: var(--colortexterror, #a00); }
 .cm-ai-busy .cm-ai-status::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cm-spin .8s linear infinite; vertical-align: -1px; }
 @keyframes cm-spin { to { transform: rotate(360deg); } }
 
@@ -386,3 +397,118 @@
 .cm-row-mailbox { display: inline-block; max-width: 11em; margin-right: 6px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--cm-border); color: var(--cm-muted); font-size: .8em; font-weight: 400; line-height: 1.5; vertical-align: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-combined-error { margin: 6px 8px 0; padding: 6px 10px; font-size: .9em; }
 .cm-markall { color: var(--cm-accent); }
+
+/* Message list design (PR 6): list head, date headings, pictures, marks, row buttons, densities, focus mode */
+/* Rows in the text colour, not the link one (the theme's link blue on every row was hard to read, mostly in dark mode) */
+.cm-row a.cm-row-main:link, .cm-row a.cm-row-main:visited { color: var(--colortext, inherit); }
+.cm-row .cm-row-subject { color: var(--colortext, inherit); opacity: .9; }
+.cm-row.unread .cm-row-subject { opacity: 1; }
+.cm-list-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 8px 12px; border-bottom: 1px solid var(--cm-border); min-width: 0; }
+.cm-list-title { font-size: 1.15em; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cm-list-count { color: var(--cm-muted); font-size: .9em; white-space: nowrap; }
+.cm-list-count::before { content: "\00b7"; margin-right: 8px; }
+.cm-list-tools { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.cm-list-tools .cm-btn { color: var(--cm-muted); }
+.cm-list-tools .cm-btn:hover, .cm-list-tools .cm-btn.active { color: var(--cm-accent); }
+.cm-display { display: flex; align-items: center; gap: 2px; margin: 0; }
+.cm-display-menu { position: relative; }
+.cm-display-menu > summary { list-style: none; }
+.cm-display-menu > summary::-webkit-details-marker { display: none; }
+.cm-display-menu[open] > summary { background: var(--cm-hover); border-color: var(--cm-border); }
+.cm-display-panel { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; gap: 6px; min-width: 170px; padding: 10px 12px; background: var(--colorbackbody, #fff); border: 1px solid var(--cm-border); border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .15); }
+.cm-display-title { font-size: .8em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--cm-muted); }
+.cm-display-panel label { cursor: pointer; white-space: nowrap; }
+
+/* Date headings stay on top while their rows scroll; a heading left without rows (rows moved away) is hidden */
+.cm-day { position: sticky; top: 0; z-index: 2; padding: 9px 12px 4px; font-size: .75em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--cm-muted); background: var(--colorbackbody, #fff); border-bottom: 1px solid var(--cm-border); }
+.cm-day:has(+ .cm-day), .cm-day:last-child { display: none; }
+
+/* Pictures: initials on a colour of the address, the photo over them when there is one */
+.cm-avatar { grid-column: 3; grid-row: 1 / span 2; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin: 1px 10px 0 2px; border-radius: 50%; overflow: hidden; background: hsl(var(--cm-hue, 210), 45%, 46%); color: #fff; font-size: .78em; font-weight: 600; letter-spacing: .02em; line-height: 1; user-select: none; }
+.cm-avatar-none { background: var(--cm-border); color: var(--colorbackbody, #fff); }
+.cm-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--colorbackbody, #fff); }
+
+/* Answered and forwarded, beside the date */
+.cm-marks { display: inline-flex; gap: 5px; color: var(--cm-muted); font-size: .8em; }
+.cm-row.answered .cm-mark-answered { color: var(--cm-accent); }
+
+/* Buttons of the row under the mouse, over its date; not on touch screens (no hover) */
+.cm-row-actions { position: absolute; top: 5px; right: 6px; z-index: 1; display: none; gap: 1px; padding: 2px; border: 1px solid var(--cm-border); border-radius: 6px; background: var(--colorbackbody, #fff); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
+.cm-row:hover .cm-row-actions { display: flex; }
+.cm-row-action { border: 0; background: none; padding: 3px 6px; border-radius: 4px; color: var(--cm-muted); cursor: pointer; font: inherit; line-height: 1.2; }
+.cm-row-action:hover { background: var(--cm-hover); color: var(--cm-accent); }
+.cm-row-action[data-cm-row-action="delete"]:hover { color: #c0392b; }
+.cm-row .cm-if-read, .cm-row.unread .cm-if-unread { display: inline; }
+.cm-row .cm-if-unread, .cm-row.unread .cm-if-read { display: none; }
+.cm-app.cm-dragging .cm-row-actions { display: none; }
+@media (hover: none) {
+	.cm-row:hover .cm-row-actions { display: none; }
+}
+
+/* Comfortable: larger picture, the text of the message on its own line */
+.cm-density-comfortable .cm-row { padding-top: 10px; padding-bottom: 10px; }
+.cm-density-comfortable .cm-avatar { width: 38px; height: 38px; font-size: .9em; margin-right: 12px; }
+.cm-density-comfortable .cm-snippet { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; font-size: .92em; }
+.cm-density-comfortable .cm-snippet-sep { display: none; }
+
+/* Compact: one line per message, no picture */
+.cm-density-compact .cm-row { grid-template-columns: 22px 22px 0 minmax(0, 1fr); padding-top: 3px; padding-bottom: 3px; align-items: center; }
+.cm-density-compact .cm-avatar { display: none; }
+.cm-density-compact .cm-row-main { display: flex; align-items: baseline; gap: 10px; }
+.cm-density-compact .cm-row-top { display: contents; }
+.cm-density-compact .cm-from { order: 1; flex: 0 0 30%; }
+.cm-density-compact .cm-row-subject { order: 2; flex: 1 1 auto; min-width: 0; }
+.cm-density-compact .cm-marks { order: 3; }
+.cm-density-compact .cm-date { order: 4; }
+.cm-density-compact .cm-row-actions { top: 50%; transform: translateY(-50%); }
+.cm-density-compact .cm-day { padding-top: 6px; }
+
+/* Focus mode: Dolibarr's left menu is not printed, the mailbox takes the page width */
+.cm-app.cm-focus { height: calc(100vh - 80px); }
+
+@media (max-width: 767px) {
+	.cm-list-head { padding: 8px; }
+	.cm-focus-toggle { display: none; }	/* phones show no left menu */
+	.cm-density-compact .cm-row-main { display: block; }
+	.cm-density-compact .cm-row-top { display: flex; }
+}
+
+/* Table view (Display > Layout): the list in columns over the full width, the reading pane under it.
+   Phones keep the list (one column). The row's own parts become the cells: its link and top line are
+   display: contents, so a click anywhere on the row still opens the message. */
+.cm-size, .cm-table-head { display: none; }
+@media (min-width: 768px) {
+	/* list | handle (drag to change the list height, kept in this browser) | reading pane */
+	.cm-app.cm-view-table { grid-template-columns: var(--cm-col1, 200px) 5px minmax(0, 1fr); grid-template-rows: minmax(0, var(--cm-listh, 45%)) 5px minmax(0, 1fr); }
+	.cm-view-table > .cm-folders, .cm-view-table > .cm-resize[data-col="1"] { grid-row: 1 / span 3; }
+	.cm-view-table > .cm-list { grid-column: 3; grid-row: 1; }
+	.cm-view-table > .cm-resize[data-col="2"] { grid-column: 3; grid-row: 2; cursor: row-resize; background-size: 100% 1px; }
+	.cm-view-table > .cm-pane { grid-column: 3; grid-row: 3; }
+	.cm-view-table .cm-table-head, .cm-view-table .cm-row { display: grid; grid-template-columns: 22px 22px minmax(120px, 24%) minmax(0, 1fr) auto auto 92px 64px; column-gap: 8px; align-items: center; }
+	.cm-view-table .cm-table-head { padding: 5px 8px 5px 7px; border-bottom: 1px solid var(--cm-border); background: var(--colorbacktitle1, transparent); font-size: .85em; font-weight: 600; color: var(--cm-muted); }
+	.cm-view-table .cm-th { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.cm-view-table a.cm-th:link, .cm-view-table a.cm-th:visited { color: inherit; text-decoration: none; }
+	.cm-view-table a.cm-th:hover, .cm-view-table .cm-th-sorted { color: var(--cm-accent) !important; }
+	.cm-view-table .cm-th-from { grid-column: 3; }
+	.cm-view-table .cm-th-subject { grid-column: 4; }
+	.cm-view-table .cm-th-marks { grid-column: 5 / span 2; }
+	.cm-view-table .cm-th-date { grid-column: 7; text-align: right; }
+	.cm-view-table .cm-th-size { grid-column: 8; text-align: right; }
+	.cm-view-table .cm-row { padding-top: 4px; padding-bottom: 4px; }
+	.cm-view-table .cm-avatar { display: none; }
+	.cm-view-table .cm-row-main, .cm-view-table .cm-row-top { display: contents; }
+	.cm-view-table .cm-from { grid-column: 3; grid-row: 1; }
+	.cm-view-table .cm-row-subject { grid-column: 4; grid-row: 1; }
+	.cm-view-table .cm-marks { grid-column: 5; grid-row: 1; }
+	.cm-view-table .cm-row-tags { grid-column: 6; grid-row: 1; margin: 0; flex-wrap: nowrap; }
+	.cm-view-table .cm-row-tags:empty { display: block; }
+	.cm-view-table .cm-date { grid-column: 7; grid-row: 1; text-align: right; }
+	.cm-view-table .cm-size { display: block; grid-column: 8; grid-row: 1; text-align: right; color: var(--cm-muted); font-size: .85em; white-space: nowrap; }
+	.cm-view-table .cm-row-actions { top: 50%; transform: translateY(-50%); }
+	.cm-view-table .cm-day { padding-top: 6px; }
+	.cm-view-table.cm-density-comfortable .cm-row { padding-top: 8px; padding-bottom: 8px; }
+	.cm-view-table.cm-density-comfortable .cm-snippet { display: inline; margin: 0; font-size: inherit; }
+	.cm-view-table.cm-density-comfortable .cm-snippet-sep { display: inline; }
+	.cm-view-table.cm-density-compact .cm-row { padding-top: 2px; padding-bottom: 2px; }
+	.cm-view-table.cm-density-compact .cm-from { flex: none; }
+}

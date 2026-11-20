@@ -1,10 +1,23 @@
+-- ============================================================================
 -- Copyright (C) 2026 DPG Supply
+-- Copyright (C) 2026 Nick Fragoulis
+--
+-- This program is free software; you can redistribute it and/or modify
+-- it under the terms of the GNU General Public License as published by
+-- the Free Software Foundation; either version 3 of the License, or
+-- (at your option) any later version.
+--
+-- This program is distributed in the hope that it will be useful,
+-- but WITHOUT ANY WARRANTY; without even the implied warranty of
+-- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-- GNU General Public License for more details.
+--
 -- Mail accounts (IMAP + SMTP) owned by a Dolibarr user
 
 CREATE TABLE llx_convomail_account(
     rowid           INTEGER       AUTO_INCREMENT PRIMARY KEY,
     entity          INTEGER       NOT NULL DEFAULT 1,
-    fk_user         INTEGER       NOT NULL,
+    fk_user         INTEGER,                            -- owner; NULL for a shared mailbox
     label           VARCHAR(128),
     email           VARCHAR(255)  NOT NULL,
     imap_host       VARCHAR(255)  NOT NULL,

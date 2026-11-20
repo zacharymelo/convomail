@@ -1,5 +1,6 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,6 +31,7 @@ dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
 dol_include_once('/convomail/class/convomailfiler.class.php');
+dol_include_once('/convomail/class/convomailavatar.class.php');
 dol_include_once('/convomail/class/convomailcreator.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
@@ -408,7 +410,10 @@ class ConvomailView
 	 * @param  array<string,mixed> $o href, accountid, folder, selected (bool), showto (bool: show recipients, for Sent and Drafts),
 	 *                                known (contact or company name of the sender, ''), resolved (project resolution or null),
 	 *                                projects (ConvomailProjectResolver::$projects), open (ConvomailTracker::opens() entry or null),
-	 *                                todaykey (Ymd today), mailbox (label of the mailbox shown on the row, '' for none)
+	 *                                todaykey (Ymd today), mailbox (label of the mailbox shown on the row, '' for none),
+	 *                                avatars (ConvomailAvatar::pictures() result), junk (bool: the row is in the Junk folder),
+	 *                                dayheadings (bool: print a date heading before the row when its group changes, see
+	 *                                $lastDayGroup) with now (current time)
 	 * @return string             HTML
 	 */
 	public static function listRow(array $m, array $o)
@@ -421,29 +426,33 @@ class ConvomailView
 		$people = $showto ? $m['to'] : ConvomailMatcher::senders($m);
 		$r = $o['resolved'] ?? null;
 		$known = (string) ($o['known'] ?? '');
-		$classes = 'cm-row'.($m['seen'] ? '' : ' unread').(!empty($o['selected']) ? ' selected' : '').($m['flagged'] ? ' flagged' : '').($known !== '' ? ' cm-row-contact' : '');
-		$h = '<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-accountid="'.((int) $o['accountid']).'" data-folder="'.dol_escape_htmltag($o['folder']).'" data-href="'.dol_escape_htmltag($o['href']).'">';
+		$date = is_numeric($m['date'] ?? null) ? (int) $m['date'] : 0;
+		$heading = !empty($o['dayheadings']) ? self::dayHeader($date, is_numeric($o['now'] ?? null) ? (int) $o['now'] : dol_now(), self::$lastDayGroup) : '';
+		$classes = 'cm-row'.($m['seen'] ? '' : ' unread').(!empty($o['selected']) ? ' selected' : '').($m['flagged'] ? ' flagged' : '').($known !== '' ? ' cm-row-contact' : '').(!empty($m['answered']) ? ' answered' : '');
+		$h = $heading.'<div class="'.$classes.'" role="listitem" draggable="true" data-uid="'.((int) $m['uid']).'" data-accountid="'.((int) $o['accountid']).'" data-folder="'.dol_escape_htmltag($o['folder']).'" data-href="'.dol_escape_htmltag($o['href']).'">';
 		$h .= '<input type="checkbox" class="cm-check" value="'.((int) $m['uid']).'">';
 		$h .= '<button type="button" class="cm-star" data-cm-star="1" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).'">'.img_picto('', 'fa-star').'</button>';
+		$h .= ConvomailAvatar::html($people, $o['avatars'] ?? array());
 		$h .= '<a class="cm-row-main" draggable="false" href="'.dol_escape_htmltag($o['href']).'">';
 		$h .= '<span class="cm-row-top"><span class="cm-from">';
 		if ($known !== '') {
 			$h .= '<span class="fas fa-address-card cm-contact-mark" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailRowFromContact', $known)).'"></span> ';
 		}
-		$h .= dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans('ConvomailNoSender'));
+		$h .= dol_escape_htmltag(convomail_format_addresses($people) ?: $langs->trans($showto ? 'ConvomailNoRecipient' : 'ConvomailNoSender'));
 		if (!empty($via)) {
 			$h .= ' <span class="cm-via">'.dol_escape_htmltag($langs->trans('ConvomailVia', convomail_format_addresses($via))).'</span>';
 		}
 		$h .= '</span>';
-		$isToday = $m['date'] && dol_print_date($m['date'], '%Y%m%d', 'tzuserrel') === $o['todaykey'];
-		$h .= '<span class="cm-date">'.($m['date'] ? dol_print_date($m['date'], $isToday ? '%H:%M' : 'day', 'tzuserrel') : '').'</span></span>';
+		$h .= self::marks($m);
+		$h .= self::rowDate($date, is_string($o['todaykey'] ?? null) ? $o['todaykey'] : '');
+		$h .= '</span>';
 		$h .= '<span class="cm-row-subject">';
 		if (($o['mailbox'] ?? '') !== '') {
 			$h .= '<span class="cm-row-mailbox" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailCombinedMailboxLabel', $o['mailbox'])).'">'.dol_escape_htmltag($o['mailbox']).'</span>';
 		}
 		$h .= '<span class="cm-subj">'.dol_escape_htmltag($m['subject'] !== '' ? $m['subject'] : $langs->trans('ConvomailNoSubject')).'</span>';
 		if (($m['snippet'] ?? '') !== '') {
-			$h .= '<span class="cm-snippet"> &ndash; '.dol_escape_htmltag($m['snippet']).'</span>';
+			$h .= '<span class="cm-snippet"><span class="cm-snippet-sep"> &ndash; </span>'.dol_escape_htmltag($m['snippet']).'</span>';
 		}
 		$h .= '</span>';
 		$h .= '</a>';
@@ -461,8 +470,274 @@ class ConvomailView
 			$h .= '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $r['eventid']).'" title="'.dol_escape_htmltag($langs->trans('ConvomailLoggedOpenEvent')).'">'.img_picto('', 'action', 'class="opacitymedium"').'</a>';
 		}
 		$h .= '</span>';
+		$size = is_numeric($m['size'] ?? null) ? (int) $m['size'] : 0;
+		$h .= '<span class="cm-size">'.self::sizeText($size).'</span>';
+		$h .= self::rowActions(!empty($o['junk']));
 		$h .= '</div>';
 		return $h;
+	}
+
+	/**
+	 * Addresses whose picture the rows show: the first recipient on Sent, Drafts and Templates, else the sender
+	 *
+	 * @param  array<mixed> $messages Summaries of the page
+	 * @param  bool         $showto   Rows show recipients
+	 * @return string[]
+	 */
+	public static function rowEmails(array $messages, $showto)
+	{
+		$emails = array();
+		foreach ($messages as $m) {
+			if (!is_array($m)) {
+				continue;
+			}
+			/** @var array<string,mixed> $m */
+			$people = $showto ? ($m['to'] ?? array()) : ConvomailMatcher::senders($m);
+			$first = is_array($people) ? reset($people) : false;
+			if (is_array($first) && is_string($first['email'] ?? null)) {
+				$emails[] = $first['email'];
+			}
+		}
+		return $emails;
+	}
+
+	/**
+	 * Date of a row: today the time, this year day and month (15 Nov), before that the full date; the full date and
+	 * time in the tooltip
+	 *
+	 * @param  int    $date     Message date (0 when unknown)
+	 * @param  string $todaykey Today as Ymd
+	 * @return string HTML
+	 */
+	private static function rowDate($date, $todaykey)
+	{
+		if (empty($date)) {
+			return '<span class="cm-date"></span>';
+		}
+		$day = dol_print_date($date, '%Y%m%d', 'tzuserrel');
+		$format = ($day === $todaykey) ? '%H:%M' : (substr($day, 0, 4) === substr($todaykey, 0, 4) ? '%d %b' : 'day');
+		return '<span class="cm-date" title="'.dol_escape_htmltag(dol_print_date($date, 'dayhour', 'tzuserrel')).'">'.dol_print_date($date, $format, 'tzuserrel').'</span>';
+	}
+
+	/**
+	 * Size of a message as mail apps show it: whole kilobytes (at least 1), megabytes with one decimal from 1 MB
+	 *
+	 * @param  int    $bytes Size
+	 * @return string        '' when unknown
+	 */
+	private static function sizeText($bytes)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		if ($bytes <= 0) {
+			return '';
+		}
+		$kb = max(1, (int) round($bytes / 1024));
+		if ($kb < 1024) {
+			return $kb.' '.$langs->trans('Kb');
+		}
+		return str_replace('.', $langs->transnoentitiesnoconv('SeparatorDecimal'), (string) round($kb / 1024, 1)).' '.$langs->trans('Mb');
+	}
+
+	/**
+	 * Answered and forwarded marks of a row, beside its date
+	 *
+	 * @param  array<string,mixed> $m Message summary
+	 * @return string HTML
+	 */
+	private static function marks(array $m)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		$h = '';
+		if (!empty($m['answered'])) {
+			$h .= '<span class="cm-mark cm-mark-answered fas fa-reply" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkAnswered')).'"></span>';
+		}
+		if (!empty($m['forwarded'])) {
+			$h .= '<span class="cm-mark cm-mark-forwarded fas fa-share" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkForwarded')).'"></span>';
+		}
+		return $h !== '' ? '<span class="cm-marks">'.$h.'</span>' : '';
+	}
+
+	/**
+	 * Buttons shown on a row under the mouse (or when it has the keyboard focus): archive, delete, read or unread,
+	 * spam or not spam. They act on that row only (js/convomail.js), like the toolbar does on ticked rows.
+	 *
+	 * @param  bool   $junk In the Junk folder (Not spam in place of Spam)
+	 * @return string HTML
+	 */
+	private static function rowActions($junk)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		// Read or unread: an unread row shows the open envelope (mark read), a read row the closed one (css)
+		$buttons = array(
+			'toggleread' => array('<span class="fas fa-envelope-open cm-if-unread"></span><span class="fas fa-envelope cm-if-read"></span>', 'ConvomailToggleRead'),
+			'archive' => array('<span class="fas fa-archive"></span>', 'ConvomailArchive'),
+			($junk ? 'notjunk' : 'junk') => array('<span class="fas '.($junk ? 'fa-check-circle' : 'fa-ban').'"></span>', $junk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp'),
+			'delete'  => array('<span class="fas fa-trash"></span>', 'Delete'),
+		);
+		$h = '<span class="cm-row-actions">';
+		foreach ($buttons as $action => $b) {
+			$h .= '<button type="button" class="cm-row-action" tabindex="-1" data-cm-row-action="'.$action.'" title="'.dol_escape_htmltag($langs->trans($b[1])).'">'.$b[0].'</button>';
+		}
+		return $h.'</span>';
+	}
+
+	/**
+	 * @var string Date group of the row printed last by listRow() with the dayheadings option; set to '*' (none yet)
+	 *             before a list
+	 */
+	public static $lastDayGroup = '*';
+
+	/**
+	 * Group of a date in the list: today, yesterday, this week, this month, else its month
+	 *
+	 * @param  int    $date Message date (0 when unknown)
+	 * @param  int    $now  Current time
+	 * @return string       Key of the group: today, yesterday, week, month, or a month as YYYYMM ('' when no date)
+	 */
+	public static function dayGroup($date, $now)
+	{
+		if (empty($date)) {
+			return '';
+		}
+		$day = dol_print_date($date, '%Y%m%d', 'tzuserrel');
+		if ($day === dol_print_date($now, '%Y%m%d', 'tzuserrel')) {
+			return 'today';
+		}
+		if ($day === dol_print_date($now - 86400, '%Y%m%d', 'tzuserrel')) {
+			return 'yesterday';
+		}
+		if ($date <= $now && dol_print_date($date, '%G%V', 'tzuserrel') === dol_print_date($now, '%G%V', 'tzuserrel')) {
+			return 'week';
+		}
+		if (dol_print_date($date, '%Y%m', 'tzuserrel') === dol_print_date($now, '%Y%m', 'tzuserrel')) {
+			return 'month';
+		}
+		return dol_print_date($date, '%Y%m', 'tzuserrel');
+	}
+
+	/**
+	 * Heading printed before a row when its date group differs from the row above (the list is newest first)
+	 *
+	 * @param  int    $date Message date
+	 * @param  int    $now  Current time
+	 * @param  string $last Group of the row above, updated
+	 * @return string HTML ('' when the group is the same)
+	 */
+	public static function dayHeader($date, $now, &$last)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		$group = self::dayGroup($date, $now);
+		if ($group === $last) {
+			return '';
+		}
+		$last = $group;
+		$labels = array('today' => 'Today', 'yesterday' => 'Yesterday', 'week' => 'ConvomailThisWeek', 'month' => 'ConvomailThisMonth', '' => 'ConvomailNoDate');
+		$label = isset($labels[$group]) ? $langs->trans($labels[$group]) : dol_print_date($date, '%B %Y', 'tzuserrel');
+		return '<div class="cm-day" role="presentation">'.dol_escape_htmltag(dol_ucfirst($label)).'</div>';
+	}
+
+	/**
+	 * Head of the message list: folder name and count, then Refresh, Display (density) and Focus mode
+	 *
+	 * @param  string $label      Folder name shown
+	 * @param  int    $count      Messages in the folder, or results of the search
+	 * @param  bool   $searching  The list shows search results
+	 * @param  string $refreshurl URL of Refresh
+	 * @param  string $backtopage The page to come back to after a display change (relative URL)
+	 * @param  bool   $cansort    Offer the order (not in the Combined Inbox, merged by arrival)
+	 * @return string HTML
+	 */
+	public static function listHead($label, $count, $searching, $refreshurl, $backtopage, $cansort = true)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		$density = convomail_density();
+		$focus = convomail_focus_mode();
+		$countlabel = $langs->transnoentitiesnoconv($searching ? ($count === 1 ? 'ConvomailResultOne' : 'ConvomailResultMany') : ($count === 1 ? 'ConvomailMessageOne' : 'ConvomailMessageMany'), (string) $count);
+		$h = '<div class="cm-list-head">';
+		$h .= '<span class="cm-list-title">'.dol_escape_htmltag($label).'</span>';
+		$h .= '<span class="cm-list-count">'.dol_escape_htmltag($countlabel).'</span>';
+		$h .= '<span class="cm-list-tools">';
+		$h .= '<a class="cm-btn cm-iconbtn cm-list-refresh" href="'.dol_escape_htmltag($refreshurl).'" title="'.dol_escape_htmltag($langs->trans('ConvomailGetMailNow')).'"><span class="fas fa-sync-alt"></span></a>';
+		// Display: density of the rows and focus mode, remembered for the user (mailbox.php, action setdisplay)
+		$h .= '<form method="POST" action="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1)).'" class="cm-display">';
+		$h .= '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="setdisplay">';
+		$h .= '<input type="hidden" name="backtopage" value="'.dol_escape_htmltag($backtopage).'">';
+		$h .= '<details class="cm-display-menu"><summary class="cm-btn cm-iconbtn" title="'.dol_escape_htmltag($langs->trans('ConvomailDisplay')).'"><span class="fas fa-sliders-h"></span></summary>';
+		$h .= '<div class="cm-display-panel" role="group" aria-label="'.dol_escape_htmltag($langs->trans('ConvomailDisplay')).'">';
+		if ($cansort) {
+			$h .= '<div class="cm-display-title">'.$langs->trans('ConvomailSortBy').'</div>';
+			$h .= '<select name="sortby" class="flat cm-display-sort">';
+			foreach (convomail_sorts() as $sortkey) {
+				$h .= '<option value="'.$sortkey.'"'.($sortkey === convomail_sort() ? ' selected' : '').'>'.dol_escape_htmltag($langs->trans('ConvomailSort_'.$sortkey)).'</option>';
+			}
+			$h .= '</select>';
+		}
+		$h .= '<div class="cm-display-title">'.$langs->trans('ConvomailListView').'</div>';
+		foreach (array('list', 'table') as $v) {
+			$h .= '<label><input type="radio" name="listview" value="'.$v.'"'.($v === convomail_list_view() ? ' checked' : '').'> '.$langs->trans('ConvomailListView_'.$v).'</label>';
+		}
+		$h .= '<div class="cm-display-title">'.$langs->trans('ConvomailDensity').'</div>';
+		foreach (array('compact', 'normal', 'comfortable') as $d) {
+			$h .= '<label><input type="radio" name="density" value="'.$d.'"'.($d === $density ? ' checked' : '').'> '.$langs->trans('ConvomailDensity_'.$d).'</label>';
+		}
+		$h .= '<noscript><button type="submit" class="button small">'.$langs->trans('Save').'</button></noscript>';
+		$h .= '</div></details>';
+		$h .= '<button type="submit" name="focus" value="'.($focus ? '0' : '1').'" class="cm-btn cm-iconbtn cm-focus-toggle'.($focus ? ' active' : '').'" title="'.dol_escape_htmltag($langs->trans($focus ? 'ConvomailFocusOff' : 'ConvomailFocusOn')).'"><span class="fas '.($focus ? 'fa-compress-alt' : 'fa-expand-alt').'"></span></button>';
+		$h .= '</form>';
+		$h .= '</span>';
+		$h .= '</div>';
+		return $h;
+	}
+
+	/**
+	 * Column headings of the table view (hidden in the list view by css). With a URL, a heading sorts the list on its
+	 * column, and the heading of the current order reverses it.
+	 *
+	 * @param  string $baseurl URL of the list without the order ('' for headings that don't sort: Combined Inbox)
+	 * @param  bool   $showto  The rows show the recipient (Sent, Drafts, Templates)
+	 * @return string HTML
+	 */
+	public static function tableHead($baseurl, $showto)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		$sort = convomail_sort();
+		$columns = array(
+			'from'    => array($showto ? 'ConvomailColumnTo' : 'ConvomailColumnFrom', 'asc'),
+			'subject' => array('ConvomailColumnSubject', 'asc'),
+			'marks'   => array('', ''),
+			'date'    => array('Date', 'desc'),
+			'size'    => array('Size', 'desc'),
+		);
+		$h = '<div class="cm-table-head" role="presentation"><span></span><span></span>';
+		foreach ($columns as $col => $c) {
+			$label = $c[0] !== '' ? $langs->trans($c[0]) : '';
+			if ($baseurl === '' || $c[1] === '') {
+				$h .= '<span class="cm-th cm-th-'.$col.'">'.dol_escape_htmltag($label).'</span>';
+				continue;
+			}
+			// The current column reverses, another one starts in its natural order (A to Z, newest, largest)
+			$current = (strpos($sort, $col.'_') === 0);
+			$next = $col.'_'.($current ? (substr($sort, -4) === 'desc' ? 'asc' : 'desc') : $c[1]);
+			$h .= '<a class="cm-th cm-th-'.$col.($current ? ' cm-th-sorted' : '').'" href="'.dol_escape_htmltag($baseurl.'&sortby='.$next).'" title="'.dol_escape_htmltag($langs->trans('ConvomailSort_'.$next)).'">';
+			$h .= dol_escape_htmltag($label);
+			if ($current) {
+				$h .= ' <span class="fas fa-caret-'.(substr($sort, -4) === 'desc' ? 'down' : 'up').'"></span>';
+			}
+			$h .= '</a>';
+		}
+		return $h.'</div>';
 	}
 
 	/**
@@ -497,12 +772,43 @@ class ConvomailView
 	 */
 	public static function isJunkFolder($folder, array $folders)
 	{
-		foreach ($folders as $f) {
-			if ($f['name'] === $folder) {
-				return $f['role'] === 'junk';
+		return self::folderRole($folder, $folders) === 'junk';
+	}
+
+	/**
+	 * Attributes of the message list of Drafts and Templates: a double click on a row opens it on the compose page
+	 * (js/convomail.js)
+	 *
+	 * @param  mixed  $role Role of the folder listed
+	 * @return string       HTML attributes, '' for other folders
+	 */
+	public static function dblOpenAttributes($role)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		if (!in_array($role, array('drafts', 'templates'), true)) {
+			return '';
+		}
+		$url = dol_buildpath('/convomail/compose.php', 1).'?mode='.($role === 'drafts' ? 'draft' : 'template');
+		return ' data-dblopen="'.dol_escape_htmltag($url).'" title="'.dol_escape_htmltag($langs->trans($role === 'drafts' ? 'ConvomailDraftDblClick' : 'ConvomailTemplateDblClick')).'"';
+	}
+
+	/**
+	 * Role of a folder (inbox, drafts, templates, sent, junk...) in a folder list
+	 *
+	 * @param  string $folder  Folder name
+	 * @param  mixed  $folders Folders of the account (listFolders())
+	 * @return string          Role, '' for none or unknown
+	 */
+	public static function folderRole($folder, $folders)
+	{
+		foreach (is_array($folders) ? $folders : array() as $f) {
+			if (is_array($f) && ($f['name'] ?? null) === $folder) {
+				return is_string($f['role'] ?? null) ? $f['role'] : '';
 			}
 		}
-		return false;
+		return '';
 	}
 
 	/**
@@ -565,20 +871,37 @@ class ConvomailView
 		// In the reading pane the message scrolls on its own, above the conversation (resizable split, js/convomail.js)
 		$h .= '<div class="cm-view-main">';
 
-		// Toolbar
+		// Toolbar. A draft or a template is not a received email: no archive, spam, record suggestions or logging
+		$role = self::folderRole($folder, $opts['folders'] ?? array());
+		$notamail = in_array($role, array('drafts', 'templates'), true);
 		$h .= '<div class="cm-toolbar cm-view-toolbar">';
 		if ($user->hasRight('convomail', 'message', 'send')) {
 			// Labels in .cm-btn-label: phones show the icons only (css/convomail.css), the title says what each does
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r" title="'.dol_escape_htmltag($langs->trans('ConvomailReply')).' (r)">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReply').'</span></a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a" title="'.dol_escape_htmltag($langs->trans('ConvomailReplyAll')).' (a)">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReplyAll').'</span></a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f" title="'.dol_escape_htmltag($langs->trans('ConvomailForward')).' (f)">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailForward').'</span></a>';
+			if ($role === 'drafts') {
+				// A draft is edited, not answered: sending it removes it from Drafts
+				$h .= '<a class="cm-btn cm-primary" href="'.dol_escape_htmltag($compose.'&mode=draft').'" title="'.dol_escape_htmltag($langs->trans('ConvomailEditDraftHelp')).'">'.img_picto('', 'fa-pen', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailEditDraft').'</span></a>';
+			} elseif ($role === 'templates') {
+				// A template of the Templates folder (as Thunderbird keeps them) opens as a new email, read only here
+				$h .= '<a class="cm-btn cm-primary" href="'.dol_escape_htmltag($compose.'&mode=template').'" title="'.dol_escape_htmltag($langs->trans('ConvomailUseTemplateHelp')).'">'.img_picto('', 'fa-file-alt', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailUseTemplate').'</span></a>';
+			} else {
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r" title="'.dol_escape_htmltag($langs->trans('ConvomailReply')).' (r)">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReply').'</span></a>';
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a" title="'.dol_escape_htmltag($langs->trans('ConvomailReplyAll')).' (a)">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReplyAll').'</span></a>';
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f" title="'.dol_escape_htmltag($langs->trans('ConvomailForward')).' (f)">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailForward').'</span></a>';
+			}
+			if ($role !== 'drafts') {
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=asnew').'" title="'.dol_escape_htmltag($langs->trans('ConvomailEditAsNewHelp')).'">'.img_picto('', 'fa-copy', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailEditAsNew').'</span></a>';
+			}
 		}
 		$h .= '<span class="cm-sep"></span>';
-		$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
+		if (!$notamail) {
+			$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
+		}
 		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
-		// Spam, or Not spam in the Junk folder: the ! key presses it
-		$injunk = self::isJunkFolder($folder, $opts['folders'] ?? array());
-		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
+		if (!$notamail) {
+			// Spam, or Not spam in the Junk folder: the ! key presses it
+			$injunk = ($role === 'junk');
+			$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
+		}
 		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="unread" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkUnread')).' (u)">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailMarkUnread').'</span></button>';
 		if (!empty($opts['folders'])) {
@@ -613,10 +936,16 @@ class ConvomailView
 		}
 		$h .= '</div>';
 
+		if ($notamail) {
+			// What to do with it, as the record suggestions and logging below are left out
+			$h .= '<div class="cm-hint">'.img_picto('', $role === 'drafts' ? 'fa-pen' : 'fa-file-alt', 'class="pictofixedwidth opacitymedium"');
+			$h .= $langs->trans($role === 'drafts' ? 'ConvomailDraftHint' : 'ConvomailTemplateHint').'</div>';
+		}
+
 		// The person this message is with is not in Dolibarr: create the third party, or add them as a contact
 		// (of the third party using their domain, else of one picked on core's form: a Gmail sender of a known company)
 		// Not offered for an address recorded on an inactive contact or third party, or on a user: creating one would duplicate it
-		$person = self::correspondent($message, $myemails);
+		$person = $notamail ? null : self::correspondent($message, $myemails);
 		if ($person && !isset($matched[dol_strtolower(trim($person['email']))]) && isModEnabled('societe')
 			&& empty($matcher->knownEmails(array($person['email'])))) {
 			$actions = '';
@@ -650,23 +979,25 @@ class ConvomailView
 		}
 
 		// Project line
-		$h .= '<div class="cm-projectline">';
-		if ($res && $res['strength'] === ConvomailProjectResolver::LOGGED) {
-			$h .= '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $res['eventid']).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLoggedOpenEvent').'</a>';
-			$h .= self::eventRecordLink($db, $user, (int) $res['eventid']);
-			if ($res['projectid'] > 0 && isset($resolver->projects[$res['projectid']])) {
-				$h .= ' '.self::projectBadge($res['projectid'], $resolver->projects[$res['projectid']], false);
+		if (!$notamail) {
+			$h .= '<div class="cm-projectline">';
+			if ($res && $res['strength'] === ConvomailProjectResolver::LOGGED) {
+				$h .= '<a href="'.DOL_URL_ROOT.'/comm/action/card.php?id='.((int) $res['eventid']).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLoggedOpenEvent').'</a>';
+				$h .= self::eventRecordLink($db, $user, (int) $res['eventid']);
+				if ($res['projectid'] > 0 && isset($resolver->projects[$res['projectid']])) {
+					$h .= ' '.self::projectBadge($res['projectid'], $resolver->projects[$res['projectid']], false);
+				}
+			} else {
+				if ($res && $res['projectid'] > 0 && isset($resolver->projects[$res['projectid']])) {
+					$p = $resolver->projects[$res['projectid']];
+					$h .= self::projectBadge($res['projectid'], $p, $res['strength'] === ConvomailProjectResolver::SUGGESTED).' ';
+					$links = self::defaultLinks($db, $message, $myemails, $res['socid']);
+					$h .= '<button type="button" class="cm-btn cm-primary" data-cm-action="log" data-projectid="'.((int) $res['projectid']).'" data-socid="'.((int) $links['socid']).'" data-contactids="'.dol_escape_htmltag(implode(',', $links['contactids'])).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLogToProject', dol_escape_htmltag($p['ref'])).'</button> ';
+				}
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($pageurl.'&action=log&token='.newToken()).'">'.$langs->trans('ConvomailLogTo').'</a>';
 			}
-		} else {
-			if ($res && $res['projectid'] > 0 && isset($resolver->projects[$res['projectid']])) {
-				$p = $resolver->projects[$res['projectid']];
-				$h .= self::projectBadge($res['projectid'], $p, $res['strength'] === ConvomailProjectResolver::SUGGESTED).' ';
-				$links = self::defaultLinks($db, $message, $myemails, $res['socid']);
-				$h .= '<button type="button" class="cm-btn cm-primary" data-cm-action="log" data-projectid="'.((int) $res['projectid']).'" data-socid="'.((int) $links['socid']).'" data-contactids="'.dol_escape_htmltag(implode(',', $links['contactids'])).'">'.img_picto('', 'action', 'class="pictofixedwidth"').$langs->trans('ConvomailLogToProject', dol_escape_htmltag($p['ref'])).'</button> ';
-			}
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($pageurl.'&action=log&token='.newToken()).'">'.$langs->trans('ConvomailLogTo').'</a>';
+			$h .= '</div>';
 		}
-		$h .= '</div>';
 
 		// File the attachments on a record, or create a record from the email: a panel opens under this line
 		// (ajax/record.php, js/convomail.js), always submitted by the user
@@ -678,7 +1009,7 @@ class ConvomailView
 			$recordlinks .= '<button type="button" class="cm-btn" data-cm-record="link">'.img_picto('', 'fa-link', 'class="pictofixedwidth"').$langs->trans('ConvomailLinkToRecordButton').'</button>';
 		}
 		$recordlinks .= self::createMenu($db, $user, $message, $matched);
-		if ($recordlinks !== '') {
+		if ($recordlinks !== '' && !$notamail) {
 			$h .= '<div class="cm-recordline" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/record.php', 1).$base).'" data-search="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/records.php', 1)).'" data-token="'.newToken().'">';
 			$h .= '<span class="opacitymedium">'.$langs->trans('ConvomailFromThisEmail').'</span> '.$recordlinks.'</div>';
 			$h .= '<div class="cm-recordpanel"></div>';

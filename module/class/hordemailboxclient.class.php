@@ -1,5 +1,6 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 
 /**
  * \file    class/hordemailboxclient.class.php
@@ -70,6 +72,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	{
 		$this->timeout = max(5, (int) $seconds);
 	}
+
+	/** Header of a draft saved by Convomail: its compose context (third party, project, document, reply), URL-encoded */
+	const DRAFT_HEADER = 'X-Convomail-Draft';
 
 	/** @var array<string,bool> Library classes whose origin was checked (see checkLibrary()) */
 	private static $librarychecked = array();
@@ -463,15 +468,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		if (empty($uids)) {
 			return $uids;
 		}
-		$validity = (string) ($imap->status($folder, Horde_Imap_Client::STATUS_UIDVALIDITY)['uidvalidity'] ?? '');
+		$validity = $this->uidValidity($imap, $folder);
 		$file = $this->arrivalCacheFile($folder);
-		$known = array();
-		if ($file !== '' && is_readable($file)) {
-			$cached = json_decode((string) @file_get_contents($file), true);
-			if (is_array($cached) && (string) ($cached['uidvalidity'] ?? '') === $validity && is_array($cached['arrival'] ?? null)) {
-				$known = $cached['arrival'];
-			}
-		}
+		$known = self::readFolderCache($file, $validity, 'arrival');
 		$missing = array_values(array_filter($uids, function ($uid) use ($known) {
 			return !isset($known[$uid]);
 		}));
@@ -505,6 +504,187 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			return array($times[$b], $b) <=> array($times[$a], $a);
 		});
 		return $uids;
+	}
+
+	/** Orders of the message list: newest arrival first (default), oldest, correspondent, subject, size */
+	const SORTS = array('date_desc', 'date_asc', 'from_asc', 'from_desc', 'to_asc', 'to_desc', 'subject_asc', 'subject_desc', 'size_desc', 'size_asc');
+
+	/**
+	 * UIDs in another order than newest first. Ties keep the newest first. Sender, first recipient, subject and size
+	 * are fetched once per message (envelope and size, not the text) and kept per folder like the arrival times
+	 * (sortCacheFile()), so later sorts of the folder only fetch new messages. Server-side SORT is not used, for
+	 * the reasons given at newestFirst().
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap   Connection
+	 * @param  string                   $folder Folder
+	 * @param  int[]                    $uids   UIDs, newest first
+	 * @param  string                   $sort   One of self::SORTS
+	 * @param  bool                     $whole  $uids is the whole folder: keys of messages gone are dropped
+	 * @return int[]
+	 */
+	private function sortUids($imap, $folder, array $uids, $sort, $whole)
+	{
+		if ($sort === 'date_asc') {
+			return array_reverse($this->newestFirst($imap, $folder, $uids));
+		}
+		$uids = $this->newestFirst($imap, $folder, $uids);
+		if (empty($uids)) {
+			return $uids;
+		}
+		$validity = $this->uidValidity($imap, $folder);
+		$file = $this->sortCacheFile($folder);
+		$known = self::readFolderCache($file, $validity, 'keys');
+		$missing = array();
+		foreach ($uids as $uid) {
+			if (!isset($known[$uid])) {
+				$missing[] = $uid;
+			}
+		}
+		if ($missing) {
+			$query = new Horde_Imap_Client_Fetch_Query();
+			$query->envelope();
+			$query->size();
+			foreach (array_chunk($missing, 2000) as $chunk) {
+				$fetched = $imap->fetch($folder, $query, array('ids' => new Horde_Imap_Client_Ids($chunk)));
+				foreach ($chunk as $uid) {
+					$item = $fetched[$uid];
+					$known[$uid] = ($item instanceof Horde_Imap_Client_Data_Fetch) ? self::sortKeys($item) : array('', '', '', 0);
+				}
+			}
+		}
+		// Keys as read back from the cache file: checked, since the file could be damaged
+		$keys = array();
+		foreach ($uids as $uid) {
+			$k = $known[$uid] ?? null;
+			$k = is_array($k) ? $k : array();
+			$keys[$uid] = array(is_string($k[0] ?? null) ? $k[0] : '', is_string($k[1] ?? null) ? $k[1] : '', is_string($k[2] ?? null) ? $k[2] : '', is_numeric($k[3] ?? null) ? (int) $k[3] : 0);
+		}
+		if ($file !== '' && ($missing || ($whole && count($known) > count($uids)))) {
+			if (@file_put_contents($file, json_encode(array('uidvalidity' => $validity, 'keys' => $whole ? $keys : $known))) !== false) {
+				dolChmod($file);
+			}
+		}
+
+		/** @var Translate|null $langs */
+		global $langs;
+		list($field, $dir) = explode('_', $sort);
+		$col = array('from' => 0, 'to' => 1, 'subject' => 2, 'size' => 3)[$field];
+		$collator = class_exists('Collator') ? new Collator(is_object($langs) ? $langs->defaultlang : 'en_US') : null;
+		$rank = array_flip($uids);	// newest first, for ties
+		usort($uids, function (int $a, int $b) use ($keys, $col, $dir, $collator, $rank): int {
+			$x = $keys[$a][$col];
+			$y = $keys[$b][$col];
+			if (is_int($x) && is_int($y)) {
+				$cmp = $x <=> $y;
+			} else {
+				$x = (string) $x;
+				$y = (string) $y;
+				// Empty last whatever the direction
+				if (($x === '') !== ($y === '')) {
+					return $x === '' ? 1 : -1;
+				}
+				$cmp = $collator ? (int) $collator->compare($x, $y) : strcmp($x, $y);
+			}
+			if ($dir === 'desc') {
+				$cmp = -$cmp;
+			}
+			return $cmp !== 0 ? $cmp : $rank[$a] <=> $rank[$b];
+		});
+		return $uids;
+	}
+
+	/**
+	 * Sort keys of a message: sender, first recipient (name, else address), subject without Re: / Fwd:, size
+	 *
+	 * @param  Horde_Imap_Client_Data_Fetch $data Fetched envelope and size
+	 * @return array{0:string,1:string,2:string,3:int}
+	 */
+	private static function sortKeys($data)
+	{
+		$env = $data->getEnvelope();
+		$subject = (string) preg_replace('/^\s*((re|fwd?|aw|wg|tr|sv|ΑΠ|ΣΧΕΤ|ΠΡΘ)\s*(\[\d+\])?\s*:\s*)+/iu', '', self::sortText($env->subject));
+		return array(self::sortPerson($env->from), self::sortPerson($env->to), $subject, $data->getSize());
+	}
+
+	/**
+	 * Sort key of the first address of a list: its name, else the address
+	 *
+	 * @param  mixed  $list Horde_Mail_Rfc822_List of the envelope
+	 * @return string
+	 */
+	private static function sortPerson($list)
+	{
+		if (!is_iterable($list)) {
+			return '';
+		}
+		foreach ($list as $address) {
+			if (!$address instanceof Horde_Mail_Rfc822_Address) {
+				continue;
+			}
+			$name = trim((string) $address->personal, " \t\"'");
+			return self::sortText($name !== '' ? $name : $address->bare_address);
+		}
+		return '';
+	}
+
+	/**
+	 * Text as a sort key: valid UTF-8, lower case, trimmed
+	 *
+	 * @param  string $text Text
+	 * @return string
+	 */
+	private static function sortText($text)
+	{
+		if (!mb_check_encoding($text, 'UTF-8')) {
+			$text = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+		}
+		return trim(mb_strtolower($text, 'UTF-8'));
+	}
+
+	/**
+	 * UIDVALIDITY of a folder ('' when the server gives none)
+	 *
+	 * @param  Horde_Imap_Client_Socket $imap   Connection
+	 * @param  string                   $folder Folder
+	 * @return string
+	 */
+	private function uidValidity($imap, $folder)
+	{
+		$value = $imap->status($folder, Horde_Imap_Client::STATUS_UIDVALIDITY)['uidvalidity'] ?? '';
+		return is_scalar($value) ? (string) $value : '';
+	}
+
+	/**
+	 * What a folder cache file keeps under a key (arrival times, sort keys), by UID; empty when the file is missing,
+	 * damaged, or from before the folder's UIDVALIDITY changed
+	 *
+	 * @param  string $file     Cache file ('' for none)
+	 * @param  string $validity Current UIDVALIDITY of the folder
+	 * @param  string $key      arrival or keys
+	 * @return array<mixed>
+	 */
+	private static function readFolderCache($file, $validity, $key)
+	{
+		if ($file === '' || !is_readable($file)) {
+			return array();
+		}
+		$cached = json_decode((string) @file_get_contents($file), true);
+		if (!is_array($cached) || !is_scalar($cached['uidvalidity'] ?? null) || !is_array($cached[$key] ?? null)) {
+			return array();
+		}
+		return (string) $cached['uidvalidity'] === $validity ? $cached[$key] : array();
+	}
+
+	/**
+	 * File keeping the sort keys of a folder of this mailbox (shared by its users), '' if there is nowhere to keep them
+	 *
+	 * @param  string $folder Folder
+	 * @return string
+	 */
+	private function sortCacheFile($folder)
+	{
+		$file = $this->arrivalCacheFile($folder);
+		return $file !== '' ? (string) preg_replace('/\.json$/', '.sort.json', $file) : '';
 	}
 
 	/**
@@ -892,7 +1072,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$folders[$f['parent']]['children']++;
 			}
 		}
-		$order = array('inbox' => 0, 'drafts' => 1, 'sent' => 2, 'archive' => 3, 'junk' => 4, 'trash' => 5, '' => 9);
+		$order = array('inbox' => 0, 'drafts' => 1, 'templates' => 2, 'sent' => 3, 'archive' => 4, 'junk' => 5, 'trash' => 6, '' => 9);
 		$sortkids = function (array $names) use ($folders, $order) {
 			usort($names, function ($a, $b) use ($folders, $order) {
 				$c = $order[$folders[$a]['role']] <=> $order[$folders[$b]['role']];
@@ -958,6 +1138,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		$bynames = array(
 			'sent'    => array('sent', 'sent items', 'sent messages', 'sent mail'),
 			'drafts'  => array('drafts', 'draft'),
+			'templates' => array('templates', 'template'),	// no SPECIAL-USE flag; the name Thunderbird gives it
 			'junk'    => array('junk', 'spam', 'junk e-mail', 'junk email'),
 			'trash'   => array('trash', 'deleted items', 'deleted messages', 'bin'),
 			'archive' => array('archive', 'archives', 'all mail'),
@@ -1114,6 +1295,25 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	}
 
 	/**
+	 * Fields of a message that only drafts and templates use: Bcc (kept in drafts, templates and Sent copies only) and
+	 * the compose context of a draft saved by Convomail
+	 *
+	 * @param  mixed                              $data Fetch result with the whole header block
+	 * @return array{bcc:array<int,array{name:string,email:string}>,draft_context:string}
+	 */
+	private static function draftFields($data)
+	{
+		if (!$data instanceof Horde_Imap_Client_Data_Fetch) {
+			return array('bcc' => array(), 'draft_context' => '');
+		}
+		$rawheaders = self::rawHeaders($data);
+		return array(
+			'bcc' => self::headerAddresses($data->getEnvelope()->bcc, $rawheaders, 'Bcc', self::bodyCharset($data->getStructure())),
+			'draft_context' => (string) self::rawHeader($rawheaders, self::DRAFT_HEADER),
+		);
+	}
+
+	/**
 	 * Raw value of a header in a header block
 	 *
 	 * @param  string      $rawheaders Header block
@@ -1194,6 +1394,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			'seen'            => in_array('\\seen', $flags, true),
 			'answered'        => in_array('\\answered', $flags, true),
 			'flagged'         => in_array('\\flagged', $flags, true),
+			'forwarded'       => in_array('$forwarded', $flags, true),
 			'size'            => (int) $data->getSize(),
 			'has_attachments' => $hasattachments,
 		);
@@ -1205,9 +1406,10 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	 * @param  int    $limit      Page size
 	 * @param  string $searchText Search text
 	 * @param  bool   $searchBody Also search the message text (slow on servers without a search index)
+	 * @param  string $sort       Order (self::SORTS): '' or date_desc = newest arrival first
 	 * @return array<string,mixed>|false
 	 */
-	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false)
+	public function listMessages($folder, $offset, $limit, $searchText = '', $searchBody = false, $sort = '')
 	{
 		try {
 			$imap = $this->connect();
@@ -1217,6 +1419,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$uids = $this->newestFirst($imap, $folder, $imap->search($folder)['match']->ids, true);
 			} else {
 				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
+			}
+			if ($sort !== '' && $sort !== 'date_desc' && in_array($sort, self::SORTS, true)) {
+				$uids = $this->sortUids($imap, $folder, $uids, $sort, $searchText === '');
 			}
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
@@ -1468,6 +1673,8 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			if ($bodysubject !== null) {
 				$message['subject'] = $bodysubject;
 			}
+
+			$message += self::draftFields($data);
 
 			// References from the raw header block (unfolded)
 			$headertext = (string) $data->getHeaderText(0);
@@ -1764,6 +1971,32 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			));
 		} catch (Exception $e) {
 			// The move still happens without them
+		}
+	}
+
+	/**
+	 * Delete messages for good (\Deleted, then expunge of these UIDs only): a draft replaced by a newer one or sent
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @return bool
+	 */
+	public function deleteMessages($folder, array $uids)
+	{
+		$uids = array_values(array_filter(array_map('intval', $uids)));
+		if (empty($uids)) {
+			return false;
+		}
+		try {
+			$imap = $this->connect();
+			$ids = new Horde_Imap_Client_Ids($uids);
+			$imap->store($folder, array('ids' => $ids, 'add' => array(Horde_Imap_Client::FLAG_DELETED)));
+			// UID EXPUNGE where the server has UIDPLUS: other messages marked deleted by another mail app stay
+			$imap->expunge($folder, array('ids' => $ids));
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
 		}
 	}
 

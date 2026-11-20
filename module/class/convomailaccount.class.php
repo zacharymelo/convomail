@@ -1,5 +1,7 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -38,7 +40,7 @@ class ConvomailAccount extends CommonObject
 	const STATUS_DISABLED = 0;
 	const STATUS_ENABLED = 1;
 
-	/** fk_user of a shared mailbox (sales@, support@): created by an admin, used by the users granted access */
+	/** fk_user of a shared mailbox (sales@, support@) once loaded (NULL in the database): created by an admin, used by the users granted access */
 	const SHARED_OWNER = 0;
 
 	const AUTH_PASSWORD = 'password';
@@ -57,8 +59,9 @@ class ConvomailAccount extends CommonObject
 	public $fields = array(
 		'rowid'           => array('type' => 'integer', 'label' => 'TechnicalID', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'position' => 1),
 		'entity'          => array('type' => 'integer', 'label' => 'Entity', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'default' => '1', 'position' => 5),
-		// 0 = shared mailbox (SHARED_OWNER); the default makes core save 0 instead of NULL for an empty user link
-		'fk_user'         => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'User', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 10),
+		// Owner. A shared mailbox has none: NULL in the database (notnull -1 makes core save 0 as NULL), SHARED_OWNER (0)
+		// on the object once loaded, so the rest of the code keeps one way to tell it (isShared())
+		'fk_user'         => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'User', 'enabled' => 1, 'visible' => 1, 'notnull' => -1, 'position' => 10),
 		'label'           => array('type' => 'varchar(128)', 'label' => 'Label', 'enabled' => 1, 'visible' => 1, 'notnull' => 0, 'position' => 20),
 		'email'           => array('type' => 'varchar(255)', 'label' => 'Email', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'position' => 30),
 		'imap_host'       => array('type' => 'varchar(255)', 'label' => 'ConvomailImapHost', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'position' => 40),
@@ -197,7 +200,11 @@ class ConvomailAccount extends CommonObject
 	 */
 	public function fetch($id, $ref = null)
 	{
-		return $this->fetchCommon($id, null, ' AND t.entity IN ('.getEntity($this->element).')');
+		$result = $this->fetchCommon($id, null, ' AND t.entity IN ('.getEntity($this->element).')');
+		if ($result > 0 && empty($this->fk_user)) {
+			$this->fk_user = self::SHARED_OWNER;	// NULL owner in the database: a shared mailbox
+		}
+		return $result;
 	}
 
 	/**
@@ -242,12 +249,15 @@ class ConvomailAccount extends CommonObject
 	 */
 	public function delete(User $user, $notrigger = 0)
 	{
-		// The account and its grants go together, or neither does
+		// The account and its grants go together, or neither does; grants first (they reference the account)
 		$this->db->begin();
-		$result = $this->deleteCommon($user, $notrigger);
-		if ($result > 0 && !$this->db->query("DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_account = ".((int) $this->id))) {
+		$result = 1;
+		if (!$this->db->query("DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_account = ".((int) $this->id))) {
 			$this->error = $this->db->lasterror();
 			$result = -1;
+		}
+		if ($result > 0) {
+			$result = $this->deleteCommon($user, $notrigger);
 		}
 		if ($result <= 0) {
 			$this->db->rollback();
@@ -353,7 +363,7 @@ class ConvomailAccount extends CommonObject
 		// Own accounts first (default one first), then shared mailboxes the user was granted
 		$sql = "SELECT a.rowid FROM ".MAIN_DB_PREFIX.$this->table_element." as a";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."convomail_account_access as g ON g.fk_account = a.rowid AND g.fk_user = ".((int) $u->id);
-		$sql .= " WHERE (a.fk_user = ".((int) $u->id)." OR (a.fk_user = ".self::SHARED_OWNER." AND g.rowid IS NOT NULL))";
+		$sql .= " WHERE (a.fk_user = ".((int) $u->id)." OR (a.fk_user IS NULL AND g.rowid IS NOT NULL))";
 		$sql .= " AND a.status = ".self::STATUS_ENABLED;
 		$sql .= " AND a.entity IN (".getEntity($this->element).")";
 		$sql .= " ORDER BY CASE WHEN a.fk_user = ".((int) $u->id)." THEN 0 ELSE 1 END, a.is_default DESC, a.rowid ASC";
@@ -440,7 +450,7 @@ class ConvomailAccount extends CommonObject
 		}
 		$sql = "SELECT a.rowid FROM ".MAIN_DB_PREFIX.$this->table_element." as a";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."convomail_account_access as g ON g.fk_account = a.rowid AND g.fk_user = ".((int) $u->id);
-		$sql .= " WHERE a.fk_user = ".self::SHARED_OWNER;
+		$sql .= " WHERE a.fk_user IS NULL";
 		$sql .= " AND a.entity IN (".getEntity($this->element).")";
 		if ($onlyenabled) {
 			$sql .= " AND a.status = ".self::STATUS_ENABLED;
@@ -632,8 +642,8 @@ class ConvomailAccount extends CommonObject
 			}
 			return 1;
 		}
-		$sql = "INSERT INTO ".MAIN_DB_PREFIX."convomail_account_access (fk_account, fk_user, can_send, date_creation, fk_user_creat)";
-		$sql .= " VALUES (".((int) $this->id).", ".((int) $userid).", ".($cansend ? 1 : 0).", '".$this->db->idate(dol_now())."', ".((int) $by->id).")";
+		$sql = "INSERT INTO ".MAIN_DB_PREFIX."convomail_account_access (entity, fk_account, fk_user, can_send, date_creation, fk_user_creat)";
+		$sql .= " VALUES (".((int) $this->entity).", ".((int) $this->id).", ".((int) $userid).", ".($cansend ? 1 : 0).", '".$this->db->idate(dol_now())."', ".((int) $by->id).")";
 		if (!$this->db->query($sql)) {
 			$this->error = $this->db->lasterror();
 			return -1;
@@ -667,7 +677,7 @@ class ConvomailAccount extends CommonObject
 	{
 		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX.$this->table_element;
 		$sql .= " WHERE entity IN (".getEntity($this->element).")";
-		$sql .= " ORDER BY CASE WHEN fk_user = ".self::SHARED_OWNER." THEN 0 ELSE 1 END, email";
+		$sql .= " ORDER BY CASE WHEN fk_user IS NULL THEN 0 ELSE 1 END, email";
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();

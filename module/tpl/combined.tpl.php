@@ -1,5 +1,6 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,11 +40,7 @@ if (empty($conf) || !is_object($conf)) {
  * @var User $user
  * @var int $limit
  */
-'@phan-var-force Conf $conf';
-'@phan-var-force DoliDB $db';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
-'@phan-var-force int $limit';
+
 
 $folder      = ConvomailCombined::FOLDER;
 $before      = ConvomailCombined::parseCursor(GETPOST('before', 'alphanohtml'));
@@ -171,7 +168,7 @@ foreach (is_array($myaccounts) ? $myaccounts : array() as $acc) {
 
 llxHeader(convomail_assets(array('/convomail/css/convomail.css'), array('/convomail/js/convomail.js')), $langs->trans('ConvomailCombinedTitle'), '', '', 0, 0, '', '', '', 'mod-convomail page-mailbox page-combined');
 
-print '<div class="cm-app" data-view="combined" data-accountid="" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
+print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').'" data-view="combined" data-accountid="" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
 	.'" data-ajax-message="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/message.php', 1))
 	.'" data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1))
 	.'" data-ajax-folder="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/folder.php', 1))
@@ -283,6 +280,10 @@ if ($page['hasolder']) {
 print '</span>';
 print '</div>';
 
+// Name and count, Get mail now, Display and Focus mode
+print ConvomailView::listHead($langs->trans('ConvomailCombinedInbox'), (int) $page['total'], $search !== '', $base.$searchparam.'&refresh=1', $base.$listparam, false);
+print ConvomailView::tableHead('', false);
+
 // Notice bar of the new-mail checks, then a line per mailbox that could not be read (the others still show)
 print '<div class="cm-notice" role="status" aria-live="polite" hidden></div>';
 foreach ($page['accounts'] as $id => $info) {
@@ -298,7 +299,10 @@ if (empty($messages)) {
 	}
 	print '</div>';
 }
-$todaykey = dol_print_date(dol_now(), '%Y%m%d', 'tzuserrel');
+$now = dol_now();
+$todaykey = dol_print_date($now, '%Y%m%d', 'tzuserrel');
+$avatars = (convomail_density() !== 'compact') ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails($messages, false), $matched, $user) : array();
+ConvomailView::$lastDayGroup = '*';
 foreach ($messages as $m) {
 	$id = (int) $m['accountid'];
 	print ConvomailView::listRow($m, array(
@@ -312,6 +316,9 @@ foreach ($messages as $m) {
 		'open'      => $opens[$id][$m['msgid'] ?? ''] ?? null,
 		'todaykey'  => $todaykey,
 		'mailbox'   => (string) $m['account'],
+		'avatars'   => $avatars,
+		'dayheadings' => true,
+		'now'       => $now,
 	));
 }
 print '</div>';
