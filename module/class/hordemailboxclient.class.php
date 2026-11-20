@@ -71,6 +71,9 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		$this->timeout = max(5, (int) $seconds);
 	}
 
+	/** Header of a draft saved by Convomail: its compose context (third party, project, document, reply), URL-encoded */
+	const DRAFT_HEADER = 'X-Convomail-Draft';
+
 	/** @var array<string,bool> Library classes whose origin was checked (see checkLibrary()) */
 	private static $librarychecked = array();
 
@@ -892,7 +895,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$folders[$f['parent']]['children']++;
 			}
 		}
-		$order = array('inbox' => 0, 'drafts' => 1, 'sent' => 2, 'archive' => 3, 'junk' => 4, 'trash' => 5, '' => 9);
+		$order = array('inbox' => 0, 'drafts' => 1, 'templates' => 2, 'sent' => 3, 'archive' => 4, 'junk' => 5, 'trash' => 6, '' => 9);
 		$sortkids = function (array $names) use ($folders, $order) {
 			usort($names, function ($a, $b) use ($folders, $order) {
 				$c = $order[$folders[$a]['role']] <=> $order[$folders[$b]['role']];
@@ -958,6 +961,7 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		$bynames = array(
 			'sent'    => array('sent', 'sent items', 'sent messages', 'sent mail'),
 			'drafts'  => array('drafts', 'draft'),
+			'templates' => array('templates', 'template'),	// no SPECIAL-USE flag; the name Thunderbird gives it
 			'junk'    => array('junk', 'spam', 'junk e-mail', 'junk email'),
 			'trash'   => array('trash', 'deleted items', 'deleted messages', 'bin'),
 			'archive' => array('archive', 'archives', 'all mail'),
@@ -1111,6 +1115,25 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		$bodycharsets = array();
 		$this->snippets($folder, array($uid => $found), $bodycharsets);
 		return empty($bodycharsets[$uid]) ? null : self::subjectInBodyCharset($data, $bodycharsets[$uid]);
+	}
+
+	/**
+	 * Fields of a message that only drafts and templates use: Bcc (kept in drafts, templates and Sent copies only) and
+	 * the compose context of a draft saved by Convomail
+	 *
+	 * @param  mixed                              $data Fetch result with the whole header block
+	 * @return array{bcc:array<int,array{name:string,email:string}>,draft_context:string}
+	 */
+	private static function draftFields($data)
+	{
+		if (!$data instanceof Horde_Imap_Client_Data_Fetch) {
+			return array('bcc' => array(), 'draft_context' => '');
+		}
+		$rawheaders = self::rawHeaders($data);
+		return array(
+			'bcc' => self::headerAddresses($data->getEnvelope()->bcc, $rawheaders, 'Bcc', self::bodyCharset($data->getStructure())),
+			'draft_context' => (string) self::rawHeader($rawheaders, self::DRAFT_HEADER),
+		);
 	}
 
 	/**
@@ -1469,6 +1492,8 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 				$message['subject'] = $bodysubject;
 			}
 
+			$message += self::draftFields($data);
+
 			// References from the raw header block (unfolded)
 			$headertext = (string) $data->getHeaderText(0);
 			$message['references'] = '';
@@ -1764,6 +1789,32 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			));
 		} catch (Exception $e) {
 			// The move still happens without them
+		}
+	}
+
+	/**
+	 * Delete messages for good (\Deleted, then expunge of these UIDs only): a draft replaced by a newer one or sent
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @return bool
+	 */
+	public function deleteMessages($folder, array $uids)
+	{
+		$uids = array_values(array_filter(array_map('intval', $uids)));
+		if (empty($uids)) {
+			return false;
+		}
+		try {
+			$imap = $this->connect();
+			$ids = new Horde_Imap_Client_Ids($uids);
+			$imap->store($folder, array('ids' => $ids, 'add' => array(Horde_Imap_Client::FLAG_DELETED)));
+			// UID EXPUNGE where the server has UIDPLUS: other messages marked deleted by another mail app stay
+			$imap->expunge($folder, array('ids' => $ids));
+			return true;
+		} catch (Exception $e) {
+			$this->error = $e->getMessage();
+			return false;
 		}
 	}
 

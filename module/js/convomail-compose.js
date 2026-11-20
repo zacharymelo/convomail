@@ -640,8 +640,21 @@
 
 		var tpl = document.getElementById('cm-template');
 		if (tpl) {
+			loadMailboxTemplates(tpl);
+			var account = field('accountid');
+			if (account) {
+				account.addEventListener('change', function () { loadMailboxTemplates(tpl); });
+				if (window.jQuery) {
+					jQuery(account).on('select2:select', function () { loadMailboxTemplates(tpl); });
+				}
+			}
 			tpl.addEventListener('change', function () {
 				if (!tpl.value) {
+					return;
+				}
+				var chosen = tpl.options[tpl.selectedIndex];
+				if (chosen && chosen.getAttribute('data-uid')) {
+					openMailboxTemplate(tpl, chosen);
 					return;
 				}
 				var project = document.getElementById('projectid');
@@ -671,5 +684,151 @@
 		if (aipanel) {
 			bindAiTools(aipanel);
 		}
+
+		bindSaves();
 	});
+
+	// Templates of the From mailbox (its Templates folder), listed under Dolibarr's own; the row shows when there is any
+	function loadMailboxTemplates(tpl) {
+		var account = field('accountid');
+		var old = tpl.querySelector('optgroup[data-mailbox]');
+		if (old) {
+			old.remove();
+		}
+		showTemplateRow(tpl);
+		if (!account || !account.value) {
+			return;
+		}
+		var accountid = account.value;
+		fetch(tpl.getAttribute('data-url') + '?accountid=' + encodeURIComponent(accountid), { credentials: 'same-origin' })
+			.then(function (r) { return r.json(); })
+			.then(function (data) {
+				if (!data || !data.ok || !data.templates || !data.templates.length || account.value !== accountid) {
+					return;
+				}
+				var group = document.createElement('optgroup');
+				group.label = tpl.getAttribute('data-mailbox-label');
+				group.setAttribute('data-mailbox', accountid);
+				data.templates.forEach(function (t) {
+					var o = document.createElement('option');
+					o.value = 'mailbox:' + t.uid;
+					o.textContent = t.subject || '…';
+					o.setAttribute('data-uid', t.uid);
+					o.setAttribute('data-folder', data.folder);
+					o.setAttribute('data-account', accountid);
+					group.appendChild(o);
+				});
+				tpl.appendChild(group);
+				showTemplateRow(tpl);
+			})
+			.catch(function () { /* no templates offered: the mailbox may be unreachable, compose still works */ });
+	}
+
+	function showTemplateRow(tpl) {
+		var row = document.getElementById('cm-template-row');
+		if (row) {
+			row.classList.toggle('hidden', tpl.options.length <= 1);
+		}
+	}
+
+	// A template saved from this page is offered in the list at once, under Dolibarr's templates
+	function addSavedTemplate(template) {
+		var tpl = document.getElementById('cm-template');
+		if (!tpl || !template || !template.id || tpl.querySelector('option[value="' + template.id + '"]')) {
+			return;
+		}
+		var group = tpl.querySelector('optgroup[data-dolibarr]');
+		if (!group) {
+			group = document.createElement('optgroup');
+			group.label = tpl.getAttribute('data-dolibarr-label');
+			group.setAttribute('data-dolibarr', '1');
+			tpl.insertBefore(group, tpl.querySelector('optgroup[data-mailbox]'));
+		}
+		var o = document.createElement('option');
+		o.value = template.id;
+		o.textContent = template.label;
+		group.appendChild(o);
+		showTemplateRow(tpl);
+	}
+
+	// A template of the mailbox opens as a new email (its text, recipients and attachments), with the page's records
+	function openMailboxTemplate(tpl, chosen) {
+		var typed = (field('subject') && field('subject').value.trim() !== '')
+			|| editorData().replace(/<div class="convomail-signature"[\s\S]*$/i, '').replace(/<[^>]+>|&nbsp;|\s/g, '') !== '';
+		if (typed && !window.confirm(tpl.getAttribute('data-confirm'))) {
+			tpl.value = '';
+			return;
+		}
+		var project = document.getElementById('projectid');
+		var params = {
+			mode: 'template', srcaccountid: chosen.getAttribute('data-account'), accountid: chosen.getAttribute('data-account'),
+			folder: chosen.getAttribute('data-folder'), uid: chosen.getAttribute('data-uid'),
+			socid: (field('socid') || {}).value || '', contactid: (field('contactid') || {}).value || '',
+			projectid: project ? project.value : '', origin: (field('origin') || {}).value || '',
+			originid: (field('originid') || {}).value || '', replyto: (field('replyto') || {}).value || ''
+		};
+		var query = Object.keys(params).filter(function (k) { return params[k] !== '' && params[k] !== '0'; })
+			.map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+		window.location.href = tpl.getAttribute('data-compose') + '?' + query;
+	}
+
+	// Save draft and Save as template: the form is posted in the background, so it stays as it is with its files.
+	// A draft saved again replaces the previous one (the page keeps its place in draftaccountid/draftfolder/draftuid),
+	// except an opened draft, whose page reloads on the new one. A template goes to the user's Dolibarr templates.
+	function bindSaves() {
+		var box = document.querySelector('.cm-compose-buttons');
+		var status = document.getElementById('cm-save-status');
+		if (!box || !status || typeof FormData !== 'function' || typeof fetch !== 'function') {
+			return;	// the buttons post the form; the page then opens what was saved
+		}
+		var form = box.closest('form');
+		var show = function (lines, isError) {
+			status.textContent = '';
+			status.className = 'cm-save-status ' + (isError ? 'error' : 'opacitymedium');
+			(lines || []).forEach(function (line, i) {
+				if (i) {
+					status.appendChild(document.createElement('br'));
+				}
+				// Messages come as HTML from the server's translations: shown as text
+				var tmp = document.createElement('div');
+				tmp.innerHTML = line;
+				status.appendChild(document.createTextNode(tmp.textContent));
+			});
+		};
+		box.querySelectorAll('button[name="cmsave"]').forEach(function (btn) {
+			btn.addEventListener('click', function (ev) {
+				// An opened draft saved again is replaced, and its attachments are offered from it: the page then opens
+				// the new draft instead (a normal post)
+				var mode = form.querySelector('[name="mode"]');
+				if (btn.value === 'draft' && mode && mode.value === 'draft') {
+					return;
+				}
+				ev.preventDefault();
+				if (window.CKEDITOR && CKEDITOR.instances.message) {
+					CKEDITOR.instances.message.updateElement();
+				}
+				var data = new FormData(form);
+				data.set('cmsave', btn.value);
+				data.set('cmajax', '1');
+				var buttons = box.querySelectorAll('button[name="cmsave"]');
+				buttons.forEach(function (b) { b.disabled = true; });
+				show([box.getAttribute('data-saving')], false);
+				fetch(form.getAttribute('action'), { method: 'POST', body: data, credentials: 'same-origin' })
+					.then(function (r) { return r.json(); })
+					.then(function (res) {
+						if (res && res.ok && res.draft && btn.value === 'draft') {
+							form.querySelector('[name="draftaccountid"]').value = res.draft.accountid;
+							form.querySelector('[name="draftfolder"]').value = res.draft.folder;
+							form.querySelector('[name="draftuid"]').value = res.draft.uid;
+						}
+						if (res && res.ok && res.template && btn.value === 'template') {
+							addSavedTemplate(res.template);
+						}
+						show(res && res.ok ? res.messages : (res && res.errors && res.errors.length ? res.errors : ['?']), !(res && res.ok));
+					})
+					.catch(function (e) { show([String(e)], true); })
+					.then(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+			});
+		});
+	}
 })();

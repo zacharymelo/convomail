@@ -497,12 +497,24 @@ class ConvomailView
 	 */
 	public static function isJunkFolder($folder, array $folders)
 	{
-		foreach ($folders as $f) {
-			if ($f['name'] === $folder) {
-				return $f['role'] === 'junk';
+		return self::folderRole($folder, $folders) === 'junk';
+	}
+
+	/**
+	 * Role of a folder (inbox, drafts, templates, sent, junk...) in a folder list
+	 *
+	 * @param  string $folder  Folder name
+	 * @param  mixed  $folders Folders of the account (listFolders())
+	 * @return string          Role, '' for none or unknown
+	 */
+	public static function folderRole($folder, $folders)
+	{
+		foreach (is_array($folders) ? $folders : array() as $f) {
+			if (is_array($f) && ($f['name'] ?? null) === $folder) {
+				return is_string($f['role'] ?? null) ? $f['role'] : '';
 			}
 		}
-		return false;
+		return '';
 	}
 
 	/**
@@ -566,18 +578,30 @@ class ConvomailView
 		$h .= '<div class="cm-view-main">';
 
 		// Toolbar
+		$role = self::folderRole($folder, $opts['folders'] ?? array());
 		$h .= '<div class="cm-toolbar cm-view-toolbar">';
 		if ($user->hasRight('convomail', 'message', 'send')) {
 			// Labels in .cm-btn-label: phones show the icons only (css/convomail.css), the title says what each does
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r" title="'.dol_escape_htmltag($langs->trans('ConvomailReply')).' (r)">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReply').'</span></a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a" title="'.dol_escape_htmltag($langs->trans('ConvomailReplyAll')).' (a)">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReplyAll').'</span></a>';
-			$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f" title="'.dol_escape_htmltag($langs->trans('ConvomailForward')).' (f)">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailForward').'</span></a>';
+			if ($role === 'drafts') {
+				// A draft is edited, not answered: sending it removes it from Drafts
+				$h .= '<a class="cm-btn cm-primary" href="'.dol_escape_htmltag($compose.'&mode=draft').'" title="'.dol_escape_htmltag($langs->trans('ConvomailEditDraftHelp')).'">'.img_picto('', 'fa-pen', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailEditDraft').'</span></a>';
+			} elseif ($role === 'templates') {
+				// A template of the Templates folder (as Thunderbird keeps them) opens as a new email, read only here
+				$h .= '<a class="cm-btn cm-primary" href="'.dol_escape_htmltag($compose.'&mode=template').'" title="'.dol_escape_htmltag($langs->trans('ConvomailUseTemplateHelp')).'">'.img_picto('', 'fa-file-alt', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailUseTemplate').'</span></a>';
+			} else {
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=reply').'" data-cm-key="r" title="'.dol_escape_htmltag($langs->trans('ConvomailReply')).' (r)">'.img_picto('', 'fa-reply', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReply').'</span></a>';
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=replyall').'" data-cm-key="a" title="'.dol_escape_htmltag($langs->trans('ConvomailReplyAll')).' (a)">'.img_picto('', 'fa-reply-all', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailReplyAll').'</span></a>';
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=forward').'" data-cm-key="f" title="'.dol_escape_htmltag($langs->trans('ConvomailForward')).' (f)">'.img_picto('', 'fa-share', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailForward').'</span></a>';
+			}
+			if ($role !== 'drafts') {
+				$h .= '<a class="cm-btn" href="'.dol_escape_htmltag($compose.'&mode=asnew').'" title="'.dol_escape_htmltag($langs->trans('ConvomailEditAsNewHelp')).'">'.img_picto('', 'fa-copy', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailEditAsNew').'</span></a>';
+			}
 		}
 		$h .= '<span class="cm-sep"></span>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
 		// Spam, or Not spam in the Junk folder: the ! key presses it
-		$injunk = self::isJunkFolder($folder, $opts['folders'] ?? array());
+		$injunk = ($role === 'junk');
 		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="unread" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkUnread')).' (u)">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailMarkUnread').'</span></button>';

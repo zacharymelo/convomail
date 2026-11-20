@@ -287,7 +287,9 @@ class ConvomailInvoiceFill
 				$note('info', $langs->transnoentitiesnoconv('ConvomailReadVatNotSupplier', $found[0]['nom'], $h['seller_vat']));
 				return;
 			}
-			$note('info', $langs->transnoentitiesnoconv($h['seller_name'] !== '' ? 'ConvomailReadSellerVat' : 'ConvomailReadSellerVatOnly', $seller, $h['seller_vat']));
+			// Without a seller name, only the VAT number (Dolibarr's translations take no %2$s)
+			$sellerargs = ($h['seller_name'] !== '') ? array($seller, $h['seller_vat']) : array($h['seller_vat']);
+			$note('info', $langs->transnoentitiesnoconv($h['seller_name'] !== '' ? 'ConvomailReadSellerVat' : 'ConvomailReadSellerVatOnly', ...$sellerargs));
 			return;
 		}
 		if ($h['seller_vat'] === '') {

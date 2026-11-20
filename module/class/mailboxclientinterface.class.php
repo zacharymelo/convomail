@@ -192,6 +192,15 @@ interface ConvomailMailboxClient
 	public function setFlag($folder, array $uids, $flag, $on);
 
 	/**
+	 * Delete messages for good (not to Trash): a draft replaced by a newer one, or sent.
+	 *
+	 * @param  string $folder Folder
+	 * @param  int[]  $uids   UIDs
+	 * @return bool
+	 */
+	public function deleteMessages($folder, array $uids);
+
+	/**
 	 * Folder with a role (trash, archive, sent...), created if missing and a name is given.
 	 *
 	 * @param  string $role       Role

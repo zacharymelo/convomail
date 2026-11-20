@@ -20,8 +20,16 @@
  * \ingroup convomail
  * \brief   Compose, reply and send through the user's own mailbox; the sent message is logged to the agenda
  *
- * GET parameters (all optional): socid, contactid, projectid, origin + originid, replyto (agenda event id), accountid
+ * GET parameters (all optional): socid, contactid, projectid, origin + originid, replyto (agenda event id), accountid,
+ * and a message of a mailbox (srcaccountid, folder, uid) with mode: reply, replyall, forward, draft (edit a draft),
+ * template (a new email from a template of the mailbox's Templates folder) or asnew (a new email from a copy of the
+ * message)
  */
+
+// Save draft and Save as template post the form in the background: the page's token must stay valid for the next post
+if (isset($_POST['cmajax'])) {
+	define('NOTOKENRENEWAL', 1);
+}
 
 $res = 0;
 if (file_exists("../main.inc.php")) {
@@ -87,6 +95,13 @@ $srcaccountid = GETPOSTINT('srcaccountid') ?: $accountid;
 $srcfolder = GETPOST('folder', 'restricthtml');
 $srcuid    = GETPOSTINT('uid');
 $mode      = GETPOST('mode', 'aZ09');
+// Draft, template, edit as new: the message is copied into the form instead of being answered
+$copymode  = in_array($mode, array('draft', 'template', 'asnew'), true);
+// Save draft, Save as template (buttons of the form), in the background when posted by the script
+if ($action === 'send' && in_array(GETPOST('cmsave', 'aZ09'), array('draft', 'template'), true)) {
+	$action = 'save'.GETPOST('cmsave', 'aZ09');
+}
+$cmajax    = GETPOSTINT('cmajax');
 
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'message', 'send')) {
 	accessforbidden();
@@ -109,7 +124,7 @@ $srcmessage = null;
 $srcclient = null;
 $srcrenderer = null;
 $srcevent = null;
-if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall', 'forward'), true)) {
+if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall', 'forward', 'draft', 'template', 'asnew'), true)) {
 	// Any mailbox the user may read; the reply goes out from it when they may send with it
 	$srcaccount = convomail_get_usable_account($db, $user, $srcaccountid);
 	if (!$srcaccount) {
@@ -123,12 +138,12 @@ if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall
 	$srcattachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $srcaccount->id).'&folder='.urlencode($srcfolder).'&uid='.((int) $srcuid);
 	$srcrenderer = new ConvomailRenderer($srcclient, $srcfolder, $srcuid, $srcmessage, $srcattachmentbase);
 	$srcaccountid = (int) $srcaccount->id;
-	if (GETPOSTINT('accountid') <= 0 || $action !== 'send') {
+	if (GETPOSTINT('accountid') <= 0 || !in_array($action, array('send', 'savedraft', 'savetemplate'), true)) {
 		$accountid = $srcaccount->canSend($user) ? (int) $srcaccount->id : 0;
 	}
 
 	// If the message was logged, the reply inherits that event's third party and project
-	if ($srcmessage['msgid'] !== '') {
+	if ($srcmessage['msgid'] !== '' && !$copymode) {
 		$srcmatcher = new ConvomailMatcher($db);
 		$srclogged = $srcmatcher->loggedEvents(array($srcmessage['msgid']));
 		if (!empty($srclogged[$srcmessage['msgid']])) {
@@ -140,13 +155,34 @@ if ($srcuid > 0 && $srcfolder !== '' && in_array($mode, array('reply', 'replyall
 	}
 }
 
-// Message-ID this message answers (none for a forward)
+// Compose context of a draft saved by Convomail: third party, project, document, the email it answers
+$draftcontext = array();	// numbers: socid, projectid, originid, contactid, replyto, receipt, track
+$draftorigin = '';
+$draftinreplyto = '';
+if ($srcmessage && $mode === 'draft' && is_string($srcmessage['draft_context'] ?? null) && $srcmessage['draft_context'] !== '') {
+	parse_str($srcmessage['draft_context'], $parsed);
+	foreach (array('socid', 'projectid', 'originid', 'contactid', 'replyto', 'receipt', 'track') as $k) {
+		$draftcontext[$k] = is_numeric($parsed[$k] ?? null) ? (int) $parsed[$k] : 0;
+	}
+	// The header is the mail server's: an element type, and a Message-ID of printable characters only
+	$draftorigin = (string) preg_replace('/[^a-z0-9_]/i', '', is_string($parsed['origin'] ?? null) ? $parsed['origin'] : '');
+	$draftinreplyto = trim((string) preg_replace('/[^\x21-\x7E]/', '', is_string($parsed['inreplyto'] ?? null) ? $parsed['inreplyto'] : ''), '<>');
+}
+
+// Message-ID this message answers (none for a forward, a template or a copy; a draft's own)
 $inreplyto = '';
 if ($replyevent) {
 	$inreplyto = $replyevent->email_msgid;
-} elseif ($srcmessage && $mode !== 'forward') {
+} elseif ($srcmessage && $mode === 'draft') {
+	$inreplyto = $draftinreplyto;
+} elseif ($srcmessage && !$copymode && $mode !== 'forward') {
 	$inreplyto = $srcmessage['msgid'];
 }
+
+// The draft this form replaces when saved again, and removes once sent (a draft opened, or saved from this form)
+$draftaccountid = GETPOSTISSET('draftuid') ? GETPOSTINT('draftaccountid') : ($mode === 'draft' ? $srcaccountid : 0);
+$draftfolder = GETPOSTISSET('draftuid') ? GETPOST('draftfolder', 'restricthtml') : ($mode === 'draft' ? $srcfolder : '');
+$draftuid = GETPOSTISSET('draftuid') ? GETPOSTINT('draftuid') : ($mode === 'draft' ? $srcuid : 0);
 
 /**
  * Where to go after sending or cancelling
@@ -191,9 +227,12 @@ $subject = GETPOST('subject', 'alphanohtml');
 $editorishtml = isModEnabled('fckeditor');
 $message = $editorishtml ? GETPOST('message', 'restricthtml') : GETPOST('message', 'none');
 
-// Receipts: defaults from setup when the form is first shown, the user's choice once posted
+// Receipts: defaults from setup (or the draft) when the form is first shown, the user's choice once posted
 $trackingavailable = ConvomailTracker::isEnabled();
-if ($action == '') {
+if ($action == '' && $draftcontext) {
+	$readreceipt = $draftcontext['receipt'] ? 1 : 0;
+	$trackopens = ($trackingavailable && $draftcontext['track']) ? 1 : 0;
+} elseif ($action == '') {
 	$readreceipt = getDolGlobalInt('CONVOMAIL_READ_RECEIPT_DEFAULT') ? 1 : 0;
 	$trackopens = $trackingavailable ? 1 : 0;
 } else {
@@ -203,10 +242,10 @@ if ($action == '') {
 
 // The line introducing a quoted message, plain text (escaped where it goes into HTML)
 $intro = '';
-if ($srcmessage) {
+if ($srcmessage && !$copymode) {
 	$fromtext = convomail_format_addresses($srcmessage['from'], true);
 	$intro = ($mode === 'forward')
-		? $langs->transnoentitiesnoconv('ConvomailForwardedHeader', $fromtext, dol_print_date($srcmessage['date'], 'dayhour'), $srcmessage['subject'])
+		? $langs->transnoentitiesnoconv('ConvomailForwardedHeader', $fromtext, dol_print_date($srcmessage['date'], 'dayhour'), is_string($srcmessage['subject']) ? $srcmessage['subject'] : '')
 		: $langs->transnoentitiesnoconv('ConvomailOnDateWrote', dol_print_date($srcmessage['date'], 'dayhour'), $fromtext);
 } elseif ($replyevent) {
 	$intro = $langs->transnoentitiesnoconv('ConvomailOnDateWrote', dol_print_date($replyevent->datep, 'dayhour'), $replyevent->email_from);
@@ -214,7 +253,34 @@ if ($srcmessage) {
 $quotedhtml = '';
 
 if ($action == '') {
-	if ($srcmessage) {
+	if ($srcmessage && $copymode) {
+		// Draft, template or edit as new: the message as it is, its images kept in the text and its attachments ticked
+		$sendto = convomail_message_addresses($srcmessage, 'to');
+		$sendtocc = convomail_message_addresses($srcmessage, 'cc');
+		$sendtobcc = convomail_message_addresses($srcmessage, 'bcc');
+		$subject = convomail_message_text($srcmessage, 'subject');
+		$copiedhtml = $srcrenderer ? $srcrenderer->cleanBody(false, true, $editorishtml) : '';
+		if ($draftcontext) {
+			$socid = $socid ?: $draftcontext['socid'];
+			$projectid = $projectid ?: $draftcontext['projectid'];
+			$contactid = $contactid ?: $draftcontext['contactid'];
+			$replyto = $replyto ?: $draftcontext['replyto'];
+			if ($origin === '' && $draftorigin !== '' && $draftcontext['originid'] > 0) {
+				$origin = $draftorigin;
+				$originid = $draftcontext['originid'];
+			}
+		}
+		if ($mode === 'template' && strpos($subject.$copiedhtml, '__') !== false) {
+			// Dolibarr substitutions (__THIRDPARTY_NAME__, __PROJECT_REF__...) of the third party, contact or project
+			// the email is written from; keys with no value are left as they are
+			$subobject = convomail_substitution_object($db, $user, $projectid, $contactid, $socid);
+			$substitutions = getCommonSubstitutionArray($langs, 0, null, $subobject);
+			complete_substitutions_array($substitutions, $langs, $subobject);
+			$subject = (string) make_substitutions($subject, $substitutions, $langs);
+			$copiedhtml = ConvomailRenderer::purify((string) make_substitutions($copiedhtml, $substitutions, $langs), true);	// values may hold markup
+		}
+		$message = $editorishtml ? $copiedhtml : dol_string_nohtmltag($copiedhtml, 2);
+	} elseif ($srcmessage) {
 		$myemails = array();
 		foreach ($accounts as $acc) {
 			$myemails[] = strtolower($acc->email);
@@ -325,7 +391,9 @@ if ($action == '') {
 
 	// Signature below the typing area and above any quote, inserted once when the form opens. A new email
 	// prefilled with text (message=..., e.g. from a mailto: link) keeps that text above the signature.
-	if (getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature)) {
+	if ($srcmessage && $copymode) {
+		// A draft, a template or a copy already has its signature
+	} elseif (getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature)) {
 		$prefilled = (!$srcmessage && !$replyevent && $message !== '');
 		if ($editorishtml) {
 			$signature = '<div class="convomail-signature">-- <br>'.$user->signature.'</div>';
@@ -364,8 +432,41 @@ if ($cancel) {
 	exit;
 }
 
-if ($action == 'send') {
+// Save as template: the subject and text become one of the user's own Dolibarr email templates (Setup > Emails >
+// Email templates), offered in "Choose template" from then on. Recipients and files are not part of a template.
+if ($action === 'savetemplate') {
+	$tpltext = convomail_without_signature(is_string($message) ? $message : '');
+	$tplbody = $editorishtml ? $tpltext : dol_nl2br(htmlspecialchars($tpltext, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+	$saved = convomail_save_email_template($db, $user, dol_string_nohtmltag(is_string($subject) ? $subject : '', 1), $tplbody);
+	if ($saved['id'] > 0) {
+		setEventMessages($langs->trans('ConvomailTemplateSaved', $saved['label']), null, 'mesgs');
+		$uploads = $_FILES['attachments']['name'] ?? array();
+		if (array_filter(is_array($uploads) ? $uploads : array()) || GETPOST('fwdparts', 'array') || GETPOST('dbfile', 'array')) {
+			setEventMessages($langs->trans('ConvomailTemplateNoFiles'), null, 'warnings');
+		}
+	} else {
+		setEventMessages($langs->trans('ConvomailTemplateNotSaved', $saved['error']), null, 'errors');
+	}
+	if ($cmajax) {
+		$events = convomail_take_event_messages();
+		header('Content-Type: application/json; charset=UTF-8');
+		print json_encode(array(
+			'ok' => ($saved['id'] > 0),
+			'messages' => array_merge($events['mesgs'], $events['warnings']),
+			'errors' => $events['errors'],
+			'template' => array('id' => $saved['id'], 'label' => $saved['label'], 'new' => $saved['new']),
+		));
+		$db->close();
+		exit;
+	}
+	// Without the script the page comes back with what was typed (files have to be added again)
+}
+
+if (in_array($action, array('send', 'savedraft'), true)) {
 	$error = 0;
+	$sending = ($action === 'send');	// a draft is saved as it is: no recipient or subject needed
+	$linkedcount = 0;	// files picked from Dolibarr sent as share links
+	$subject = is_string($subject) ? $subject : '';
 
 	$account = new ConvomailAccount($db);
 	if ($accountid <= 0 || $account->fetch($accountid) <= 0 || !$account->canSend($user) || (int) $account->status !== ConvomailAccount::STATUS_ENABLED) {
@@ -393,11 +494,11 @@ if ($action == 'send') {
 
 	$recipients = array_merge(ConvomailMatcher::parseAddresses($mailto), ConvomailMatcher::parseAddresses($mailcc), ConvomailMatcher::parseAddresses($mailbcc));
 	// At least one recipient in To, Cc or Bcc
-	if (empty($recipients)) {
+	if (empty($recipients) && $sending) {
 		setEventMessages($langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('MailTo')), null, 'errors');
 		$error++;
 	}
-	if (trim($subject) === '') {
+	if (trim($subject) === '' && $sending) {
 		setEventMessages($langs->trans('ErrorFieldRequired', $langs->transnoentitiesnoconv('MailTopic')), null, 'errors');
 		$error++;
 	}
@@ -468,12 +569,13 @@ if ($action == 'send') {
 	}
 	if (!$error && $dbkeys) {
 		$langs->load('docbrowser@docbrowser');
+		/** @var array<int,array<string,mixed>> $picked */
 		$picked = array();
 		foreach (array_unique($dbkeys) as $k) {
 			$f = $docbrowser->resolve($k, $user);
 			$copy = $f ? $docbrowser->copyForMail($f, $upload_dir_tmp) : null;
 			if (!$copy) {
-				setEventMessages($langs->trans($f ? 'DocBrowserCopyFailed' : 'DocBrowserFileRefused', $f ? $f['name'] : ''), null, 'errors');
+				setEventMessages($langs->trans($f ? 'DocBrowserCopyFailed' : 'DocBrowserFileRefused', ($f && is_string($f['name'] ?? null)) ? $f['name'] : ''), null, 'errors');
 				$error++;
 				break;
 			}
@@ -485,7 +587,9 @@ if ($action == 'send') {
 			foreach ($files as $file) {
 				$otherbytes += (int) dol_filesize($file['path']);
 			}
-			$split = DocBrowserService::split($picked, $otherbytes);
+			// A draft keeps the files themselves: links are made when it is sent
+			/** @var array{attach:array<int,array<string,mixed>>,link:array<int,array<string,mixed>>} $split */
+			$split = $sending ? DocBrowserService::split($picked, $otherbytes) : array('attach' => $picked, 'link' => array());
 			foreach ($split['attach'] as $copy) {
 				$files[] = array('path' => $copy['path'], 'mime' => $copy['mime'], 'name' => $copy['name']);
 			}
@@ -502,7 +606,54 @@ if ($action == 'send') {
 		}
 	}
 
-	if (!$error) {
+	if (!$error && !$sending) {
+		// Into the account's Drafts folder, replacing the draft this form was opened from or last saved as; the form's
+		// context goes with it, so it reopens on the same third party and project
+		$context = array_filter(array(
+			'socid' => $socid, 'projectid' => $projectid, 'origin' => $origin, 'originid' => $originid, 'contactid' => $contactid,
+			'replyto' => $replyto, 'inreplyto' => $inreplyto, 'receipt' => $readreceipt, 'track' => $trackopens,
+		));
+		$transport = new ConvomailTransport($db);
+		$raw = $transport->buildRaw($account, array(
+			'to' => $mailto, 'cc' => $mailcc, 'bcc' => $mailbcc, 'subject' => $subject, 'body' => $body, 'files' => $files,
+			'in_reply_to' => $inreplyto, 'upload_dir_tmp' => $upload_dir_tmp, 'read_receipt' => $readreceipt,
+			'context' => $context,
+		));
+		$replace = convomail_draft_target($db, $user, $draftaccountid, $draftfolder, $draftuid);
+		$stored = ($raw !== '') ? $transport->store($account, $raw, $replace) : null;
+		if (is_dir($upload_dir_tmp)) {
+			dol_delete_dir_recursive($upload_dir_tmp);
+		}
+		if ($stored) {
+			setEventMessages($langs->trans('ConvomailDraftSaved', $stored['folder'], $account->email), null, 'mesgs');
+			$draftaccountid = (int) $account->id;
+			$draftfolder = $stored['folder'];
+			$draftuid = $stored['uid'];
+		} else {
+			setEventMessages($langs->trans('ConvomailDraftNotSaved', $transport->error), $transport->errors, 'errors');
+		}
+		if ($cmajax) {
+			// The form stays as it is (with its files): the script shows the messages and keeps the new draft's place
+			$events = convomail_take_event_messages();
+			header('Content-Type: application/json; charset=UTF-8');
+			print json_encode(array(
+				'ok' => (bool) $stored,
+				'messages' => array_merge($events['mesgs'], $events['warnings']),
+				'errors' => $events['errors'],
+				'draft' => array('accountid' => $draftaccountid, 'folder' => $draftfolder, 'uid' => $draftuid),
+			));
+			$db->close();
+			exit;
+		}
+		if ($stored && $stored['uid'] > 0) {
+			// Without the script: open the saved draft to go on with it
+			$back = array('mode' => 'draft', 'accountid' => (int) $account->id, 'srcaccountid' => (int) $account->id,
+				'folder' => $stored['folder'], 'uid' => $stored['uid']);
+			header('Location: '.dol_buildpath('/convomail/compose.php', 1).'?'.http_build_query(array_filter($back)));
+			exit;
+		}
+		$error++;
+	} elseif (!$error) {
 		$matcher = new ConvomailMatcher($db);
 		$match = $matcher->matchRecipients($recipients);
 		if (empty($socid) && $match['socid'] > 0) {
@@ -566,6 +717,11 @@ if ($action == 'send') {
 			if (is_dir($upload_dir_tmp)) {
 				dol_delete_dir_recursive($upload_dir_tmp);
 			}
+			// Sent: the draft it came from is no longer needed
+			$sentdraft = convomail_draft_target($db, $user, $draftaccountid, $draftfolder, $draftuid);
+			if ($sentdraft) {
+				ConvomailTransport::deleteDraft($sentdraft[0], $sentdraft[1], $sentdraft[2]);
+			}
 
 			if ($eventid < 0) {
 				// The mail left; only the logging failed. Say so plainly.
@@ -588,6 +744,14 @@ if ($action == 'send') {
 
 	if (is_dir($upload_dir_tmp)) {
 		dol_delete_dir_recursive($upload_dir_tmp);
+	}
+	if ($cmajax) {
+		// A draft that could not be saved (no account, unknown user...): the messages go back to the script
+		$events = convomail_take_event_messages();
+		header('Content-Type: application/json; charset=UTF-8');
+		print json_encode(array('ok' => false, 'messages' => array(), 'errors' => $events['errors']));
+		$db->close();
+		exit;
 	}
 	$action = 'retry';
 }
@@ -628,6 +792,10 @@ print '<input type="hidden" name="origin" value="'.dol_escape_htmltag($origin).'
 print '<input type="hidden" name="originid" value="'.((int) $originid).'">';
 print '<input type="hidden" name="contactid" value="'.((int) $contactid).'">';
 print '<input type="hidden" name="replyto" value="'.((int) $replyto).'">';
+// The draft to replace when saved again and to remove once sent (updated by the script after each Save draft)
+print '<input type="hidden" name="draftaccountid" value="'.((int) $draftaccountid).'">';
+print '<input type="hidden" name="draftfolder" value="'.dol_escape_htmltag($draftfolder).'">';
+print '<input type="hidden" name="draftuid" value="'.((int) $draftuid).'">';
 if ($srcmessage) {
 	print '<input type="hidden" name="srcaccountid" value="'.((int) $srcaccountid).'">';
 	print '<input type="hidden" name="folder" value="'.dol_escape_htmltag($srcfolder).'">';
@@ -685,15 +853,24 @@ if ($origin && $originid > 0) {
 	}
 }
 
-$templates = convomail_email_templates($db, $user);
-if (!empty($templates) && $editorishtml) {
-	print '<tr><td>'.$langs->trans('EMailTemplates').'</td><td>';
-	print '<select id="cm-template" class="flat minwidth300" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/template.php', 1)).'"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailChooseTemplate')).'</option>';
+// Templates: Dolibarr's email templates (filled in the text), the user's own included, and those of the From
+// mailbox's Templates folder, added by the script when it has some (opened as a new email, with its attachments)
+$templates = $editorishtml ? convomail_email_templates($db, $user) : array();
+print '<tr id="cm-template-row"'.(empty($templates) ? ' class="hidden"' : '').'><td>'.$langs->trans('EMailTemplates').'</td><td>';
+print '<select id="cm-template" class="flat minwidth300" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/template.php', 1)).'"';
+print ' data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1)).'"';
+print ' data-dolibarr-label="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDolibarrTemplates')).'"';
+print ' data-mailbox-label="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailMailboxTemplates')).'"';
+print ' data-confirm="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailTemplateReplaces')).'">';
+print '<option value="">'.dol_escape_htmltag($langs->trans('ConvomailChooseTemplate')).'</option>';
+if (!empty($templates)) {
+	print '<optgroup label="'.dol_escape_htmltag($langs->trans('ConvomailDolibarrTemplates')).'" data-dolibarr="1">';
 	foreach ($templates as $tid => $tlabel) {
 		print '<option value="'.((int) $tid).'">'.dol_escape_htmltag($tlabel).'</option>';
 	}
-	print '</select></td></tr>';
+	print '</optgroup>';
 }
+print '</select></td></tr>';
 
 print '<tr><td class="fieldrequired">'.$langs->trans('MailTopic').'</td><td><input type="text" name="subject" class="quatrevingtpercent" value="'.dol_escape_htmltag($subject).'"></td></tr>';
 
@@ -703,9 +880,12 @@ print '<tr><td>'.$langs->trans('MailFile').'</td><td>';
 // the others (too large, SVG) so they are not lost; a reply offers them unticked
 if ($srcmessage) {
 	$keep = ($action == '') ? null : GETPOST('fwdparts', 'array');
+	// A draft, a template or a copy is sent as it is: like a forward, its attachments are ticked
+	$likeforward = ($mode === 'forward' || $copymode);
+	$groupsuffix = $copymode ? 'Copy' : ($mode === 'forward' ? 'Forward' : 'Reply');
 	$groups = array(
-		array('ConvomailOriginalAttachments'.($mode === 'forward' ? 'Forward' : 'Reply'), $srcrenderer->attachments(), false),
-		array('ConvomailOriginalImages'.($mode === 'forward' ? 'Forward' : 'Reply'), $srcrenderer->inlineImages(), true),
+		array('ConvomailOriginalAttachments'.$groupsuffix, $srcrenderer->attachments(), false),
+		array('ConvomailOriginalImages'.$groupsuffix, $srcrenderer->inlineImages(), true),
 	);
 	foreach ($groups as $group) {
 		if (empty($group[1])) {
@@ -715,11 +895,11 @@ if ($srcmessage) {
 		foreach ($group[1] as $att) {
 			$name = convomail_part_filename($att);
 			$intext = $group[2] && in_array(strtolower((string) $att['cid']), $srcrenderer->embeddedCids, true);
-			$default = ($mode === 'forward') && !$intext;
+			$default = $likeforward && !$intext;
 			$checked = ($keep === null) ? $default : in_array((string) $att['id'], $keep, true);
 			print '<label class="marginrightonly"><input type="checkbox" name="fwdparts[]" value="'.dol_escape_htmltag($att['id']).'"'.($checked ? ' checked' : '').'> '.img_mime($name, '', 'pictofixedwidth').dol_escape_htmltag($name);
 			print (!empty($att['size']) ? ' <span class="opacitymedium">'.dol_print_size((int) $att['size'], 1, 1).'</span>' : '');
-			if ($group[2] && $mode === 'forward') {
+			if ($group[2] && $likeforward) {
 				print ' <span class="opacitymedium">('.$langs->trans($intext ? 'ConvomailImageKeptInText' : 'ConvomailImageNotInText').')</span>';
 			}
 			print '</label><br>';
@@ -767,13 +947,13 @@ if (isModEnabled('ai') && $editorishtml) {
 if (isModEnabled('ai') && $editorishtml && function_exists('getListForAIRephraseStyle') && function_exists('getListForAISummarize')) {
 	require_once DOL_DOCUMENT_ROOT.'/core/class/html.formadmin.class.php';
 	$langs->load('other');
-	if ($quotedhtml === '' && ($srcmessage || $replyevent)) {
+	if ($quotedhtml === '' && (($srcmessage && !$copymode) || $replyevent)) {
 		$quotedhtml = $srcmessage ? $srcrenderer->cleanBody(false, true) : ConvomailRenderer::purify((string) $replyevent->note_private);
 	}
 	$aiquote = dol_trunc(trim(dol_string_nohtmltag($quotedhtml, 2)), 8000, 'right', 'UTF-8', 1);
 	$aiattrs = array(
 		'url' => DOL_URL_ROOT.'/ai/ajax/generate_content.php?token='.currentToken(),
-		'mode' => ($srcmessage || $replyevent) ? ($mode === 'forward' ? 'forward' : 'reply') : 'new',
+		'mode' => (($srcmessage && !$copymode) || $replyevent) ? ($mode === 'forward' ? 'forward' : 'reply') : 'new',
 		'intro' => $intro,
 		'quote' => $aiquote,
 		'wait' => $langs->transnoentitiesnoconv('ConvomailAiWorking'),
@@ -793,11 +973,11 @@ if (isModEnabled('ai') && $editorishtml && function_exists('getListForAIRephrase
 	print '<div class="cm-ai-change"><span class="opacitymedium">'.$langs->trans('ConvomailAiChangeText').'</span> ';
 	$styles = array();
 	foreach (getListForAIRephraseStyle() as $k => $label) {
-		$styles[$k] = $langs->trans($label);
+		$styles[$k] = is_string($label) ? $langs->trans($label) : '';
 	}
 	$lengths = array();
 	foreach (getListForAISummarize() as $k => $label) {
-		$lengths[$k] = $langs->trans($label);
+		$lengths[$k] = is_string($label) ? $langs->trans($label) : '';
 	}
 	print $form->selectarray('cm_ai_rephrase', $styles, '', $langs->trans('RephraserByAI').'...', 0, 0, '', 0, 0, 0, '', 'minwidth200 cm-ai-select', 1);
 	print ' '.$form->selectarray('cm_ai_summarize', $lengths, '', $langs->trans('SummarizeByAI').'...', 0, 0, '', 0, 0, 0, '', 'minwidth200 cm-ai-select', 1);
@@ -818,7 +998,16 @@ print '</td></tr>';
 
 print '</table>';
 
-print $form->buttonsSaveCancel('Send');
+// Send, Save draft (Drafts folder of the From account), Save as template (the user's own Dolibarr email template),
+// Cancel. The two saves post in the background when the script runs (js/convomail-compose.js), so the form and its
+// files stay
+print '<div class="center cm-compose-buttons" data-saving="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailSaving')).'">';
+print $form->buttonsSaveCancel('Send', '', array(), true);
+print '<button type="submit" class="button marginleftonly marginrightonly" name="cmsave" value="draft" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveDraftHelp')).'">'.$langs->trans('ConvomailSaveDraft').'</button>';
+print '<button type="submit" class="button marginleftonly marginrightonly" name="cmsave" value="template" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveTemplateHelp')).'">'.$langs->trans('ConvomailSaveTemplate').'</button>';
+print $form->buttonsSaveCancel('', 'Cancel', array(), true);
+print '<div id="cm-save-status" class="cm-save-status" role="status" aria-live="polite"></div>';
+print '</div>';
 print '</form>';
 
 llxFooter();
