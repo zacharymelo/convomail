@@ -53,11 +53,6 @@ if (!$res) {
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force Conf $conf';
-'@phan-var-force DoliDB $db';
-'@phan-var-force HookManager $hookmanager';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/doleditor.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';

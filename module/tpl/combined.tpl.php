@@ -40,11 +40,7 @@ if (empty($conf) || !is_object($conf)) {
  * @var User $user
  * @var int $limit
  */
-'@phan-var-force Conf $conf';
-'@phan-var-force DoliDB $db';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
-'@phan-var-force int $limit';
+
 
 $folder      = ConvomailCombined::FOLDER;
 $before      = ConvomailCombined::parseCursor(GETPOST('before', 'alphanohtml'));
