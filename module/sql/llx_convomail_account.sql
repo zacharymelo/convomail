@@ -34,6 +34,7 @@ CREATE TABLE llx_convomail_account(
     server_saves_sent SMALLINT    NOT NULL DEFAULT 0,
     is_default      SMALLINT      NOT NULL DEFAULT 0,
     status          SMALLINT      NOT NULL DEFAULT 1,
+    date_delete     DATETIME,                                  -- set when its user leaves: deleted on this date (scheduled job)
     date_creation   DATETIME      NOT NULL,
     tms             TIMESTAMP,
     fk_user_creat   INTEGER,

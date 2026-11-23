@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -24,6 +33,7 @@
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 dol_include_once('/convomail/class/convomailrenderer.class.php');
 dol_include_once('/convomail/class/convomailtargets.class.php');
+dol_include_once('/convomail/class/convomailmessage.class.php');
 
 /**
  * Class ConvomailFiler
@@ -44,6 +54,9 @@ class ConvomailFiler
 
 	/** @var string Temporary folder of this run */
 	private $tmpdir = '';
+
+	/** @var array{accountid:int,folder:string,uid:int,msgid:string} The message the staged files come from, for the trigger */
+	private $source = array('accountid' => 0, 'folder' => '', 'uid' => 0, 'msgid' => '');
 
 	/**
 	 * @param DoliDB $db Database handler
@@ -77,6 +90,8 @@ class ConvomailFiler
 	public function stage($client, ConvomailAccount $account, $folder, $uid, array $message, array $partids)
 	{
 		global $conf, $langs, $user;
+
+		$this->source = array('accountid' => (int) $account->id, 'folder' => (string) $folder, 'uid' => (int) $uid, 'msgid' => is_string($message['msgid'] ?? null) ? $message['msgid'] : '');
 
 		$attachmentbase = dol_buildpath('/convomail/attachment.php', 2).'?accountid='.((int) $account->id).'&folder='.urlencode($folder).'&uid='.((int) $uid);
 		$renderer = new ConvomailRenderer($client, $folder, $uid, $message, $attachmentbase);
@@ -209,20 +224,50 @@ class ConvomailFiler
 	}
 
 	/**
-	 * Move the staged files into a record's documents, indexed against it
+	 * Move the staged files into a record's documents, indexed against it. Then the trigger CONVOMAIL_MESSAGE_FILED
+	 * runs (see notifyFiled()).
 	 *
 	 * @param  string       $type   ConvomailTargets type
 	 * @param  CommonObject $object Record (already checked with ConvomailTargets::fetchWritable())
+	 * @param  ?User        $user   User doing it (the logged-in user when null), for the trigger
 	 * @return string[]             Names as stored
 	 */
-	public function fileOnRecord($type, $object)
+	public function fileOnRecord($type, $object, $user = null)
 	{
 		$dir = ConvomailTargets::uploadDir($type, $object);
 		if ($dir === '') {
 			$this->errors[] = 'No documents folder for '.$type.' '.$object->id;
 			return array();
 		}
-		return $this->moveAll($dir, array('src_object_type' => $object->table_element, 'src_object_id' => (int) $object->id));
+		$stored = $this->moveAll($dir, array('src_object_type' => $object->table_element, 'src_object_id' => (int) $object->id));
+		$this->notifyFiled($object->element, (int) $object->id, $stored, $user);
+		return $stored;
+	}
+
+	/**
+	 * Tell other modules that files of an email were stored on a record or an ECM folder: trigger
+	 * CONVOMAIL_MESSAGE_FILED on the email (ConvomailMessage::callEmailTrigger()), with $object->context['convomail'] =
+	 * accountid, folder, uid, msgid (of the email), element and elementid (where the files went: a record's element,
+	 * or 'ecm_directories') and files (names as stored). Core already indexes each file (llx_ecm_files); this one is
+	 * per email. The files are stored by then, so an error from a trigger is reported, not undone.
+	 *
+	 * @param  string   $element   Element of the record, or 'ecm_directories'
+	 * @param  int      $elementid Record or ECM folder id
+	 * @param  string[] $stored    Names as stored
+	 * @param  ?User    $user      User doing it (the logged-in user when null)
+	 * @return void
+	 */
+	private function notifyFiled($element, $elementid, array $stored, $user)
+	{
+		if (empty($stored)) {
+			return;
+		}
+		$email = new ConvomailMessage($this->db);
+		$context = $this->source + array('element' => (string) $element, 'elementid' => (int) $elementid, 'files' => $stored);
+		$known = array('accountid' => $this->source['accountid'], 'folder' => $this->source['folder'], 'uid' => $this->source['uid'], 'msgid' => $this->source['msgid']);
+		if ($email->callEmailTrigger('CONVOMAIL_MESSAGE_FILED', $known, $context, $user) < 0) {
+			$this->errors = array_merge($this->errors, $email->errors);
+		}
 	}
 
 	/**
@@ -252,6 +297,7 @@ class ConvomailFiler
 		if (!empty($stored)) {
 			$section->refreshcachenboffile();	// a count, not +1: the cache can be -1 (never counted)
 		}
+		$this->notifyFiled('ecm_directories', (int) $section->id, $stored, $user);
 		return $stored;
 	}
 

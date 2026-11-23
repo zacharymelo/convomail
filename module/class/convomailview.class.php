@@ -893,18 +893,23 @@ class ConvomailView
 			}
 		}
 		$h .= '<span class="cm-sep"></span>';
-		if (!$notamail) {
-			$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
+		// Organising needs that level of access on a shared mailbox (ConvomailAccount::canHandle())
+		/** @var User $user */
+		$canhandle = $account->canHandle($user);
+		if ($canhandle) {
+			if (!$notamail) {
+				$h .= '<button type="button" class="cm-btn" data-cm-action="archive" title="'.dol_escape_htmltag($langs->trans('ConvomailArchive')).' (e)">'.img_picto('', 'fa-archive', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailArchive').'</span></button>';
+			}
+			$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
+			if (!$notamail) {
+				// Spam, or Not spam in the Junk folder: the ! key presses it
+				$injunk = ($role === 'junk');
+				$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
+			}
+			$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
 		}
-		$h .= '<button type="button" class="cm-btn" data-cm-action="delete" title="'.dol_escape_htmltag($langs->trans('Delete')).' (#)">'.img_picto('', 'fa-trash', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('Delete').'</span></button>';
-		if (!$notamail) {
-			// Spam, or Not spam in the Junk folder: the ! key presses it
-			$injunk = ($role === 'junk');
-			$h .= '<button type="button" class="cm-btn" data-cm-action="'.($injunk ? 'notjunk' : 'junk').'" data-cm-key="!" title="'.dol_escape_htmltag($langs->trans($injunk ? 'ConvomailNotSpamHelp' : 'ConvomailSpamHelp')).' (!)">'.img_picto('', $injunk ? 'fa-check-circle' : 'fa-ban', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($injunk ? 'ConvomailNotSpam' : 'ConvomailSpam').'</span></button>';
-		}
-		$h .= '<button type="button" class="cm-btn" data-cm-action="'.($message['flagged'] ? 'unflag' : 'flag').'" title="'.dol_escape_htmltag($langs->trans('ConvomailFlag')).' (s)">'.img_picto('', 'fa-star', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans($message['flagged'] ? 'ConvomailUnflag' : 'ConvomailFlag').'</span></button>';
 		$h .= '<button type="button" class="cm-btn" data-cm-action="unread" title="'.dol_escape_htmltag($langs->trans('ConvomailMarkUnread')).' (u)">'.img_picto('', 'fa-envelope', 'class="pictofixedwidth"').'<span class="cm-btn-label">'.$langs->trans('ConvomailMarkUnread').'</span></button>';
-		if (!empty($opts['folders'])) {
+		if ($canhandle && !empty($opts['folders'])) {
 			$h .= '<select class="cm-move flat" data-cm-action="move"><option value="">'.dol_escape_htmltag($langs->trans('ConvomailMoveTo')).'</option>';
 			foreach ($opts['folders'] as $f) {
 				if ($f['name'] !== $folder) {

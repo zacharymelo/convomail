@@ -45,7 +45,13 @@ class ConvomailAccount extends CommonObject
 
 	const AUTH_PASSWORD = 'password';
 
-	/** @var array<string,array{read:bool,send:bool}> Grants read in this request, see accessOf() */
+	/** Access levels on a shared mailbox, each including the ones below it */
+	const LEVEL_READ = 1;		// open, read, file into Dolibarr
+	const LEVEL_HANDLE = 2;		// also organise: move, archive, delete, spam, flags
+	const LEVEL_SEND = 3;		// also send as the shared address
+	const LEVEL_MANAGE = 4;		// also manage: folders, sign-in, automatic filing
+
+	/** @var array<string,int> Levels read in this request (account-user), see level() */
 	private static $accessCache = array();
 	const AUTH_OAUTH = 'oauth';
 
@@ -77,6 +83,7 @@ class ConvomailAccount extends CommonObject
 		'sent_folder'     => array('type' => 'varchar(255)', 'label' => 'ConvomailSentFolder', 'enabled' => 1, 'visible' => 1, 'notnull' => 0, 'position' => 70),
 		'server_saves_sent' => array('type' => 'smallint', 'label' => 'ConvomailServerSavesSent', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 75),
 		'is_default'      => array('type' => 'smallint', 'label' => 'Default', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'position' => 80),
+		'date_delete'     => array('type' => 'datetime', 'label' => 'ConvomailDateDelete', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 85),
 		'status'          => array('type' => 'smallint', 'label' => 'Status', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '1', 'position' => 1000),
 		'date_creation'   => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => 0, 'notnull' => 1, 'position' => 500),
 		'tms'             => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'visible' => 0, 'notnull' => 0, 'position' => 501),
@@ -120,6 +127,8 @@ class ConvomailAccount extends CommonObject
 	public $server_saves_sent;
 	/** @var int 1 for the user's default account */
 	public $is_default;
+	/** @var int|string|null When its user left: the date the account is deleted on (cronDeleteLeaving()) */
+	public $date_delete;
 	public $status;
 	public $date_creation;
 	public $fk_user_creat;
@@ -449,15 +458,15 @@ class ConvomailAccount extends CommonObject
 			return -1;
 		}
 		$sql = "SELECT a.rowid FROM ".MAIN_DB_PREFIX.$this->table_element." as a";
-		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."convomail_account_access as g ON g.fk_account = a.rowid AND g.fk_user = ".((int) $u->id);
 		$sql .= " WHERE a.fk_user IS NULL";
 		$sql .= " AND a.entity IN (".getEntity($this->element).")";
 		if ($onlyenabled) {
 			$sql .= " AND a.status = ".self::STATUS_ENABLED;
 		}
-		if ($sendable) {
-			$sql .= " AND g.can_send = 1";
-		}
+		// Granted to the user or to one of their groups, at a level that lets them send when asked
+		$sql .= " AND EXISTS (SELECT g.rowid FROM ".MAIN_DB_PREFIX."convomail_account_access as g WHERE g.fk_account = a.rowid";
+		$sql .= " AND g.level >= ".($sendable ? self::LEVEL_SEND : self::LEVEL_READ);
+		$sql .= " AND (".self::granteeCondition('g', (int) $u->id)."))";
 		$sql .= " ORDER BY a.label, a.email";
 		$resql = $this->db->query($sql);
 		if (!$resql) {
@@ -488,25 +497,61 @@ class ConvomailAccount extends CommonObject
 	}
 
 	/**
-	 * The grant of a user on this shared mailbox
+	 * Forget the levels read in this request (after a change of grants or of group members)
+	 *
+	 * @return void
+	 */
+	public static function clearAccessCache()
+	{
+		self::$accessCache = array();
+	}
+
+	/**
+	 * SQL condition: the grant (alias) is the user's own or one of their groups'
+	 *
+	 * @param  string $alias  Alias of llx_convomail_account_access
+	 * @param  int    $userid User
+	 * @return string
+	 */
+	private static function granteeCondition($alias, $userid)
+	{
+		return $alias.".fk_user = ".((int) $userid)." OR ".$alias.".fk_usergroup IN (SELECT ugu.fk_usergroup FROM ".MAIN_DB_PREFIX."usergroup_user as ugu WHERE ugu.fk_user = ".((int) $userid).")";
+	}
+
+	/**
+	 * Level of a user on this shared mailbox: the highest of their own grant and their groups' grants
 	 *
 	 * @param  User $u User
-	 * @return array{read:bool,send:bool}
+	 * @return int     0 (none) to LEVEL_MANAGE
+	 */
+	public function level(User $u)
+	{
+		$key = ((int) $this->id).'-'.((int) $u->id);
+		if (!isset(self::$accessCache[$key])) {
+			self::$accessCache[$key] = 0;
+			$sql = "SELECT MAX(g.level) as level FROM ".MAIN_DB_PREFIX."convomail_account_access as g";
+			$sql .= " WHERE g.fk_account = ".((int) $this->id)." AND (".self::granteeCondition('g', (int) $u->id).")";
+			$resql = $this->db->query($sql);
+			if ($resql && $resql !== true) {
+				/** @var ?object{level:?string} $obj */
+				$obj = $this->db->fetch_object($resql);
+				self::$accessCache[$key] = $obj ? (int) $obj->level : 0;
+			}
+		}
+		return self::$accessCache[$key];
+	}
+
+	/**
+	 * The grant of a user on this shared mailbox (their own or a group's), as what it allows
+	 *
+	 * @param  User $u User
+	 * @return array{level:int,read:bool,handle:bool,send:bool,manage:bool}
 	 */
 	public function accessOf(User $u)
 	{
-		$cache = &self::$accessCache;
-		$key = ((int) $this->id).'-'.((int) $u->id);
-		if (!isset($cache[$key])) {
-			$cache[$key] = array('read' => false, 'send' => false);
-			$sql = "SELECT can_send FROM ".MAIN_DB_PREFIX."convomail_account_access";
-			$sql .= " WHERE fk_account = ".((int) $this->id)." AND fk_user = ".((int) $u->id);
-			$resql = $this->db->query($sql);
-			if ($resql && ($obj = $this->db->fetch_object($resql))) {
-				$cache[$key] = array('read' => true, 'send' => ((int) $obj->can_send === 1));
-			}
-		}
-		return $cache[$key];
+		$level = $this->level($u);
+		return array('level' => $level, 'read' => $level >= self::LEVEL_READ, 'handle' => $level >= self::LEVEL_HANDLE,
+			'send' => $level >= self::LEVEL_SEND, 'manage' => $level >= self::LEVEL_MANAGE);
 	}
 
 	/**
@@ -570,7 +615,24 @@ class ConvomailAccount extends CommonObject
 	}
 
 	/**
-	 * May this user change the account: settings, sign-in, automatic filing? The owner, or a mail accounts admin.
+	 * May this user organise the messages: move, archive, delete, spam, flags? Own account; a shared mailbox granted
+	 * at least LEVEL_HANDLE; another user's mailbox read through a read right (as before levels existed).
+	 *
+	 * @param  User $u User
+	 * @return bool
+	 */
+	public function canHandle(User $u)
+	{
+		$why = $this->readAccess($u);
+		if ($why === 'shared') {
+			return $this->accessOf($u)['handle'];
+		}
+		return $why !== '';
+	}
+
+	/**
+	 * May this user change the account: folders, sign-in, automatic filing? The owner, a shared mailbox's users granted
+	 * LEVEL_MANAGE, or a mail accounts admin.
 	 *
 	 * @param  User $u User
 	 * @return bool
@@ -578,6 +640,9 @@ class ConvomailAccount extends CommonObject
 	public function canManage(User $u)
 	{
 		if ((int) $this->fk_user === (int) $u->id && !$this->isShared() && $u->hasRight('convomail', 'account', 'read')) {
+			return true;
+		}
+		if ($this->isShared() && $u->hasRight('convomail', 'account', 'read') && $this->accessOf($u)['manage']) {
 			return true;
 		}
 		return (bool) $u->hasRight('convomail', 'account', 'admin');
@@ -595,60 +660,351 @@ class ConvomailAccount extends CommonObject
 	}
 
 	/**
-	 * Users granted this shared mailbox
+	 * Users and user groups granted this shared mailbox
 	 *
-	 * @return array<int,array{fk_user:int,can_send:int,name:string,login:string}>|int Keyed by user id, <0 if KO
+	 * @return array<string,array{type:string,id:int,fk_user:int,level:int,can_send:int,name:string,login:string}>|int
+	 *         Keyed by 'u<user id>' or 'g<group id>', users first; <0 if KO
 	 */
 	public function fetchAccess()
 	{
-		$sql = "SELECT g.fk_user, g.can_send, u.login, u.firstname, u.lastname FROM ".MAIN_DB_PREFIX."convomail_account_access as g";
+		$out = array();
+		$sql = "SELECT g.fk_user as id, g.level, u.login, u.firstname, u.lastname FROM ".MAIN_DB_PREFIX."convomail_account_access as g";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."user as u ON u.rowid = g.fk_user";
 		$sql .= " WHERE g.fk_account = ".((int) $this->id);
 		$sql .= " ORDER BY u.lastname, u.firstname, u.login";
 		$resql = $this->db->query($sql);
-		if (!$resql) {
+		if (!$resql || $resql === true) {
 			$this->error = $this->db->lasterror();
 			return -1;
 		}
-		$out = array();
 		while ($obj = $this->db->fetch_object($resql)) {
-			$out[(int) $obj->fk_user] = array('fk_user' => (int) $obj->fk_user, 'can_send' => (int) $obj->can_send,
-				'name' => dolGetFirstLastname($obj->firstname, $obj->lastname), 'login' => (string) $obj->login);
+			/** @var object{id:string,level:string,login:string,firstname:?string,lastname:?string} $obj */
+			$out['u'.((int) $obj->id)] = array('type' => 'user', 'id' => (int) $obj->id, 'fk_user' => (int) $obj->id, 'level' => (int) $obj->level,
+				'can_send' => ((int) $obj->level >= self::LEVEL_SEND) ? 1 : 0, 'name' => dolGetFirstLastname((string) $obj->firstname, (string) $obj->lastname), 'login' => $obj->login);
+		}
+		$sql = "SELECT g.fk_usergroup as id, g.level, ug.nom as name FROM ".MAIN_DB_PREFIX."convomail_account_access as g";
+		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."usergroup as ug ON ug.rowid = g.fk_usergroup";
+		$sql .= " WHERE g.fk_account = ".((int) $this->id);
+		$sql .= " ORDER BY ug.nom";
+		$resql = $this->db->query($sql);
+		if (!$resql || $resql === true) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		while ($obj = $this->db->fetch_object($resql)) {
+			/** @var object{id:string,level:string,name:string} $obj */
+			$out['g'.((int) $obj->id)] = array('type' => 'group', 'id' => (int) $obj->id, 'fk_user' => 0, 'level' => (int) $obj->level,
+				'can_send' => ((int) $obj->level >= self::LEVEL_SEND) ? 1 : 0, 'name' => $obj->name, 'login' => '');
 		}
 		return $out;
 	}
 
 	/**
-	 * Grant (or change) a user's access to this shared mailbox
+	 * Grant (or change) the level of a user or a user group on this shared mailbox
 	 *
-	 * @param  int  $userid  User
-	 * @param  bool $cansend Also send as the shared address
-	 * @param  User $by      User granting
+	 * @param  string $type  'user' or 'group'
+	 * @param  int    $id    User or group id
+	 * @param  int    $level LEVEL_READ to LEVEL_MANAGE
+	 * @param  User   $by    User granting
 	 * @return int           >0 if OK, <0 if KO
 	 */
-	public function setAccess($userid, $cansend, User $by)
+	public function setGrant($type, $id, $level, User $by)
 	{
-		if (!$this->isShared() || $userid <= 0) {
+		if (!$this->isShared() || (int) $id <= 0 || !in_array($type, array('user', 'group'), true) || $level < self::LEVEL_READ || $level > self::LEVEL_MANAGE) {
+			$this->error = 'BadParameter';
 			return -1;
 		}
 		self::$accessCache = array();
-		$resql = $this->db->query("SELECT rowid FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_account = ".((int) $this->id)." AND fk_user = ".((int) $userid));
-		if ($resql && $this->db->fetch_object($resql)) {
-			$sql = "UPDATE ".MAIN_DB_PREFIX."convomail_account_access SET can_send = ".($cansend ? 1 : 0);
-			$sql .= " WHERE fk_account = ".((int) $this->id)." AND fk_user = ".((int) $userid);
-			if (!$this->db->query($sql)) {
-				$this->error = $this->db->lasterror();
-				return -1;
-			}
-			return 1;
+		$cansend = ($level >= self::LEVEL_SEND) ? 1 : 0;
+		$resql = $this->db->query("SELECT rowid FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE ".self::grantCondition((int) $this->id, $type, (int) $id));
+		if ($resql && $resql !== true && $this->db->num_rows($resql) > 0) {
+			$sql = "UPDATE ".MAIN_DB_PREFIX."convomail_account_access SET level = ".((int) $level).", can_send = ".((int) $cansend);
+			$sql .= " WHERE ".self::grantCondition((int) $this->id, $type, (int) $id);
+		} else {
+			$sql = "INSERT INTO ".MAIN_DB_PREFIX."convomail_account_access (entity, fk_account, fk_user, fk_usergroup, level, can_send, date_creation, fk_user_creat)";
+			$sql .= " VALUES (".((int) $this->entity).", ".((int) $this->id).", ".($type === 'user' ? (int) $id : 'NULL').", ".($type === 'group' ? (int) $id : 'NULL');
+			$sql .= ", ".((int) $level).", ".((int) $cansend).", '".$this->db->idate(dol_now())."', ".((int) $by->id).")";
 		}
-		$sql = "INSERT INTO ".MAIN_DB_PREFIX."convomail_account_access (entity, fk_account, fk_user, can_send, date_creation, fk_user_creat)";
-		$sql .= " VALUES (".((int) $this->entity).", ".((int) $this->id).", ".((int) $userid).", ".($cansend ? 1 : 0).", '".$this->db->idate(dol_now())."', ".((int) $by->id).")";
 		if (!$this->db->query($sql)) {
 			$this->error = $this->db->lasterror();
 			return -1;
 		}
 		return 1;
+	}
+
+	/**
+	 * SQL condition selecting one grant
+	 *
+	 * @param  int    $accountid Mailbox
+	 * @param  string $type      'user' or 'group'
+	 * @param  int    $id        User or group id
+	 * @return string
+	 */
+	private static function grantCondition($accountid, $type, $id)
+	{
+		if ($type === 'group') {
+			return "fk_account = ".((int) $accountid)." AND fk_usergroup = ".((int) $id);
+		}
+		return "fk_account = ".((int) $accountid)." AND fk_user = ".((int) $id);
+	}
+
+	/**
+	 * Remove the grant of a user or a user group on this shared mailbox
+	 *
+	 * @param  string $type 'user' or 'group'
+	 * @param  int    $id   User or group id
+	 * @return int          >0 if OK, <0 if KO
+	 */
+	public function removeGrant($type, $id)
+	{
+		self::$accessCache = array();
+		$sql = "DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE ".self::grantCondition((int) $this->id, $type, (int) $id);
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		return 1;
+	}
+
+	/**
+	 * Turn this personal mailbox into a shared one, in place: same account (password or OAuth token, automatic
+	 * filing, logged emails, read receipts and open tracking stay), its owner granted LEVEL_MANAGE
+	 *
+	 * @param  User $by User doing it (a mail accounts admin)
+	 * @return int      >0 if OK, <0 if KO (see $this->error)
+	 */
+	public function makeShared(User $by)
+	{
+		$owner = (int) $this->fk_user;
+		if ($this->isShared() || $owner <= 0 || (int) $this->id <= 0) {
+			$this->error = 'ConvomailNotPersonal';
+			return -1;
+		}
+		$this->db->begin();
+		if (!$this->db->query("UPDATE ".MAIN_DB_PREFIX.$this->table_element." SET fk_user = NULL, is_default = 0, fk_user_modif = ".((int) $by->id)." WHERE rowid = ".((int) $this->id))) {
+			$this->error = $this->db->lasterror();
+			$this->db->rollback();
+			return -1;
+		}
+		$this->fk_user = self::SHARED_OWNER;
+		$this->is_default = 0;
+		if ($this->setGrant('user', $owner, self::LEVEL_MANAGE, $by) < 0) {
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		self::clearSessionCache();
+		$this->syncCollectorOwner($by);
+		dol_syslog(__METHOD__.' account '.$this->id.' of user '.$owner.' made shared by '.$by->id, LOG_NOTICE);
+		return 1;
+	}
+
+	/**
+	 * Turn this shared mailbox back into the personal mailbox of its only user: possible when exactly one user, and
+	 * no group, has access. Their grant goes; the account and everything kept with it stay.
+	 *
+	 * @param  User $by User doing it (a mail accounts admin)
+	 * @return int      >0 if OK, <0 if KO (see $this->error)
+	 */
+	public function makePersonal(User $by)
+	{
+		$access = $this->isShared() ? $this->fetchAccess() : -1;
+		if (!is_array($access)) {
+			$this->error = 'ConvomailNotShared';
+			return -1;
+		}
+		$userid = $this->onlyUser($access);
+		if ($userid <= 0) {
+			$this->error = 'ConvomailMakePersonalOneUser';
+			return -1;
+		}
+		$this->db->begin();
+		$ok = $this->db->query("UPDATE ".MAIN_DB_PREFIX.$this->table_element." SET fk_user = ".((int) $userid).", fk_user_modif = ".((int) $by->id)." WHERE rowid = ".((int) $this->id))
+			&& $this->db->query("DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_account = ".((int) $this->id));
+		if (!$ok) {
+			$this->error = $this->db->lasterror();
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		$this->fk_user = $userid;
+		self::$accessCache = array();
+		self::clearSessionCache();
+		$this->syncCollectorOwner($by);
+		dol_syslog(__METHOD__.' account '.$this->id.' made personal for user '.$userid.' by '.$by->id, LOG_NOTICE);
+		return 1;
+	}
+
+	/**
+	 * Its user is leaving: the personal mailbox is blocked now (disabled, automatic filing off) and deleted after a
+	 * period, by the scheduled job (cronDeleteLeaving()), as data protection authorities ask for a departed employee's
+	 * named mailbox. Each step is recorded in the security events.
+	 *
+	 * @param  User $by   User doing it (a mail accounts admin)
+	 * @param  int  $days Days until deletion (1 to 90)
+	 * @return int        >0 if OK, <0 if KO (see $this->error)
+	 */
+	public function markLeaving(User $by, $days)
+	{
+		if ($this->isShared() || (int) $this->id <= 0 || $days < 1 || $days > 90) {
+			$this->error = 'ConvomailLeavingNotPossible';
+			return -1;
+		}
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
+		$deleteon = dol_time_plus_duree(dol_now(), (int) $days, 'd');
+		$sql = "UPDATE ".MAIN_DB_PREFIX.$this->table_element." SET status = ".self::STATUS_DISABLED.", date_delete = '".$this->db->idate($deleteon)."', fk_user_modif = ".((int) $by->id);
+		$sql .= " WHERE rowid = ".((int) $this->id);
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$this->status = self::STATUS_DISABLED;
+		$this->date_delete = $deleteon;
+		self::clearSessionCache();
+		if (isModEnabled('emailcollector')) {
+			dol_include_once('/convomail/class/convomailcollector.class.php');
+			(new ConvomailCollector($this->db))->disable($this, $by);
+		}
+		$this->audit($by, 'CONVOMAIL_ACCOUNT_LEAVING', 'ConvomailLeavingLog', dol_print_date($deleteon, 'day'));
+		return 1;
+	}
+
+	/**
+	 * Undo markLeaving(): no deletion date, enabled again (automatic filing stays off until turned on)
+	 *
+	 * @param  User $by User doing it
+	 * @return int      >0 if OK, <0 if KO
+	 */
+	public function cancelLeaving(User $by)
+	{
+		$sql = "UPDATE ".MAIN_DB_PREFIX.$this->table_element." SET status = ".self::STATUS_ENABLED.", date_delete = NULL, fk_user_modif = ".((int) $by->id);
+		$sql .= " WHERE rowid = ".((int) $this->id);
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$this->status = self::STATUS_ENABLED;
+		$this->date_delete = null;
+		self::clearSessionCache();
+		$this->audit($by, 'CONVOMAIL_ACCOUNT_LEAVING', 'ConvomailLeavingCancelLog', '');
+		return 1;
+	}
+
+	/**
+	 * Scheduled job: delete the mailboxes whose deletion date has come (their user left). Logged emails stay in the
+	 * agenda as the company's records.
+	 *
+	 * @return int 0 if OK, <0 if KO (as core's scheduled jobs expect); what was done is in $this->output
+	 */
+	public function cronDeleteLeaving()
+	{
+		/** @var User $user */
+		global $user;
+
+		$this->output = '';
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX.$this->table_element;
+		$sql .= " WHERE date_delete IS NOT NULL AND date_delete <= '".$this->db->idate(dol_now())."' AND status = ".self::STATUS_DISABLED;
+		$sql .= " AND entity IN (".getEntity($this->element).")";
+		$resql = $this->db->query($sql);
+		if (!$resql || $resql === true) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		$ids = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			/** @var object{rowid:string} $obj */
+			$ids[] = (int) $obj->rowid;
+		}
+		$done = 0;
+		foreach ($ids as $id) {
+			$account = new ConvomailAccount($this->db);
+			if ($account->fetch($id) <= 0) {
+				continue;
+			}
+			if ($account->delete($user) <= 0) {
+				$this->error = $account->error;
+				return -1;
+			}
+			$account->audit($user, 'CONVOMAIL_ACCOUNT_DELETED', 'ConvomailLeavingDeletedLog', '');
+			$done++;
+		}
+		$this->output = $done.' mailbox(es) of users who left deleted';
+		return 0;
+	}
+
+	/**
+	 * Record a step about this mailbox in Dolibarr's security events
+	 *
+	 * @param  User   $by    User
+	 * @param  string $type  Event type
+	 * @param  string $key   Translation key of the description (%1 mailbox, %2 account id, %3 extra)
+	 * @param  string $extra Extra value
+	 * @return void
+	 */
+	private function audit(User $by, $type, $key, $extra)
+	{
+		/** @var Translate $langs */
+		global $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/core/class/events.class.php';
+		$langs->load('convomail@convomail');
+		$event = new Events($this->db);
+		$event->type = $type;
+		$event->dateevent = dol_now();
+		$event->description = $langs->transnoentitiesnoconv($key, (string) $this->email, (string) $this->id, $extra);
+		if ($event->create($by) <= 0) {
+			dol_syslog(__METHOD__.' '.$event->error, LOG_WARNING);
+		}
+	}
+
+	/**
+	 * The only user with access to this shared mailbox, when there is exactly one user and no group
+	 *
+	 * @param  array<string,array{type:string,id:int}>|null $access fetchAccess() result (read again when null)
+	 * @return int                                                 User id, 0 if none or more than one
+	 */
+	public function onlyUser($access = null)
+	{
+		if ($access === null) {
+			$access = $this->fetchAccess();
+		}
+		if (!is_array($access) || count($access) !== 1) {
+			return 0;
+		}
+		$grant = reset($access);
+		return ($grant['type'] === 'user') ? (int) $grant['id'] : 0;
+	}
+
+	/**
+	 * The automatic filing collectors follow a change between personal and shared
+	 *
+	 * @param  User $by User
+	 * @return void
+	 */
+	private function syncCollectorOwner(User $by)
+	{
+		if (!isModEnabled('emailcollector')) {
+			return;
+		}
+		dol_include_once('/convomail/class/convomailcollector.class.php');
+		$collectors = new ConvomailCollector($this->db);
+		if ($collectors->syncOwner($this, $by) < 0) {
+			dol_syslog(__METHOD__.' account '.$this->id.': '.$collectors->error, LOG_WARNING);
+		}
+	}
+
+	/**
+	 * Grant (or change) a user's access, as before levels: read, file and organise, or also send
+	 *
+	 * @param  int  $userid  User
+	 * @param  bool $cansend Also send as the shared address
+	 * @param  User $by      User granting
+	 * @return int           >0 if OK, <0 if KO
+	 * @deprecated Use setGrant()
+	 */
+	public function setAccess($userid, $cansend, User $by)
+	{
+		return $this->setGrant('user', (int) $userid, $cansend ? self::LEVEL_SEND : self::LEVEL_HANDLE, $by);
 	}
 
 	/**
@@ -656,16 +1012,11 @@ class ConvomailAccount extends CommonObject
 	 *
 	 * @param  int $userid User
 	 * @return int         >0 if OK, <0 if KO
+	 * @deprecated Use removeGrant()
 	 */
 	public function removeAccess($userid)
 	{
-		self::$accessCache = array();
-		$sql = "DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_account = ".((int) $this->id)." AND fk_user = ".((int) $userid);
-		if (!$this->db->query($sql)) {
-			$this->error = $this->db->lasterror();
-			return -1;
-		}
-		return 1;
+		return $this->removeGrant('user', (int) $userid);
 	}
 
 	/**

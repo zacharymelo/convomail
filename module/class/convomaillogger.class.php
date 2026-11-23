@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -241,7 +250,9 @@ class ConvomailLogger
 	/**
 	 * Link an email event logged earlier to a record, unless it is linked to one already (an event has one link) or
 	 * the user asked to move it ($replace). Done in SQL: ActionComm::update() would rewrite the event's contacts and
-	 * owner rows.
+	 * owner rows. When the link changes, the trigger CONVOMAIL_MESSAGE_LINKED runs on the email (ConvomailMessage::
+	 * callEmailTrigger()), with $object->context['convomail'] = eventid, element, elementid, socid, projectid and
+	 * replace; an error from it cancels the link.
 	 *
 	 * @param  int    $eventid   Event id
 	 * @param  string $origin    Element of the record ('invoice_supplier', 'ticket'...; 'project' sets fk_project)
@@ -249,9 +260,10 @@ class ConvomailLogger
 	 * @param  int    $socid     Third party: set when the event has none, or always when moving the link
 	 * @param  bool   $replace   Move the link from the record it is on (the user chose to)
 	 * @param  int    $projectid The record's project, set when the event has none
+	 * @param  ?User  $user      User doing it (the logged-in user when null), for the trigger
 	 * @return int               1 linked, 0 already linked elsewhere (left as it is), <0 error
 	 */
-	public function linkEvent($eventid, $origin, $originid, $socid = 0, $replace = false, $projectid = 0)
+	public function linkEvent($eventid, $origin, $originid, $socid = 0, $replace = false, $projectid = 0, $user = null)
 	{
 		$sqlset = array();
 		$where = '';
@@ -278,13 +290,30 @@ class ConvomailLogger
 		if (empty($sqlset)) {
 			return 1;
 		}
+		$this->db->begin();
 		$sql = 'UPDATE '.MAIN_DB_PREFIX.'actioncomm SET '.implode(', ', $sqlset).' WHERE id = '.((int) $eventid).' AND entity IN ('.getEntity('agenda').')'.$where;
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();
+			$this->db->rollback();
 			return -1;
 		}
-		return $this->db->affected_rows($resql) > 0 ? 1 : 0;
+		if ($this->db->affected_rows($resql) <= 0) {
+			$this->db->commit();
+			return 0;
+		}
+
+		// Other modules may react to an email linked to a record (no ACTION_MODIFY: the event row is updated in SQL)
+		$email = new ConvomailMessage($this->db);
+		$context = array('eventid' => (int) $eventid, 'element' => $origin, 'elementid' => (int) $originid, 'socid' => (int) $socid, 'projectid' => (int) $projectid, 'replace' => (bool) $replace);
+		if ($email->callEmailTrigger('CONVOMAIL_MESSAGE_LINKED', array('eventid' => (int) $eventid), $context, $user) < 0) {
+			$this->error = implode(', ', $email->errors);
+			$this->errors = $email->errors;
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		return 1;
 	}
 
 	/**

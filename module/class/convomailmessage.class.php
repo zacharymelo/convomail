@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -201,5 +210,46 @@ class ConvomailMessage extends CommonObject
 		}
 		$obj = $this->db->fetch_object($resql);
 		return $obj ? $this->fetch((int) $obj->rowid) : 0;
+	}
+
+	/**
+	 * Run a CONVOMAIL_MESSAGE_* trigger on an email, for other modules. The object is the email: its row here when
+	 * Convomail logged it (found by event, else by Message-ID), otherwise an unsaved one (id 0) with what is known.
+	 * Core requires a trigger name to start with the object's TRIGGER_PREFIX, hence this object for all three.
+	 *
+	 * @param  string              $name    CONVOMAIL_MESSAGE_LINKED, CONVOMAIL_MESSAGE_FILED or CONVOMAIL_MESSAGE_SENT
+	 * @param  array{accountid?:int,folder?:string,uid?:int,msgid?:string,in_reply_to?:string,direction?:int,eventid?:int} $email The email, as known (all optional)
+	 * @param  array<string,mixed> $context What happened, put in $object->context['convomail'] for the trigger
+	 * @param  ?User               $user    User the trigger runs for (the logged-in user when null)
+	 * @return int                          Negative if a trigger failed (see $this->errors)
+	 */
+	public function callEmailTrigger($name, array $email, array $context, $user = null)
+	{
+		$found = 0;
+		if (!empty($email['eventid'])) {
+			$found = $this->fetchByActioncomm($email['eventid']);
+		}
+		if ($found <= 0 && !empty($email['msgid'])) {
+			$found = $this->fetchByMsgid($email['msgid']);
+		}
+		if ($found <= 0) {
+			$this->id = 0;
+			$this->fk_account = $email['accountid'] ?? 0;
+			$this->folder = $email['folder'] ?? '';
+			$this->uid = $email['uid'] ?? 0;
+			$this->msgid = $email['msgid'] ?? '';
+			$this->in_reply_to = $email['in_reply_to'] ?? '';
+			$this->direction = $email['direction'] ?? self::DIRECTION_IN;
+			$this->fk_actioncomm = $email['eventid'] ?? 0;
+		}
+		$this->errors = array();
+		$this->context['convomail'] = $context;
+		if (!$user instanceof User) {
+			/** @var User $user */
+			$user = $GLOBALS['user'];
+		}
+		$result = $this->call_trigger($name, $user);
+		unset($this->context['convomail']);
+		return $result;
 	}
 }

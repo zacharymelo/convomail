@@ -66,6 +66,7 @@ dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailrenderer.class.php');
+dol_include_once('/convomail/class/convomailtemplates.class.php');
 dol_include_once('/convomail/lib/convomail.lib.php');
 
 // Document Browser (separate module, optional): pick files stored in Dolibarr as attachments
@@ -236,6 +237,14 @@ if ($action == '' && $draftcontext) {
 	$trackopens = ($trackingavailable && GETPOSTINT('track_opens')) ? 1 : 0;
 }
 
+// Email templates: whether the template filled in when the form opens from a record joins the record's document.
+// The page adds the user's signature itself, so a template's signature keys are left empty.
+$maindocticked = GETPOSTINT('maindoc') ? 1 : 0;
+$ownsignature = getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature);
+$origintype = '';
+$originrecord = null;
+$originresolved = false;
+
 // The line introducing a quoted message, plain text (escaped where it goes into HTML)
 $intro = '';
 if ($srcmessage && !$copymode) {
@@ -370,6 +379,20 @@ if ($action == '') {
 				}
 			}
 		}
+		// From a document's card: its default template (its own type, the recipient's language) filled in, as the
+		// card's "Send by email" form does, unless the page was opened with a text already
+		list($origintype, $originrecord) = convomail_origin_record($db, $user, $origin, $originid);
+		$originresolved = true;
+		if ($originrecord && $message === '') {
+			$tpllangs = ConvomailTemplates::outputLangs($db, $originrecord, $socid);
+			$tplid = ConvomailTemplates::defaultFor($db, $user, ConvomailTemplates::typeFor($origintype), $tpllangs);
+			$filled = ($tplid > 0) ? ConvomailTemplates::fill($db, $user, $tplid, $originrecord, $tpllangs, $editorishtml, $ownsignature) : null;
+			if ($filled) {
+				$subject = ($filled['subject'] !== '') ? $filled['subject'] : $subject;
+				$message = $filled['body'];
+				$maindocticked = $filled['joinfiles'] ? 1 : 0;
+			}
+		}
 		if ($contactid > 0) {
 			$contact = new Contact($db);
 			if ($contact->fetch($contactid) > 0) {
@@ -402,6 +425,13 @@ if ($action == '') {
 		$message = '<p>&nbsp;</p>';
 	}
 }
+
+// The record the email is written from, if the user may see it: its templates, the email's language, its main document
+if (!$originresolved) {
+	list($origintype, $originrecord) = convomail_origin_record($db, $user, $origin, $originid);
+}
+$outputlangs = ConvomailTemplates::outputLangs($db, $originrecord, $socid);
+$maindoc = $originrecord ? ConvomailTemplates::mainDocument($origintype, $originrecord, $user, $outputlangs) : null;
 
 
 /*
@@ -602,6 +632,11 @@ if (in_array($action, array('send', 'savedraft'), true)) {
 		}
 	}
 
+	// The record's main document (its PDF), when ticked: found again here, never taken from the form
+	if (!$error && $maindocticked && $maindoc) {
+		$files[] = array('path' => $maindoc['path'], 'mime' => $maindoc['mime'], 'name' => $maindoc['name']);
+	}
+
 	if (!$error && !$sending) {
 		// Into the account's Drafts folder, replacing the draft this form was opened from or last saved as; the form's
 		// context goes with it, so it reopens on the same third party and project
@@ -683,7 +718,7 @@ if (in_array($action, array('send', 'savedraft'), true)) {
 			'upload_dir_tmp' => $upload_dir_tmp,
 			'read_receipt'   => $readreceipt,
 			'track_key'      => $trackkey,
-		));
+		), $user);
 
 		if ($result < 0) {
 			setEventMessages($transport->error, $transport->errors, 'errors');
@@ -852,11 +887,15 @@ if ($origin && $originid > 0) {
 	}
 }
 
-// Templates: Dolibarr's email templates (filled in the text), the user's own included, and those of the From
-// mailbox's Templates folder, added by the script when it has some (opened as a new email, with its attachments)
-$templates = $editorishtml ? convomail_email_templates($db, $user) : array();
+// Templates: Dolibarr's email templates (filled in the text), the user's own included, the record's own type first and
+// in the email's language when it is known; then those of the From mailbox's Templates folder, added by the script
+// when it has some (opened as a new email, with its attachments). A reply keeps its subject.
+$templates = convomail_email_templates($db, $user, ConvomailTemplates::typeFor($origintype), ConvomailTemplates::recipientLang($db, $originrecord, $socid));
+$keepsubject = ($replyevent || ($srcmessage && !$copymode));
 print '<tr id="cm-template-row"'.(empty($templates) ? ' class="hidden"' : '').'><td>'.$langs->trans('EMailTemplates').'</td><td>';
 print '<select id="cm-template" class="flat minwidth300" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/template.php', 1)).'"';
+print ' data-origin="'.dol_escape_htmltag($originrecord ? $origintype : '').'" data-originid="'.($originrecord ? (int) $originrecord->id : 0).'"';
+print ' data-plain="'.($editorishtml ? 0 : 1).'" data-keepsubject="'.($keepsubject ? 1 : 0).'"';
 print ' data-compose="'.dol_escape_htmltag(dol_buildpath('/convomail/compose.php', 1)).'"';
 print ' data-dolibarr-label="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailDolibarrTemplates')).'"';
 print ' data-mailbox-label="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailMailboxTemplates')).'"';
@@ -904,6 +943,12 @@ if ($srcmessage) {
 			print '</label><br>';
 		}
 	}
+}
+// The record's main document (its PDF), ticked when the template joins files, as on the record's own form
+if ($maindoc && $originrecord) {
+	print '<div class="opacitymedium">'.$langs->trans('ConvomailRecordDocument', dol_escape_htmltag((string) $originrecord->ref)).'</div>';
+	print '<label class="marginrightonly"><input type="checkbox" name="maindoc" id="cm-maindoc" value="1"'.($maindocticked ? ' checked' : '').'> '.img_mime($maindoc['name'], '', 'pictofixedwidth').dol_escape_htmltag($maindoc['name']);
+	print ' <span class="opacitymedium">'.dol_print_size($maindoc['size'], 1, 1).'</span></label><br>';
 }
 // Files from the computer: the script turns the bare field into a button and a chip per file (added across picks,
 // removable, dropped files too); without it, the browser's own field

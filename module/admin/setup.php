@@ -283,6 +283,11 @@ if ($tab === 'settings') {
 	print convomail_setup_row($langs->trans('ConvomailUsersAsAttendees'), $langs->trans('ConvomailUsersAsAttendeesDesc'), ajax_constantonoff('CONVOMAIL_USERS_AS_ATTENDEES'));
 	print '</table></div><br>';
 
+	// Privacy: when a user opens another user's mailbox through a read right (the reason is always asked and recorded)
+	print convomail_setup_section($langs->trans('ConvomailSetupPrivacy'), 'fa-user-shield');
+	print convomail_setup_row($langs->trans('ConvomailNotifyReadOther'), $langs->trans('ConvomailNotifyReadOtherDesc'), ajax_constantonoff('CONVOMAIL_NOTIFY_READ_OTHER'));
+	print '</table></div><br>';
+
 	// Other
 	print convomail_setup_section($langs->trans('Other'), 'technic');
 	print convomail_setup_row($langs->trans('DebugMode'), $langs->trans('DebugModeDesc'), ajax_constantonoff('CONVOMAIL_DEBUG_MODE'));

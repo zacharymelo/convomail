@@ -674,23 +674,35 @@
 					return;
 				}
 				var project = document.getElementById('projectid');
+				var plain = tpl.getAttribute('data-plain') === '1';
 				var params = '?id=' + encodeURIComponent(tpl.value)
 					+ '&socid=' + encodeURIComponent((field('socid') || {}).value || '')
 					+ '&contactid=' + encodeURIComponent((field('contactid') || {}).value || '')
-					+ '&projectid=' + encodeURIComponent(project ? project.value : '');
+					+ '&projectid=' + encodeURIComponent(project ? project.value : '')
+					+ '&origin=' + encodeURIComponent(tpl.getAttribute('data-origin') || '')
+					+ '&originid=' + encodeURIComponent(tpl.getAttribute('data-originid') || '')
+					+ (plain ? '&plain=1' : '');
 				fetch(tpl.getAttribute('data-url') + params, { credentials: 'same-origin' })
 					.then(function (r) { return r.json(); })
 					.then(function (data) {
 						if (!data || !data.ok) {
 							return;
 						}
-						if (data.subject && field('subject')) {
+						// A reply or a forward keeps its subject (Re: / Fwd:), as the thread needs it
+						if (data.subject && field('subject') && tpl.getAttribute('data-keepsubject') !== '1') {
 							field('subject').value = data.subject;
 						}
 						// Put the template above what is there (signature, quoted message), dropping a leading empty line.
 						// Searching for the signature markup is unreliable: the editor rewrites it.
-						var current = editorData().replace(/^\s*<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>\s*/i, '');
-						setEditorData(data.body + current);
+						var current = plain
+							? editorData().replace(/^\s*\n/, '')
+							: editorData().replace(/^\s*<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>\s*/i, '');
+						setEditorData(plain ? data.body.replace(/\s+$/, '') + '\n\n' + current : data.body + current);
+						// A template that joins files ticks the record's document, as on the record's own form
+						var maindoc = document.getElementById('cm-maindoc');
+						if (maindoc && data.joinfiles) {
+							maindoc.checked = true;
+						}
 						tpl.value = '';
 					});
 			});

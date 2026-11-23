@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -324,6 +333,44 @@ class ConvomailCollector
 				dol_syslog(__METHOD__.' account '.$account->id.': '.$collector->error, LOG_WARNING);
 			}
 		}
+	}
+
+	/**
+	 * The account changed between personal and shared: its collectors' "record event" actions follow (owner of the
+	 * logged events: the user of a personal mailbox, none for a shared one), and their names and descriptions
+	 *
+	 * @param  ConvomailAccount $account Account
+	 * @param  User             $user    User
+	 * @return int                       >0 if OK, <0 if KO (see $this->error)
+	 */
+	public function syncOwner(ConvomailAccount $account, User $user)
+	{
+		if (!self::isAvailable()) {
+			return 1;
+		}
+		self::includeCore();
+		foreach (array(self::IN, self::OUT) as $which) {
+			$collector = $this->load($account, $which);
+			if (!$collector || $collector->fetchActions() < 0) {
+				continue;
+			}
+			foreach ($collector->actions as $row) {
+				if ($row['type'] !== 'recordevent') {
+					continue;
+				}
+				$action = new EmailCollectorAction($this->db);
+				if ($action->fetch((int) $row['id']) <= 0) {
+					continue;
+				}
+				$action->actionparam = self::actionParam($account, $which);
+				if ($action->update($user) <= 0) {
+					$this->error = $action->error;
+					return -1;
+				}
+			}
+		}
+		$this->sync($account, $user);
+		return 1;
 	}
 
 	/**

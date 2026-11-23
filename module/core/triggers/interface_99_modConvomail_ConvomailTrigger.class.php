@@ -22,7 +22,12 @@
  * \brief   Removes Convomail's data about Dolibarr records that are deleted
  *
  * ACTION_DELETE: the llx_convomail_message rows of the agenda event (the link from a message to the event, with its
- * read receipt and open-tracking details, which are personal data).
+ * read receipt and open-tracking details, which are personal data), and for an email the attachments copied with it.
+ * COMPANY_DELETE: the third party's email events are deleted as the agenda deletes an event (core then removes its
+ * events in SQL, leaving their attendees, attachments and links behind).
+ * USERGROUP_DELETE: the group's grants to shared mailboxes.
+ * CONTACT_DELETE: the contact's links to email events (event contact, attendee row); the events stay with their third
+ * party. The work is in ConvomailGdpr.
  * USER_DELETE: the user's own mailboxes (with their encrypted password or OAuth token, their grants and collectors)
  * and the user's grants to shared mailboxes. Core deletes the user row before it calls this trigger, so these rows
  * can not have a foreign key to llx_user; this is what keeps them consistent.
@@ -43,7 +48,7 @@ class InterfaceConvomailTrigger extends DolibarrTriggers
 		$this->db = $db;
 		$this->name = preg_replace('/^Interface/i', '', get_class($this));
 		$this->family = 'crm';
-		$this->description = 'Removes Convomail data about deleted agenda events and users';
+		$this->description = 'Removes Convomail data about deleted agenda events, third parties, contacts, users and user groups';
 		$this->version = '1.4.0';	// the module's version, shown on the Triggers page (UPSTREAM.md 20)
 		$this->picto = 'fa-envelope';
 	}
@@ -80,27 +85,54 @@ class InterfaceConvomailTrigger extends DolibarrTriggers
 
 		switch ($action) {
 			case 'ACTION_DELETE':
-				return $this->deleteEventLinks((int) $object->id);
+				return $object instanceof ActionComm ? $this->gdpr('eventDeleted', $object) : 0;
+			case 'COMPANY_DELETE':
+				return $this->gdpr('thirdpartyDeleted', (int) $object->id, $user);
+			case 'CONTACT_DELETE':
+				return $this->gdpr('contactDeleted', (int) $object->id);
 			case 'USER_DELETE':
 				return $this->deleteUserData((int) $object->id, $user);
+			case 'USERGROUP_DELETE':
+				return $this->deleteGroupGrants((int) $object->id);
 		}
 
 		return 0;
 	}
 
 	/**
-	 * Messages logged as this agenda event: the link goes with the event
+	 * Run a ConvomailGdpr cleanup, logging its error
 	 *
-	 * @param  int $eventid Agenda event id
+	 * @param  string $method Method of ConvomailGdpr
+	 * @param  mixed  ...$args Its arguments
+	 * @return int            Its result
+	 */
+	private function gdpr($method, ...$args)
+	{
+		dol_include_once('/convomail/class/convomailgdpr.class.php');
+		$gdpr = new ConvomailGdpr($this->db);
+		$callable = array($gdpr, $method);
+		$result = is_callable($callable) ? call_user_func_array($callable, $args) : -1;
+		if (!is_int($result) || $result < 0) {
+			$err = $gdpr->error ?: implode(', ', $gdpr->errors);
+			$this->errors = array_merge($this->errors, $gdpr->errors ?: array($err));
+			dol_syslog(__METHOD__.' '.$method.': '.$err, LOG_ERR);
+			return -1;
+		}
+		return $result;
+	}
+
+	/**
+	 * A deleted user group's grants to shared mailboxes
+	 *
+	 * @param  int $groupid Deleted group id
 	 * @return int          0 if nothing, 1 if done, -1 if KO
 	 */
-	private function deleteEventLinks($eventid)
+	private function deleteGroupGrants($groupid)
 	{
-		if ($eventid <= 0) {
+		if ($groupid <= 0) {
 			return 0;
 		}
-		$sql = "DELETE FROM ".MAIN_DB_PREFIX."convomail_message WHERE fk_actioncomm = ".((int) $eventid);
-		if (!$this->db->query($sql)) {
+		if (!$this->db->query("DELETE FROM ".MAIN_DB_PREFIX."convomail_account_access WHERE fk_usergroup = ".((int) $groupid))) {
 			$err = $this->db->lasterror();
 			$this->errors[] = $err;
 			dol_syslog(__METHOD__.' '.$err, LOG_ERR);

@@ -144,6 +144,8 @@ if ($action === 'setconversation' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 	exit;
 }
 
+// Another user's mailbox through a read right: the reason first (recorded with the security event)
+convomail_read_reason_page($db, $user, $accountid);
 $account = convomail_get_usable_account($db, $user, $accountid);
 if ($accountid > 0 && !$account) {
 	accessforbidden();
@@ -304,7 +306,9 @@ $total = ($list !== false) ? (int) $list['total'] : 0;
 $first = $total ? $page * $limit + 1 : 0;
 $last = min($total, ($page + 1) * $limit);
 
-print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
+// A shared mailbox granted "read and file" only: no buttons that move, delete, mark as spam or flag (css hides them;
+// ajax/action.php refuses them anyway)
+print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').($account->canHandle($user) ? '' : ' cm-readonly').'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
 	.'" data-ajax-message="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/message.php', 1))
 	.'" data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1))
 	.'" data-page-message="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1))

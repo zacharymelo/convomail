@@ -123,6 +123,21 @@ class modConvomail extends DolibarrModules
 				'test'          => 'isModEnabled("convomail")',
 				'priority'      => 40,
 			),
+			// Deletes the mailboxes of users who left once their period is over (Employee leaving, accounts.php)
+			1 => array(
+				'label'         => 'ConvomailCronDeleteLeaving',
+				'jobtype'       => 'method',
+				'class'         => '/convomail/class/convomailaccount.class.php',
+				'objectname'    => 'ConvomailAccount',
+				'method'        => 'cronDeleteLeaving',
+				'parameters'    => '',
+				'comment'       => 'ConvomailCronDeleteLeavingHelp',
+				'frequency'     => 1,
+				'unitfrequency' => 86400,
+				'status'        => 1,
+				'test'          => 'isModEnabled("convomail")',
+				'priority'      => 50,
+			),
 		);
 
 		// Permissions

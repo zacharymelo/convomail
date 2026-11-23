@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -13,7 +22,8 @@
  * \brief   Subject and body of an email template, with substitutions for the chosen third party / contact / project; or
  *          the list of a mailbox's Templates folder. JSON.
  *
- * GET parameters: id (template), socid, contactid, projectid; or accountid (templates of that mailbox, read only)
+ * GET parameters: id (template), socid, contactid, projectid, origin + originid (the record the email is written from),
+ * plain (1: text for the plain editor); or accountid (templates of that mailbox, read only)
  */
 
 if (!defined('NOTOKENRENEWAL')) {
@@ -49,9 +59,6 @@ if (!$res) {
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force DoliDB $db';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formmail.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
@@ -91,36 +98,29 @@ if ($accountid > 0) {
 }
 
 $id = GETPOSTINT('id');
-$allowed = convomail_email_templates($db, $user);
+dol_include_once('/convomail/class/convomailtemplates.class.php');
+// The record the email is written from (a document's card), if the user may see it: its template type, language and
+// substitutions, as its own "Send by email" form
+list($origintype, $origin) = convomail_origin_record($db, $user, GETPOST('origin', 'aZ09'), GETPOSTINT('originid'));
+$socid = GETPOSTINT('socid');
+$outputlangs = ConvomailTemplates::outputLangs($db, $origin, $socid);
+$allowed = ConvomailTemplates::listFor($db, $user, ConvomailTemplates::typeFor($origintype), ConvomailTemplates::recipientLang($db, $origin, $socid));
 if (!isset($allowed[$id])) {
 	http_response_code(404);
 	print json_encode(array('ok' => false));
 	exit;
 }
 
-$formmail = new FormMail($db);
-$template = $formmail->getEMailTemplate($db, 'all', $user, $langs, $id, 1);
-if (!is_object($template) || empty($template->id)) {
+// Object used for substitutions: the record, else project, then contact, then third party
+$object = $origin ?: convomail_substitution_object($db, $user, GETPOSTINT('projectid'), GETPOSTINT('contactid'), $socid);
+// The compose page adds the user's signature itself: the template's signature keys stay empty then
+$ownsignature = getDolGlobalInt('CONVOMAIL_ADD_SIGNATURE', 1) && !empty($user->signature);
+$filled = ConvomailTemplates::fill($db, $user, $id, $object, $outputlangs, !GETPOSTINT('plain'), $ownsignature);
+if ($filled === null) {
 	http_response_code(404);
 	print json_encode(array('ok' => false));
 	exit;
 }
 
-// Object used for substitutions: project first, then contact, then third party
-$object = convomail_substitution_object($db, $user, GETPOSTINT('projectid'), GETPOSTINT('contactid'), GETPOSTINT('socid'));
-
-$substitutions = getCommonSubstitutionArray($langs, 0, null, $object);
-complete_substitutions_array($substitutions, $langs, $object);
-
-// The subject field is plain text: a value with markup (a third party name...) keeps only its text
-$subject = dol_string_nohtmltag((string) make_substitutions((string) $template->topic, $substitutions, $langs), 1);
-$body = (string) $template->content;
-if (!dol_textishtml($body)) {
-	$body = dol_nl2br(dol_escape_htmltag($body, 0, 1));
-}
-$body = make_substitutions($body, $substitutions, $langs);
-// A template with <style> or scripts would make core's injection filter refuse the compose form on send
-$body = ConvomailRenderer::purify($body, true);
-
-print json_encode(array('ok' => true, 'subject' => $subject, 'body' => $body));
+print json_encode(array('ok' => true, 'subject' => $filled['subject'], 'body' => $filled['body'], 'joinfiles' => $filled['joinfiles']));
 $db->close();

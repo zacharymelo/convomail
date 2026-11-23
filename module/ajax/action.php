@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -51,9 +60,6 @@ if (!$res) {
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force DoliDB $db';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 dol_include_once('/convomail/class/convomailview.class.php');
 dol_include_once('/convomail/class/convomailcombined.class.php');
@@ -79,6 +85,11 @@ if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read
 $account = convomail_get_usable_account($db, $user, $accountid);
 if (!$account || $folder === '' || empty($uids)) {
 	convomail_json(array('ok' => false, 'error' => 'Forbidden'), 403);
+}
+
+// Organising a shared mailbox's messages needs that level of access (read and file is enough for the rest)
+if (in_array($action, array('flag', 'unflag', 'move', 'archive', 'delete', 'junk', 'notjunk'), true) && !$account->canHandle($user)) {
+	convomail_json(array('ok' => false, 'error' => $langs->trans('ConvomailAccessCannotHandle')), 403);
 }
 
 $client = new ConvomailHordeMailboxClient($account);

@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -35,10 +44,6 @@ if (!$res) {
  * @var Translate $langs
  * @var User $user
  */
-'@phan-var-force DoliDB $db';
-'@phan-var-force HookManager $hookmanager';
-'@phan-var-force Translate $langs';
-'@phan-var-force User $user';
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formprojet.class.php';
 dol_include_once('/convomail/class/convomailview.class.php');
@@ -59,6 +64,8 @@ $showimages = GETPOSTINT('showimages');
 if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'account', 'read')) {
 	accessforbidden();
 }
+// Another user's mailbox through a read right: the reason first (recorded with the security event)
+convomail_read_reason_page($db, $user, $accountid);
 $account = convomail_get_usable_account($db, $user, $accountid);
 if (!$account || $uid <= 0 || $folder === '') {
 	accessforbidden();

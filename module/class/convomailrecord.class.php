@@ -1,5 +1,6 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -819,7 +820,7 @@ class ConvomailRecord
 				return array('ok' => false, 'errors' => array($langs->trans('ConvomailNotYourEvent')));
 			}
 			$logger = new ConvomailLogger($this->db);
-			if ($logger->linkEvent($event['eventid'], $object->element, (int) $object->id, $socid, $replace, $projectid) <= 0) {
+			if ($logger->linkEvent($event['eventid'], $object->element, (int) $object->id, $socid, $replace, $projectid, $user) <= 0) {
 				return array('ok' => false, 'errors' => array($langs->trans('ConvomailEventLinkedElsewhere')));
 			}
 		}
@@ -929,7 +930,7 @@ class ConvomailRecord
 		if (!empty($parts)) {
 			$filer = new ConvomailFiler($this->db);
 			$filer->stage($this->client, $this->account, $this->folder, $this->uid, $this->message, $parts);
-			$stored = $filer->fileOnRecord($type, $object);
+			$stored = $filer->fileOnRecord($type, $object, $user);
 			$filer->cleanup();
 			$notes = self::filerNotes($filer);
 		}
@@ -941,7 +942,7 @@ class ConvomailRecord
 			$events = $matcher->loggedEvents(array($this->message['msgid']));
 			if (!empty($events)) {
 				$logger = new ConvomailLogger($this->db);
-				if ($logger->linkEvent((int) reset($events), $object->element, (int) $object->id, $socid) === 0) {
+				if ($logger->linkEvent((int) reset($events), $object->element, (int) $object->id, $socid, false, 0, $user) === 0) {
 					$notes[] = $langs->trans('ConvomailEventLinkedElsewhere');
 				}
 			} elseif (!in_array($type, array('societe', 'contact'), true) || $socid > 0) {

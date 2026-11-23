@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -190,17 +199,28 @@ class ActionsConvomail
 	 */
 	public function addMoreActionsButtons($parameters, &$object, &$action, $hookmanager)
 	{
+		/** @var Translate $langs */
+		/** @var User $user */
 		global $langs, $user;
 
-		if (!isModEnabled('convomail') || !$user->hasRight('convomail', 'message', 'send') || !is_object($object) || empty($object->id)) {
+		if (!isModEnabled('convomail') || !is_object($object) || empty($object->id) || (!empty($action) && $action !== 'view')) {
 			return 0;
 		}
-		if (!empty($action) && $action !== 'view') {
-			return 0;
-		}
-
 		$contexts = explode(':', isset($parameters['context']) ? $parameters['context'] : '');
 		$langs->load('convomail@convomail');
+
+		// Third party and contact cards: the person's emails kept in Dolibarr, for data protection requests (export,
+		// erase), for admins only, as core's Data privacy module
+		if ((in_array('thirdpartycard', $contexts) && $object instanceof Societe) || (in_array('contactcard', $contexts) && $object instanceof Contact)) {
+			if (isModEnabled('agenda') && !empty($user->admin) && empty($user->socid)) {
+				$url = dol_buildpath('/convomail/personal_emails.php', 1).'?type='.($object instanceof Contact ? 'contact' : 'societe').'&id='.((int) $object->id);
+				print dolGetButtonAction('', $langs->trans('ConvomailPersonalEmails'), 'default', $url, '', true);
+			}
+		}
+
+		if (!$user->hasRight('convomail', 'message', 'send')) {
+			return 0;
+		}
 		$compose = dol_buildpath('/convomail/compose.php', 1);
 
 		// Third party, contact and project cards already have core's "Send email" button: no second one here.

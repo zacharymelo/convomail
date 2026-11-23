@@ -1,10 +1,19 @@
 <?php
 /* Copyright (C) 2026 DPG Supply
+ * Copyright (C) 2026 Nick Fragoulis
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
@@ -17,6 +26,7 @@ dol_include_once('/convomail/class/convomailaccount.class.php');
 dol_include_once('/convomail/class/hordemailboxclient.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
 dol_include_once('/convomail/class/convomailoauth.class.php');
+dol_include_once('/convomail/class/convomailmessage.class.php');
 
 /**
  * Class ConvomailTransport
@@ -95,9 +105,15 @@ class ConvomailTransport
 	 *                                      in_reply_to (Message-ID without brackets), upload_dir_tmp,
 	 *                                      read_receipt (1 = ask for a read receipt, Disposition-Notification-To),
 	 *                                      track_key (open-tracking key; adds the tracking image to what is sent, not to the Sent copy)
+	 * @param  ?User               $user    User sending (the logged-in user when null), for the trigger
 	 * @return int                          >0 if sent, <0 if KO (see $this->error)
+	 *
+	 * Once sent, the trigger CONVOMAIL_MESSAGE_SENT runs on the email (ConvomailMessage::callEmailTrigger(), not saved
+	 * yet: the caller logs it), with $object->context['convomail'] = accountid, msgid, to, cc, bcc, subject, trackid
+	 * and in_reply_to. The email is gone by then, so an error from a trigger becomes a
+	 * warning, not a failure.
 	 */
-	public function send(ConvomailAccount $account, array $msg)
+	public function send(ConvomailAccount $account, array $msg, $user = null)
 	{
 		global $conf, $langs;
 
@@ -174,6 +190,17 @@ class ConvomailTransport
 		}
 
 		$this->copyToSent($account, $rawmime);
+
+		// Other modules may react to an email sent from the user's own mailbox (CMailFile fires no trigger)
+		$email = new ConvomailMessage($this->db);
+		$context = array('accountid' => (int) $account->id, 'msgid' => $this->msgid);
+		foreach (array('to', 'cc', 'bcc', 'subject', 'trackid', 'in_reply_to') as $key) {
+			$context[$key] = is_string($msg[$key] ?? null) ? $msg[$key] : '';
+		}
+		$known = array('accountid' => (int) $account->id, 'msgid' => $this->msgid, 'in_reply_to' => is_string($msg['in_reply_to'] ?? null) ? $msg['in_reply_to'] : '', 'direction' => ConvomailMessage::DIRECTION_OUT);
+		if ($email->callEmailTrigger('CONVOMAIL_MESSAGE_SENT', $known, $context, $user) < 0) {
+			$this->warnings = array_merge($this->warnings, $email->errors);
+		}
 
 		return 1;
 	}

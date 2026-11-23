@@ -8,8 +8,8 @@ Permission19428202 = Αποστολή email από το Dolibarr
 Permission19428203 = Διαχείριση των λογαριασμών email όλων των χρηστών
 Permission19428204 = Ανάγνωση των γραμματοκιβωτίων όλων των χρηστών
 Permission19428205 = Ανάγνωση των γραμματοκιβωτίων των υφισταμένων
-ConvomailReadLogAll = Ανάγνωση του γραμματοκιβωτίου %s (λογαριασμός %s) άλλου χρήστη, με το δικαίωμα ανάγνωσης όλων των γραμματοκιβωτίων
-ConvomailReadLogHierarchy = Ανάγνωση του γραμματοκιβωτίου %s (λογαριασμός %s) υφισταμένου
+ConvomailReadLogAll = Ανάγνωση του γραμματοκιβωτίου %s (λογαριασμός %s) άλλου χρήστη, με το δικαίωμα ανάγνωσης όλων των γραμματοκιβωτίων. Αιτία: %s
+ConvomailReadLogHierarchy = Ανάγνωση του γραμματοκιβωτίου %s (λογαριασμός %s) υφισταμένου. Αιτία: %s
 
 # Menus and titles
 MailAccounts = Λογαριασμοί email
@@ -329,14 +329,14 @@ ConvomailNotAUser = %s: το %s δεν είναι διεύθυνση ενεργ�
 ConvomailAccountsLoadError = Δεν ήταν δυνατή η φόρτωση των λογαριασμών email σας (%s). Ένας διαχειριστής μπορεί να απενεργοποιήσει και να ενεργοποιήσει την ενότητα Convomail για να επισκευάσει τους πίνακές της.
 
 # Third party from an email
-ConvomailNotInDolibarr = Το %s δεν υπάρχει στο Dolibarr.
+ConvomailNotInDolibarr = Δεν βρέθηκε %s στο Dolibarr.
 ConvomailCreateThirdParty = Δημιουργία τρίτου μέρους
 ConvomailAddContactTo = Προσθήκη ως επαφή του %s
 ConvomailAddContactPick = Προσθήκη ως επαφή…
-ConvomailThirdPartyCreated = Το %s δημιουργήθηκε
+ConvomailThirdPartyCreated = Δημιουργήθηκε %s
 ConvomailAddAsContact = Προσθήκη ως επαφή
 ConvomailLogThisEmailOn = Καταγραφή αυτού του email στο %s
-ConvomailContactAdded = Το %s προστέθηκε ως επαφή.
+ConvomailContactAdded = Προστέθηκε νέα επαφή %s.
 
 # Web form mail (sender in Reply-To)
 ConvomailReplyTo = Απάντηση σε
@@ -373,15 +373,20 @@ ConvomailNewShared = Νέο κοινόχρηστο γραμματοκιβώτι�
 ConvomailEditShared = Κοινόχρηστο γραμματοκιβώτιο
 ConvomailAccountType = Τύπος
 ConvomailPersonal = Προσωπικό
-ConvomailSharedWith = Κοινόχρηστο: %s χρήστης(-ες)
+ConvomailSharedWith = Κοινόχρηστο: %s χρήστης(-ες) ή ομάδα(-ες)
 ConvomailAccess = Πρόσβαση
 ConvomailAccessRead = Ανάγνωση και καταχώριση
-ConvomailAccessSend = Ανάγνωση, καταχώριση και αποστολή
+ConvomailAccessSend = Ανάγνωση, καταχώριση, οργάνωση και αποστολή
 ConvomailAccessAdd = Παραχώρηση πρόσβασης
+ConvomailAccessHandle = Ανάγνωση, καταχώριση και οργάνωση
+ConvomailAccessManage = Διαχείριση (όλα, μαζί με φακέλους, σύνδεση και καταχώριση)
+ConvomailAccessWho = Χρήστης ή ομάδα
+ConvomailAccessAddGroup = Παραχώρηση πρόσβασης στην ομάδα
+ConvomailAccessCannotHandle = Η πρόσβασή σας σε αυτό το γραμματοκιβώτιο επιτρέπει ανάγνωση και καταχώριση των email του, όχι μετακίνηση ή διαγραφή τους.
 ConvomailAccessRemove = Αφαίρεση
 ConvomailAccessNone = Κανείς δεν έχει ακόμη πρόσβαση.
 ConvomailAccessSaved = Η πρόσβαση αποθηκεύτηκε.
-ConvomailSharedHelp = Ένα κοινόχρηστο γραμματοκιβώτιο (sales@, support@) χρησιμοποιείται από τους χρήστες στους οποίους δίνετε πρόσβαση. Το "Ανάγνωση και καταχώριση" τους επιτρέπει να το διαβάζουν και να καταγράφουν τα email του· το "Ανάγνωση, καταχώριση και αποστολή" τους επιτρέπει επίσης να στέλνουν με τη διεύθυνσή του. Τα email που στέλνουν καταγράφονται με το δικό τους όνομα.
+ConvomailSharedHelp = Ένα κοινόχρηστο γραμματοκιβώτιο (sales@, support@) χρησιμοποιείται από τους χρήστες και τις ομάδες χρηστών στους οποίους δίνετε πρόσβαση· ένας χρήστης έχει το υψηλότερο επίπεδο από τη δική του πρόσβαση και των ομάδων του. "Ανάγνωση και καταχώριση": ανάγνωση και καταγραφή των email του στο Dolibarr. "Ανάγνωση, καταχώριση και οργάνωση": επίσης μετακίνηση, αρχειοθέτηση, διαγραφή, σήμανση ως ανεπιθύμητα και επισήμανση των email του. "Ανάγνωση, καταχώριση, οργάνωση και αποστολή": επίσης αποστολή με τη διεύθυνσή του. "Διαχείριση": επίσης οι φάκελοι, η σύνδεση και η αυτόματη καταχώριση. Τα email που στέλνονται καταγράφονται με το όνομα του αποστολέα.
 ConvomailPhpImapOff = Οι συλλέκτες διαβάζουν γραμματοκιβώτια Google και Microsoft 365 μόνο με τη βιβλιοθήκη PHP-IMAP, που είναι απενεργοποιημένη (ρύθμιση πυρήνα MAIN_IMAP_USE_PHPIMAP).
 ConvomailPhpImapTurnOn = Χρήση PHP-IMAP για τον Συλλέκτη Email
 ConvomailPhpImapOn = Ο Συλλέκτης Email χρησιμοποιεί πλέον τη βιβλιοθήκη PHP-IMAP.
@@ -649,3 +654,65 @@ ConvomailSetupServers = Διακομιστές email
 ConvomailSetupCompose = Σύνταξη email
 ConvomailSetupTracking = Επιβεβαιώσεις ανάγνωσης και παρακολούθηση ανοίγματος
 ConvomailToolsIntro = Κουμπιά κάτω από κάθε μήνυμα στο παράθυρο ανάγνωσης. Απενεργοποιήστε όσα δεν χρησιμοποιεί κανείς εδώ· οι χρήστες χρειάζονται πάντα τα δικαιώματα για ό,τι κάνει ένα κουμπί.
+
+# Core email templates in compose (ConvomailTemplates)
+ConvomailRecordDocument = Έγγραφο του %s
+
+# Personal data: a person's emails kept in Dolibarr (personal_emails.php, ConvomailGdpr)
+ConvomailPersonalEmails = Προσωπικά δεδομένα: email
+ConvomailGdprCount = Email που φυλάσσονται στο Dolibarr
+ConvomailGdprScopeContact = Email καταγεγραμμένα στην ατζέντα με αυτή την επαφή, ως συμμετέχουσα ή με μία από τις διευθύνσεις της ως αποστολέα ή παραλήπτη.
+ConvomailGdprScopeThirdparty = Email καταγεγραμμένα στην ατζέντα σε αυτό το τρίτο μέρος, ή με τη διεύθυνσή του ως αποστολέα ή παραλήπτη.
+ConvomailGdprMailServer = Τα αντίγραφα στους διακομιστές email δεν επηρεάζονται.
+ConvomailGdprExport = Εξαγωγή email
+ConvomailGdprExportFailed = Δεν ήταν δυνατή η εξαγωγή των email
+ConvomailGdprExportLog = Εξαγωγή των email του %s (%s %s)
+ConvomailGdprErase = Διαγραφή email
+ConvomailGdprEraseConfirm = Διαγραφή των %s email του %s από το Dolibarr, με το κείμενο και τα συνημμένα τους; Δεν μπορεί να αναιρεθεί.
+ConvomailGdprEraseFailed = Δεν ήταν δυνατή η διαγραφή των email· δεν διαγράφηκε τίποτα
+ConvomailGdprEraseLog = Διαγραφή %s email του %s (%s %s)
+ConvomailGdprErased = Διαγράφηκαν %s email
+
+# Make a personal mailbox shared, or a shared one personal (accounts.php)
+ConvomailMakeShared = Μετατροπή σε κοινόχρηστο
+ConvomailMakeSharedConfirm = Να γίνει το %s κοινόχρηστο γραμματοκιβώτιο; Παραμένει ο ίδιος λογαριασμός: η σύνδεση, η αυτόματη καταχώριση και τα καταγεγραμμένα email διατηρούνται. Ο/Η %s το κρατά με πρόσβαση "Διαχείριση"· μπορείτε μετά να δώσετε πρόσβαση σε άλλους χρήστες και ομάδες.
+ConvomailMadeShared = Το γραμματοκιβώτιο είναι πλέον κοινόχρηστο.
+ConvomailMakePersonal = Μετατροπή σε προσωπικό
+ConvomailMakePersonalConfirm = Να γίνει το %s ξανά προσωπικό γραμματοκιβώτιο του/της %s; Η σύνδεση, η αυτόματη καταχώριση και τα καταγεγραμμένα email διατηρούνται.
+ConvomailMadePersonal = Το γραμματοκιβώτιο είναι ξανά προσωπικό.
+ConvomailMakePersonalOneUser = Δυνατό όταν ακριβώς ένας χρήστης, και καμία ομάδα, έχει πρόσβαση
+ConvomailNotPersonal = Αυτό το γραμματοκιβώτιο δεν είναι προσωπικό
+ConvomailNotShared = Αυτό το γραμματοκιβώτιο δεν είναι κοινόχρηστο
+
+# Reading another user's mailbox: the reason, the owner told (lib/convomail.lib.php)
+ConvomailReadReasonTitle = Άνοιγμα γραμματοκιβωτίου άλλου χρήστη
+ConvomailReadReasonIntro = Πρόκειται να ανοίξετε το γραμματοκιβώτιο %s του/της %s μέσω του δικαιώματός σας να διαβάζετε γραμματοκιβώτια άλλων χρηστών. Δηλώστε την αιτία: καταγράφεται με το όνομά σας στα συμβάντα ασφαλείας του Dolibarr (Αρχική > Εργαλεία διαχείρισης > Έλεγχος). Το άνοιγμα του γραμματοκιβωτίου εργαζομένου απαιτεί γραπτή πολιτική γνωστή σε αυτόν και νόμιμη, συγκεκριμένη αιτία.
+ConvomailReadReason = Αιτία
+ConvomailReadReasonContinue = Άνοιγμα του γραμματοκιβωτίου
+ConvomailReadReasonRequired = Δηλώστε την αιτία (τουλάχιστον 5 χαρακτήρες).
+ConvomailSetupPrivacy = Ιδιωτικότητα
+ConvomailNotifyReadOther = Ενημέρωση του κατόχου όταν το γραμματοκιβώτιό του ανοίγει άλλος χρήστης
+ConvomailNotifyReadOtherDesc = Όταν ένας χρήστης ανοίγει το γραμματοκιβώτιο κάποιου μέσω του δικαιώματος ανάγνωσης όλων των γραμματοκιβωτίων ή των υφισταμένων του, ο κάτοχος λαμβάνει email που λέει από ποιον και πότε (μία φορά ανά σύνδεση). Η αιτία δεν περιλαμβάνεται στο email, μόνο στα συμβάντα ασφαλείας. Απενεργοποιημένο αρχικά: αφήστε το έτσι όπου η αιτία μπορεί να είναι έρευνα.
+ConvomailReadNotifySubject = Το γραμματοκιβώτιό σας %s ανοίχτηκε στο Dolibarr
+ConvomailReadNotifyText = Το γραμματοκιβώτιό σας %s ανοίχτηκε στο Dolibarr από τον/την %s στις %s, μέσω του δικαιώματος ανάγνωσης γραμματοκιβωτίων άλλων χρηστών. Καταγράφηκε στα συμβάντα ασφαλείας του Dolibarr.
+
+# Make shared: a person's named mailbox (accounts.php)
+ConvomailMakeSharedWarnNamed = Τα κοινόχρηστα γραμματοκιβώτια είναι για διευθύνσεις ρόλων (sales@, support@). Αν αυτή η διεύθυνση ονομάζει πρόσωπο, μην τη χρησιμοποιήσετε ώστε συνάδελφοι να διαβάζουν ή να στέλνουν ως αυτό: οι αρχές προστασίας δεδομένων ζητούν το γραμματοκιβώτιο εργαζομένου που αποχώρησε να μπλοκάρεται, να απαντά με αυτόματη απάντηση και να διαγράφεται μετά από σύντομο διάστημα, όχι να δίνεται σε άλλους. Για αυτό, χρησιμοποιήστε "Αποχώρηση εργαζομένου".
+ConvomailMakeSharedWarnLeft = Ο/Η %s έχει αποχωρήσει ή είναι απενεργοποιημένος/η. Πριν την κοινή χρήση, ενημερώστε τον/την, αφήστε τον/την να πάρει τα προσωπικά του/της email, και ορίστε αυτόματη απάντηση στον διακομιστή email που λέει ότι δεν εργάζεται πλέον εδώ και με ποιον να επικοινωνήσουν.
+
+# Employee leaving (accounts.php, ConvomailAccount::markLeaving(), scheduled job)
+ConvomailLeaving = Αποχώρηση εργαζομένου
+ConvomailLeavingConfirm = Μπλοκάρισμα του γραμματοκιβωτίου %s του/της %s τώρα και διαγραφή του μετά το παρακάτω διάστημα; Απενεργοποιείται αμέσως και η αυτόματη καταχώρισή του σταματά. Τα καταγεγραμμένα email του παραμένουν στην ατζέντα. Στο μεταξύ, ορίστε αυτόματη απάντηση στον διακομιστή email που λέει ότι το πρόσωπο δεν εργάζεται πλέον εδώ, από πότε, και με ποιον να επικοινωνήσουν· και αφήστε το να πάρει τα προσωπικά του email.
+ConvomailLeavingPeriod = Διαγραφή μετά από
+ConvomailLeavingMonths = %s μήνα(-ες)
+ConvomailLeavingDone = Το γραμματοκιβώτιο μπλοκαρίστηκε· θα διαγραφεί στις %s. Ορίστε στο μεταξύ αυτόματη απάντηση στον διακομιστή email.
+ConvomailLeavingCancelled = Η αποχώρηση ακυρώθηκε: το γραμματοκιβώτιο ενεργοποιήθηκε ξανά.
+ConvomailLeavingDeleteOn = Αποχώρηση: διαγραφή στις %s
+ConvomailLeavingAutoReply = Μέχρι τότε, μια αυτόματη απάντηση στον διακομιστή email πρέπει να λέει ότι το πρόσωπο δεν εργάζεται πλέον εδώ και με ποιον να επικοινωνήσουν.
+ConvomailLeavingNotPossible = Μόνο προσωπικό γραμματοκιβώτιο μπορεί να σημειωθεί ως αποχώρηση, για 1 έως 90 ημέρες
+ConvomailLeavingLog = Το γραμματοκιβώτιο %s (λογαριασμός %s) μπλοκαρίστηκε: ο χρήστης του αποχωρεί· διαγραφή στις %s
+ConvomailLeavingCancelLog = Γραμματοκιβώτιο %s (λογαριασμός %s): η αποχώρηση ακυρώθηκε, ενεργοποιήθηκε ξανά%s
+ConvomailLeavingDeletedLog = Το γραμματοκιβώτιο %s (λογαριασμός %s) διαγράφηκε στο τέλος του διαστήματος αποχώρησης%s
+ConvomailCronDeleteLeaving = Διαγραφή των γραμματοκιβωτίων χρηστών που αποχώρησαν
+ConvomailCronDeleteLeavingHelp = Διαγράφει κάθε γραμματοκιβώτιο σημειωμένο "Αποχώρηση εργαζομένου" μόλις λήξει το διάστημά του
+ConvomailDateDelete = Ημερομηνία διαγραφής

@@ -141,6 +141,10 @@ function convomail_get_usable_account($db, $user, $accountid = 0)
 	$account = new ConvomailAccount($db);
 	if ($accountid > 0) {
 		if ($account->fetch($accountid) > 0 && $account->canBeUsedBy($user) && (int) $account->status === ConvomailAccount::STATUS_ENABLED) {
+			// Another user's mailbox, through a read right: only once a reason was given (convomail_read_reason_page())
+			if (convomail_read_reason_missing($user, $account)) {
+				return null;
+			}
 			convomail_log_read($db, $user, $account);
 			return $account;
 		}
@@ -563,28 +567,38 @@ function convomail_project_contacts($db, $projectid)
 }
 
 /**
- * Email templates the user may use in Convomail compose
+ * Email templates the user may use in Convomail compose (see ConvomailTemplates::listFor())
  *
  * @param  DoliDB $db   Database
  * @param  User   $user User
+ * @param  string $type Template type of the record the email is written from ('' for none)
+ * @param  string $lang Language of the email ('' for every language)
  * @return array<int,string> Template id => label
  */
-function convomail_email_templates($db, $user)
+function convomail_email_templates($db, $user, $type = '', $lang = '')
 {
-	$out = array();
-	$sql = "SELECT t.rowid, t.label, t.type_template FROM ".MAIN_DB_PREFIX."c_email_templates as t";
-	$sql .= " WHERE t.active = 1";
-	$sql .= " AND t.type_template IN ('all', 'thirdparty', 'contact', 'project', 'actioncomm')";
-	$sql .= " AND (t.private = 0 OR t.fk_user = ".((int) $user->id).")";
-	$sql .= " AND t.entity IN (".getEntity('c_email_templates').")";
-	$sql .= " ORDER BY t.position ASC, t.label ASC";
-	$resql = $db->query($sql);
-	if ($resql) {
-		while ($obj = $db->fetch_object($resql)) {
-			$out[(int) $obj->rowid] = (string) $obj->label;
-		}
+	dol_include_once('/convomail/class/convomailtemplates.class.php');
+	return ConvomailTemplates::listFor($db, $user, $type, $lang);
+}
+
+/**
+ * Record an email is written from (origin and originid of the compose page), if the user may see it
+ *
+ * @param  DoliDB $db       Database
+ * @param  User   $user     User
+ * @param  string $origin   Element or event type (facture, invoice, propal...)
+ * @param  int    $originid Record id
+ * @return array{0:string,1:CommonObject|null}  ConvomailTargets type ('' if not one) and the record
+ */
+function convomail_origin_record($db, $user, $origin, $originid)
+{
+	dol_include_once('/convomail/class/convomailtargets.class.php');
+	$type = ConvomailTargets::fromEventType((string) $origin);
+	if ($type === '' || (int) $originid <= 0) {
+		return array($type, null);
 	}
-	return $out;
+	$targets = new ConvomailTargets($db);
+	return array($type, $targets->fetchVisible($type, (int) $originid, $user));
 }
 
 /**
@@ -1011,7 +1025,81 @@ function convomail_virus_free($path, $name)
 }
 
 /**
- * Record in Dolibarr's security events when a user reads another user's mailbox through a read right, once per session
+ * Whether the user opens another user's mailbox through a read right (all mailboxes, or a subordinate's) without
+ * having given the reason yet in this session
+ *
+ * @param  User             $user    User
+ * @param  ConvomailAccount $account Mailbox
+ * @return bool
+ */
+function convomail_read_reason_missing($user, $account)
+{
+	if (!in_array($account->readAccess($user), array('all', 'hierarchy'), true)) {
+		return false;
+	}
+	$reasons = (isset($_SESSION['convomail_read_reason']) && is_array($_SESSION['convomail_read_reason'])) ? $_SESSION['convomail_read_reason'] : array();
+	return empty($reasons[(int) $account->id]);
+}
+
+/**
+ * Before a page shows another user's mailbox through a read right: ask why (a form), keep the answer for the session
+ * and come back to the page. Does nothing for the user's own or granted mailboxes, or once the reason is given.
+ *
+ * @param  DoliDB $db        Database
+ * @param  User   $user      User
+ * @param  int    $accountid Mailbox asked for
+ * @return void              Ends the request when it shows the form or redirects
+ */
+function convomail_read_reason_page($db, $user, $accountid)
+{
+	/** @var Translate $langs */
+	global $langs;
+
+	dol_include_once('/convomail/class/convomailaccount.class.php');
+	$account = new ConvomailAccount($db);
+	if ($accountid <= 0 || $account->fetch($accountid) <= 0 || !$account->canBeUsedBy($user) || !convomail_read_reason_missing($user, $account)) {
+		return;
+	}
+	$langs->load('convomail@convomail');
+	$here = (string) ($_SERVER['REQUEST_URI'] ?? '');
+	if (GETPOST('action', 'aZ09') === 'convomail_readreason' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+		$reason = trim(GETPOST('readreason', 'alphanohtml'));
+		if (dol_strlen($reason) >= 5) {
+			$reasons = (isset($_SESSION['convomail_read_reason']) && is_array($_SESSION['convomail_read_reason'])) ? $_SESSION['convomail_read_reason'] : array();
+			$reasons[(int) $account->id] = dol_trunc($reason, 250, 'right', 'UTF-8', 1);
+			$_SESSION['convomail_read_reason'] = $reasons;
+			// Back to the page asked for: a path of this site only
+			$back = GETPOST('backtopage', 'alphanohtml');
+			if (!preg_match('#^/[^/\\\\]#', $back)) {
+				$back = dol_buildpath('/convomail/mailbox.php', 1).'?accountid='.((int) $account->id);
+			}
+			header('Location: '.$back);
+			exit;
+		}
+		setEventMessages($langs->trans('ConvomailReadReasonRequired'), null, 'errors');
+	}
+
+	$owner = new User($db);
+	$ownername = ($owner->fetch((int) $account->fk_user) > 0) ? $owner->getFullName($langs) : '';
+	llxHeader('', $langs->trans('ConvomailReadReasonTitle'), '', '', 0, 0, '', '', '', 'mod-convomail page-readreason');
+	print load_fiche_titre($langs->trans('ConvomailReadReasonTitle'), '', 'fa-user-shield');
+	print '<div class="warning">'.$langs->trans('ConvomailReadReasonIntro', dol_escape_htmltag($account->email), dol_escape_htmltag($ownername)).'</div>';
+	print '<form method="POST" action="'.dol_escape_htmltag($here).'">';
+	print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="convomail_readreason">';
+	print '<input type="hidden" name="backtopage" value="'.dol_escape_htmltag($here).'">';
+	print '<table class="border centpercent"><tr><td class="titlefield fieldrequired">'.$langs->trans('ConvomailReadReason').'</td>';
+	print '<td><textarea name="readreason" rows="3" class="quatrevingtpercent" maxlength="250" required minlength="5"></textarea></td></tr></table>';
+	print '<div class="center margintoponly"><input type="submit" class="button button-save" value="'.dol_escape_htmltag($langs->trans('ConvomailReadReasonContinue')).'">';
+	print ' <a class="button button-cancel" href="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1)).'">'.$langs->trans('Cancel').'</a></div>';
+	print '</form>';
+	llxFooter();
+	$db->close();
+	exit;
+}
+
+/**
+ * Record in Dolibarr's security events when a user reads another user's mailbox through a read right, once per
+ * session, with the reason they gave; and tell the mailbox's owner by email when the setup asks for it
  *
  * @param  DoliDB           $db      Database
  * @param  User             $user    Reader
@@ -1028,17 +1116,56 @@ function convomail_log_read($db, $user, $account)
 	if (!in_array($why, array('all', 'hierarchy'), true) || !empty($logged[(int) $account->id])) {
 		return;
 	}
+	$reasons = (isset($_SESSION['convomail_read_reason']) && is_array($_SESSION['convomail_read_reason'])) ? $_SESSION['convomail_read_reason'] : array();
+	$reason = is_string($reasons[(int) $account->id] ?? null) ? $reasons[(int) $account->id] : '';
 	require_once DOL_DOCUMENT_ROOT.'/core/class/events.class.php';
 	$langs->load('convomail@convomail');
 	$event = new Events($db);
 	$event->type = 'CONVOMAIL_READ_OTHER';
 	$event->dateevent = dol_now();
-	$event->description = $langs->transnoentitiesnoconv($why === 'all' ? 'ConvomailReadLogAll' : 'ConvomailReadLogHierarchy', (is_string($account->email) ? $account->email : ''), (string) $account->id);
+	$event->description = $langs->transnoentitiesnoconv($why === 'all' ? 'ConvomailReadLogAll' : 'ConvomailReadLogHierarchy', (is_string($account->email) ? $account->email : ''), (string) $account->id, $reason);
 	if ($event->create($user) > 0) {
 		$logged[(int) $account->id] = 1;
 		$_SESSION['convomail_read_logged'] = $logged;
+		if (getDolGlobalInt('CONVOMAIL_NOTIFY_READ_OTHER')) {
+			convomail_notify_read($db, $user, $account);
+		}
 	} else {
 		dol_syslog(__FUNCTION__.' '.$event->error, LOG_WARNING);
+	}
+}
+
+/**
+ * Tell a mailbox's owner, by email to their user's address, that another user opened their mailbox, and when. The
+ * reason stays in the security events: it may concern an investigation the owner is not to be told about.
+ *
+ * @param  DoliDB           $db      Database
+ * @param  User             $reader  Reader
+ * @param  ConvomailAccount $account Mailbox read
+ * @return void
+ */
+function convomail_notify_read($db, $reader, $account)
+{
+	/** @var Translate $langs */
+	/** @var Conf $conf */
+	global $langs, $conf;
+
+	$owner = new User($db);
+	if ((int) $account->fk_user <= 0 || $owner->fetch((int) $account->fk_user) <= 0 || empty($owner->email) || getDolGlobalString('MAIN_MAIL_EMAIL_FROM') === '') {
+		return;
+	}
+	require_once DOL_DOCUMENT_ROOT.'/core/class/CMailFile.class.php';
+	$outputlangs = $langs;
+	if (!empty($owner->lang) && $owner->lang !== $langs->defaultlang) {
+		$outputlangs = new Translate('', $conf);
+		$outputlangs->setDefaultLang($owner->lang);
+	}
+	$outputlangs->loadLangs(array('main', 'convomail@convomail'));
+	$subject = $outputlangs->transnoentitiesnoconv('ConvomailReadNotifySubject', (string) $account->email);
+	$text = $outputlangs->transnoentitiesnoconv('ConvomailReadNotifyText', (string) $account->email, $reader->getFullName($outputlangs), dol_print_date(dol_now(), 'dayhour', 'tzuser', $outputlangs));
+	$mail = new CMailFile($subject, (string) $owner->email, getDolGlobalString('MAIN_MAIL_EMAIL_FROM'), $text, array(), array(), array(), '', '', 0, 0, '', '', '', '', 'standard');
+	if (!$mail->sendfile()) {
+		dol_syslog(__FUNCTION__.' '.$mail->error, LOG_WARNING);
 	}
 }
 

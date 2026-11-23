@@ -512,3 +512,9 @@
 	.cm-view-table.cm-density-compact .cm-row { padding-top: 2px; padding-bottom: 2px; }
 	.cm-view-table.cm-density-compact .cm-from { flex: none; }
 }
+
+/* Shared mailbox granted "read and file" only: no buttons that organise its emails (ConvomailAccount::canHandle()) */
+.cm-app.cm-readonly [data-cm-bulk="archive"], .cm-app.cm-readonly [data-cm-bulk="delete"], .cm-app.cm-readonly [data-cm-bulk="junk"],
+.cm-app.cm-readonly [data-cm-bulk="notjunk"], .cm-app.cm-readonly [data-cm-bulk="move"], .cm-app.cm-readonly [data-cm-bulk="flag"],
+.cm-app.cm-readonly [data-cm-row-action="archive"], .cm-app.cm-readonly [data-cm-row-action="junk"], .cm-app.cm-readonly [data-cm-row-action="notjunk"],
+.cm-app.cm-readonly [data-cm-row-action="delete"] { display: none !important; }

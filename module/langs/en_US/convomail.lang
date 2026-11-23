@@ -8,8 +8,8 @@ Permission19428202 = Send email from Dolibarr
 Permission19428203 = Manage the mail accounts of all users
 Permission19428204 = Read the mailboxes of all users
 Permission19428205 = Read the mailboxes of subordinates
-ConvomailReadLogAll = Read the mailbox %s (account %s) of another user, with the right to read all mailboxes
-ConvomailReadLogHierarchy = Read the mailbox %s (account %s) of a subordinate
+ConvomailReadLogAll = Read the mailbox %s (account %s) of another user, with the right to read all mailboxes. Reason: %s
+ConvomailReadLogHierarchy = Read the mailbox %s (account %s) of a subordinate. Reason: %s
 
 # Menus and titles
 MailAccounts = Mail accounts
@@ -373,15 +373,20 @@ ConvomailNewShared = New shared mailbox
 ConvomailEditShared = Shared mailbox
 ConvomailAccountType = Type
 ConvomailPersonal = Personal
-ConvomailSharedWith = Shared: %s user(s)
+ConvomailSharedWith = Shared: %s user(s) or group(s)
 ConvomailAccess = Access
 ConvomailAccessRead = Read and file
-ConvomailAccessSend = Read, file and send
+ConvomailAccessSend = Read, file, organise and send
 ConvomailAccessAdd = Give access
+ConvomailAccessHandle = Read, file and organise
+ConvomailAccessManage = Manage (everything, plus folders, sign-in and filing)
+ConvomailAccessWho = User or group
+ConvomailAccessAddGroup = Give access to the group
+ConvomailAccessCannotHandle = Your access to this mailbox lets you read and file its emails, not move or delete them.
 ConvomailAccessRemove = Remove
 ConvomailAccessNone = Nobody has access yet.
 ConvomailAccessSaved = Access saved.
-ConvomailSharedHelp = A shared mailbox (sales@, support@) is used by the users you give access to. "Read and file" lets them read it and log its emails; "Read, file and send" also lets them send as its address. Their sent emails are logged under their own name.
+ConvomailSharedHelp = A shared mailbox (sales@, support@) is used by the users and user groups you give access to; a user has the highest level of their own and their groups' access. "Read and file": read it and log its emails into Dolibarr. "Read, file and organise": also move, archive, delete, mark as spam and flag its emails. "Read, file, organise and send": also send as its address. "Manage": also its folders, sign-in and automatic filing. Sent emails are logged under the sender's own name.
 ConvomailPhpImapOff = Collectors read Google and Microsoft 365 mailboxes only with the PHP-IMAP library, which is off (core setting MAIN_IMAP_USE_PHPIMAP).
 ConvomailPhpImapTurnOn = Use PHP-IMAP for Email Collector
 ConvomailPhpImapOn = Email Collector now uses the PHP-IMAP library.
@@ -650,3 +655,65 @@ ConvomailSetupServers = Mail servers
 ConvomailSetupCompose = Writing emails
 ConvomailSetupTracking = Read receipts and open tracking
 ConvomailToolsIntro = Buttons under each message in the reading pane. Turn off the ones nobody uses here; users still need the rights for what a button does.
+
+# Core email templates in compose (ConvomailTemplates)
+ConvomailRecordDocument = Document of %s
+
+# Personal data: a person's emails kept in Dolibarr (personal_emails.php, ConvomailGdpr)
+ConvomailPersonalEmails = Personal data: emails
+ConvomailGdprCount = Emails kept in Dolibarr
+ConvomailGdprScopeContact = Emails logged in the agenda with this contact, as attendee or with one of its addresses as sender or recipient.
+ConvomailGdprScopeThirdparty = Emails logged in the agenda on this third party, or with its address as sender or recipient.
+ConvomailGdprMailServer = Copies kept on mail servers are not affected.
+ConvomailGdprExport = Export emails
+ConvomailGdprExportFailed = The emails could not be exported
+ConvomailGdprExportLog = Emails of %s exported (%s %s)
+ConvomailGdprErase = Erase emails
+ConvomailGdprEraseConfirm = Erase the %s emails of %s from Dolibarr, with their text and attachments? This can not be undone.
+ConvomailGdprEraseFailed = The emails could not be erased; nothing was erased
+ConvomailGdprEraseLog = %s emails of %s erased (%s %s)
+ConvomailGdprErased = %s emails erased
+
+# Make a personal mailbox shared, or a shared one personal (accounts.php)
+ConvomailMakeShared = Make shared
+ConvomailMakeSharedConfirm = Make %s a shared mailbox? It stays the same account: its sign-in, automatic filing and logged emails are kept. %s keeps it with "Manage" access; you can then give access to other users and groups.
+ConvomailMadeShared = The mailbox is now shared.
+ConvomailMakePersonal = Make personal
+ConvomailMakePersonalConfirm = Make %s the personal mailbox of %s again? Its sign-in, automatic filing and logged emails are kept.
+ConvomailMadePersonal = The mailbox is personal again.
+ConvomailMakePersonalOneUser = Possible when exactly one user, and no group, has access
+ConvomailNotPersonal = This mailbox is not a personal one
+ConvomailNotShared = This mailbox is not a shared one
+
+# Reading another user's mailbox: the reason, the owner told (lib/convomail.lib.php)
+ConvomailReadReasonTitle = Opening another user's mailbox
+ConvomailReadReasonIntro = You are about to open the mailbox %s of %s through your right to read other users' mailboxes. Say why: the reason is recorded with your name in Dolibarr's security events (Home > Admin tools > Audit). Opening an employee's mailbox needs a written policy known to them and a legitimate, specific reason.
+ConvomailReadReason = Reason
+ConvomailReadReasonContinue = Open the mailbox
+ConvomailReadReasonRequired = Give the reason (at least 5 characters).
+ConvomailSetupPrivacy = Privacy
+ConvomailNotifyReadOther = Tell the owner when their mailbox is opened by another user
+ConvomailNotifyReadOtherDesc = When a user opens someone's mailbox through the right to read all mailboxes or their subordinates', its owner gets an email saying by whom and when (once per session). The reason given is not in the email, only in the security events. Off by default: leave it off where the reason may be an investigation.
+ConvomailReadNotifySubject = Your mailbox %s was opened in Dolibarr
+ConvomailReadNotifyText = Your mailbox %s was opened in Dolibarr by %s on %s, through the right to read other users' mailboxes. This was recorded in Dolibarr's security events.
+
+# Make shared: a person's named mailbox (accounts.php)
+ConvomailMakeSharedWarnNamed = Shared mailboxes are for role addresses (sales@, support@). If this address names a person, do not use it to let colleagues read or send as them: data protection authorities ask that a departed employee's mailbox be blocked, answered by an auto-reply and deleted after a short period, not given to others. For that, use "Employee leaving".
+ConvomailMakeSharedWarnLeft = %s has left or is disabled. Before sharing, inform them, let them collect their private emails, and set an auto-reply on the mail server saying they no longer work here and whom to contact.
+
+# Employee leaving (accounts.php, ConvomailAccount::markLeaving(), scheduled job)
+ConvomailLeaving = Employee leaving
+ConvomailLeavingConfirm = Block the mailbox %s of %s now and delete it after the period below? It is disabled at once and its automatic filing stops. Its logged emails stay in the agenda. Meanwhile, set an auto-reply on the mail server saying the person no longer works here, since when, and whom to contact; and let them collect their private emails.
+ConvomailLeavingPeriod = Delete after
+ConvomailLeavingMonths = %s month(s)
+ConvomailLeavingDone = Mailbox blocked; it will be deleted on %s. Set an auto-reply on the mail server meanwhile.
+ConvomailLeavingCancelled = Departure cancelled: the mailbox is enabled again.
+ConvomailLeavingDeleteOn = Leaving: deleted on %s
+ConvomailLeavingAutoReply = Until then, an auto-reply on the mail server should say the person no longer works here and whom to contact.
+ConvomailLeavingNotPossible = Only a personal mailbox can be marked as leaving, for 1 to 90 days
+ConvomailLeavingLog = Mailbox %s (account %s) blocked: its user is leaving; deletion on %s
+ConvomailLeavingCancelLog = Mailbox %s (account %s): departure cancelled, enabled again%s
+ConvomailLeavingDeletedLog = Mailbox %s (account %s) deleted at the end of its departure period%s
+ConvomailCronDeleteLeaving = Delete the mailboxes of users who left
+ConvomailCronDeleteLeavingHelp = Deletes each mailbox marked "Employee leaving" once its period is over
+ConvomailDateDelete = Deletion date
