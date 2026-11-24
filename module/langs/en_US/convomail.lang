@@ -586,6 +586,7 @@ ConvomailOriginalImagesCopy = Images in the text (tick those to also send as att
 ConvomailSaveDraft = Save draft
 ConvomailSaveDraftHelp = Save this email in the Drafts folder of the From account, to finish it later here or in another mail app. Saving again replaces the draft; sending removes it.
 ConvomailSaving = Saving…
+ConvomailSendMore = More: save as a draft or a template
 ConvomailDraftSaved = Draft saved in %s of %s.
 ConvomailDraftNotSaved = The draft could not be saved: %s
 

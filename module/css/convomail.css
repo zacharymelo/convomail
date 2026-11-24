@@ -72,7 +72,8 @@
 /* Middle: list */
 .cm-list { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .cm-rows { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-.cm-row { position: relative; display: grid; grid-template-columns: 22px 22px auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 7px 8px 7px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
+/* The checkbox over the star in one narrow column, so the text keeps the width */
+.cm-row { position: relative; display: grid; grid-template-columns: 20px 0 auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; padding: 7px 8px 7px 4px; border-bottom: 1px solid var(--cm-border); cursor: pointer; border-left: 3px solid transparent; }
 /* From a known contact or third party: a card icon before the name and a light tint (hover and selection win) */
 .cm-row.cm-row-contact { background: rgba(59, 111, 182, .06); }
 .cm-contact-mark { color: var(--cm-accent); font-size: .9em; }
@@ -80,7 +81,9 @@
 .cm-row.selected { background: var(--cm-selected); border-left-color: var(--cm-accent); }
 /* On the selected row the theme's text colour, not the link one: dark mode selects in the link's own blue */
 .cm-row.selected a.cm-row-main:link, .cm-row.selected a.cm-row-main:visited { color: var(--colortext, inherit); }
-.cm-row .cm-check { margin: 3px 0 0; }
+.cm-row .cm-check { grid-column: 1; grid-row: 1; justify-self: center; margin: 3px 0 0; }
+/* Same cell as the checkbox, at its foot: the sender and subject lines are one item of the first row */
+.cm-row .cm-star { grid-column: 1; grid-row: 1; justify-self: center; align-self: end; }
 .cm-star { border: 0; background: none; padding: 0; cursor: pointer; color: #c9c9c9; line-height: 1.4; }
 .cm-row.flagged .cm-star { color: #e8a317; }
 .cm-row-main { grid-column: 4; display: block; min-width: 0; text-decoration: none; color: inherit; }
@@ -263,6 +266,20 @@
 /* Save draft result, under the buttons of the compose page */
 .cm-save-status { margin-top: 6px; min-height: 1.2em; font-size: .92em; }
 .cm-save-status.error { color: var(--colortexterror, #a00); }
+/* Send with an arrow: the arrow opens Save draft and Save as template, upwards (the buttons end the page) */
+.cm-send-split { display: inline-flex; align-items: stretch; margin: 0 4px; white-space: nowrap; }
+/* !important: over core's marginleftonly / marginrightonly on Send */
+.cm-send-split input.button-save { margin-left: 0 !important; margin-right: 0 !important; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cm-send-more { position: relative; display: inline-flex; }
+.cm-send-more > summary { list-style: none; }
+.cm-send-more > summary::-webkit-details-marker { display: none; }
+/* The theme colours input.button only, so the arrow (no .button class: core's rule would outrank this one) takes Send's colours */
+.cm-send-split .cm-send-caret { display: inline-flex; align-items: center; min-width: 0; height: auto; margin: 3px 0; padding: 0 10px; cursor: pointer; background: var(--butactionbg, #a69944); color: var(--textbutaction, #fff); border: 0; border-left: 1px solid rgba(255, 255, 255, .45); border-radius: 0 4px 4px 0; }
+.cm-send-split .cm-send-caret:hover, .cm-send-more[open] > .cm-send-caret { box-shadow: 0 0 6px 1px rgba(50, 50, 50, .4); }
+.cm-send-menu { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; min-width: 190px; padding: 4px; text-align: left; background: var(--colorbackbody, #fff); border: 1px solid var(--colortopbordertitle1, #d8d8d8); border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, .15); }
+.cm-send-menuitem { border: 0; background: none; padding: 7px 10px; border-radius: 4px; color: var(--colortext, inherit); font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
+.cm-send-menuitem:hover, .cm-send-menuitem:focus-visible { background: var(--colorbacklinepairhover, rgba(0, 0, 0, .04)); }
+.cm-send-menuitem:disabled { opacity: .5; cursor: default; }
 .cm-ai-busy .cm-ai-status::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cm-spin .8s linear infinite; vertical-align: -1px; }
 @keyframes cm-spin { to { transform: rotate(360deg); } }
 
@@ -426,7 +443,7 @@
 .cm-day:has(+ .cm-day), .cm-day:last-child { display: none; }
 
 /* Pictures: initials on a colour of the address, the photo over them when there is one */
-.cm-avatar { grid-column: 3; grid-row: 1 / span 2; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin: 1px 10px 0 2px; border-radius: 50%; overflow: hidden; background: hsl(var(--cm-hue, 210), 45%, 46%); color: #fff; font-size: .78em; font-weight: 600; letter-spacing: .02em; line-height: 1; user-select: none; }
+.cm-avatar { grid-column: 3; grid-row: 1 / span 2; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; margin: 1px 8px 0 2px; border-radius: 50%; overflow: hidden; background: hsl(var(--cm-hue, 210), 45%, 46%); color: #fff; font-size: .78em; font-weight: 600; letter-spacing: .02em; line-height: 1; user-select: none; }
 .cm-avatar-none { background: var(--cm-border); color: var(--colorbackbody, #fff); }
 .cm-avatar-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--colorbackbody, #fff); }
 
@@ -455,6 +472,8 @@
 
 /* Compact: one line per message, no picture */
 .cm-density-compact .cm-row { grid-template-columns: 22px 22px 0 minmax(0, 1fr); padding-top: 3px; padding-bottom: 3px; align-items: center; }
+/* One line: the star beside the checkbox again (also in the table view) */
+.cm-density-compact .cm-row .cm-star { grid-column: 2; grid-row: 1; align-self: auto; }
 .cm-density-compact .cm-avatar { display: none; }
 .cm-density-compact .cm-row-main { display: flex; align-items: baseline; gap: 10px; }
 .cm-density-compact .cm-row-top { display: contents; }
@@ -497,6 +516,7 @@
 	.cm-view-table .cm-th-date { grid-column: 7; text-align: right; }
 	.cm-view-table .cm-th-size { grid-column: 8; text-align: right; }
 	.cm-view-table .cm-row { padding-top: 4px; padding-bottom: 4px; }
+	.cm-view-table .cm-row .cm-star { grid-column: 2; grid-row: 1; align-self: auto; }
 	.cm-view-table .cm-avatar { display: none; }
 	.cm-view-table .cm-row-main, .cm-view-table .cm-row-top { display: contents; }
 	.cm-view-table .cm-from { grid-column: 3; grid-row: 1; }

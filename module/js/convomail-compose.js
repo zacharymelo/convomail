@@ -810,6 +810,21 @@
 			return;	// the buttons post the form; the page then opens what was saved
 		}
 		var form = box.closest('form');
+		// The saves sit in the menu of Send's arrow: it closes once one is picked, on a click elsewhere or on Escape
+		var more = box.querySelector('.cm-send-more');
+		if (more) {
+			document.addEventListener('click', function (ev) {
+				if (more.open && !more.contains(ev.target)) {
+					more.open = false;
+				}
+			});
+			more.addEventListener('keydown', function (ev) {
+				if (ev.key === 'Escape' && more.open) {
+					more.open = false;
+					more.querySelector('summary').focus();
+				}
+			});
+		}
 		var show = function (lines, isError) {
 			status.textContent = '';
 			status.className = 'cm-save-status ' + (isError ? 'error' : 'opacitymedium');
@@ -840,13 +855,19 @@
 				data.set('cmajax', '1');
 				var buttons = box.querySelectorAll('button[name="cmsave"]');
 				buttons.forEach(function (b) { b.disabled = true; });
-				// Dolibarr's input feedback classes (theme input-feedback.css; nothing on older themes)
+				// Dolibarr's input feedback classes (theme input-feedback.css; nothing on older themes), on the arrow
+				// when the button is in its closed menu
+				var shown = btn;
+				if (more && more.contains(btn)) {
+					more.open = false;
+					shown = more.querySelector('summary');
+				}
 				var feedback = function (state) {
-					btn.classList.remove('processing-feedback', 'success-feedback', 'fail-feedback');
+					shown.classList.remove('processing-feedback', 'success-feedback', 'fail-feedback');
 					if (state) {
-						btn.classList.add(state + '-feedback');
+						shown.classList.add(state + '-feedback');
 						if (state !== 'processing') {
-							setTimeout(function () { btn.classList.remove(state + '-feedback'); }, 1500);
+							setTimeout(function () { shown.classList.remove(state + '-feedback'); }, 1500);
 						}
 					}
 				};

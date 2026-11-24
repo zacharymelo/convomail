@@ -1042,13 +1042,20 @@ print '</td></tr>';
 
 print '</table>';
 
-// Send, Save draft (Drafts folder of the From account), Save as template (the user's own Dolibarr email template),
-// Cancel. The two saves post in the background when the script runs (js/convomail-compose.js), so the form and its
-// files stay
+// Send and Cancel. Save draft (Drafts folder of the From account) and Save as template (the user's own Dolibarr email
+// template) sit in a menu on Send's arrow, so a stray click doesn't save. They post in the background when the
+// script runs (js/convomail-compose.js), so the form and its files stay. Send comes first: Enter in a field sends.
 print '<div class="center cm-compose-buttons" data-saving="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailSaving')).'">';
+print '<span class="cm-send-split">';
 print $form->buttonsSaveCancel('Send', '', array(), true);
-print '<button type="submit" class="button marginleftonly marginrightonly" name="cmsave" value="draft" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveDraftHelp')).'">'.$langs->trans('ConvomailSaveDraft').'</button>';
-print '<button type="submit" class="button marginleftonly marginrightonly" name="cmsave" value="template" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveTemplateHelp')).'">'.$langs->trans('ConvomailSaveTemplate').'</button>';
+print '<details class="cm-send-more">';
+print '<summary class="cm-send-caret" title="'.dol_escape_htmltag($langs->trans('ConvomailSendMore')).'" aria-label="'.dol_escape_htmltag($langs->trans('ConvomailSendMore')).'">'.img_picto('', 'fa-caret-down').'</summary>';
+print '<div class="cm-send-menu">';
+print '<button type="submit" class="cm-send-menuitem" name="cmsave" value="draft" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveDraftHelp')).'">'.img_picto('', 'fa-save', 'class="pictofixedwidth"').$langs->trans('ConvomailSaveDraft').'</button>';
+print '<button type="submit" class="cm-send-menuitem" name="cmsave" value="template" formnovalidate title="'.dol_escape_htmltag($langs->trans('ConvomailSaveTemplateHelp')).'">'.img_picto('', 'fa-file-alt', 'class="pictofixedwidth"').$langs->trans('ConvomailSaveTemplate').'</button>';
+print '</div>';
+print '</details>';
+print '</span>';
 print $form->buttonsSaveCancel('', 'Cancel', array(), true);
 print '<div id="cm-save-status" class="cm-save-status" role="status" aria-live="polite"></div>';
 print '</div>';
