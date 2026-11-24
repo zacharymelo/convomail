@@ -107,6 +107,13 @@ if ($action === 'setdisplay' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 	if (GETPOSTISSET('focus')) {
 		$display['CONVOMAIL_FOCUS'] = GETPOSTINT('focus') ? '1' : '';
 	}
+	// Shown by default: what is stored is the hiding (each box posts 0 from a hidden field when unticked)
+	if (GETPOSTISSET('pictures')) {
+		$display['CONVOMAIL_HIDE_PICTURES'] = GETPOSTINT('pictures') ? '' : '1';
+	}
+	if (GETPOSTISSET('contactmark')) {
+		$display['CONVOMAIL_HIDE_CONTACTMARK'] = GETPOSTINT('contactmark') ? '' : '1';
+	}
 	if (!empty($display)) {
 		dol_set_user_param($db, $conf, $user, $display);
 	}
@@ -309,7 +316,7 @@ $last = min($total, ($page + 1) * $limit);
 
 // A shared mailbox granted "read and file" only: no buttons that move, delete, mark as spam or flag (css hides them;
 // ajax/action.php refuses them anyway)
-print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').($account->canHandle($user) ? '' : ' cm-readonly').'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
+print '<div class="cm-app cm-density-'.convomail_density().' cm-view-'.convomail_list_view().(convomail_focus_mode() ? ' cm-focus' : '').(convomail_show_pictures() ? '' : ' cm-nopictures').(convomail_show_contact_mark() ? '' : ' cm-nocontactmark').($account->canHandle($user) ? '' : ' cm-readonly').'" data-accountid="'.((int) $account->id).'" data-folder="'.dol_escape_htmltag($folder).'" data-token="'.newToken()
 	.'" data-ajax-message="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/message.php', 1))
 	.'" data-ajax-action="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/action.php', 1))
 	.'" data-page-message="'.dol_escape_htmltag(dol_buildpath('/convomail/message.php', 1))
@@ -494,7 +501,7 @@ $todaykey = dol_print_date($now, '%Y%m%d', 'tzuserrel');
 // Sent with the tracking image: opened or not, one query for the page
 $opens = ConvomailTracker::opens($db, (int) $account->id, array_column($messages, 'msgid'));
 // Pictures of the correspondents shown (users, contacts, third parties): three queries for the page
-$avatars = (convomail_density() !== 'compact') ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails(is_array($messages) ? $messages : array(), $showto), $matched, $user) : array();
+$avatars = (convomail_density() !== 'compact' && convomail_show_pictures()) ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails(is_array($messages) ? $messages : array(), $showto), $matched, $user) : array();
 // Date headings (Today, Yesterday, This week...) in the list, which is sorted newest first
 ConvomailView::$lastDayGroup = '*';
 foreach ($messages as $m) {

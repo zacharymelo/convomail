@@ -1809,8 +1809,9 @@
 			}
 		});
 
-		// Display menu of the list head: a choice (order, list or table, density) is saved at once (the page comes back with it)
-		qsa('form.cm-display input[name="density"], form.cm-display input[name="listview"], form.cm-display select[name="sortby"]', app).forEach(function (field) {
+		// Display menu of the list head: a choice (order, list or table, density, what rows show) is saved at once (the
+		// page comes back with it)
+		qsa('form.cm-display input[name="density"], form.cm-display input[name="listview"], form.cm-display select[name="sortby"], form.cm-display input.cm-display-show', app).forEach(function (field) {
 			field.addEventListener('change', function () {
 				field.form.submit();
 			});
