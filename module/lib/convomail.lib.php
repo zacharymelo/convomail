@@ -1025,6 +1025,17 @@ function convomail_virus_free($path, $name)
 }
 
 /**
+ * Whether a reason is asked before opening another user's mailbox through a read right. On unless the setup turned
+ * it off: the switch stores 0 rather than deleting the constant, so a missing constant still asks.
+ *
+ * @return bool
+ */
+function convomail_read_reason_asked()
+{
+	return getDolGlobalString('CONVOMAIL_READ_REASON', '1') !== '0';
+}
+
+/**
  * Whether the user opens another user's mailbox through a read right (all mailboxes, or a subordinate's) without
  * having given the reason yet in this session
  *
@@ -1034,7 +1045,7 @@ function convomail_virus_free($path, $name)
  */
 function convomail_read_reason_missing($user, $account)
 {
-	if (!in_array($account->readAccess($user), array('all', 'hierarchy'), true)) {
+	if (!convomail_read_reason_asked() || !in_array($account->readAccess($user), array('all', 'hierarchy'), true)) {
 		return false;
 	}
 	$reasons = (isset($_SESSION['convomail_read_reason']) && is_array($_SESSION['convomail_read_reason'])) ? $_SESSION['convomail_read_reason'] : array();
@@ -1120,6 +1131,9 @@ function convomail_log_read($db, $user, $account)
 	$reason = is_string($reasons[(int) $account->id] ?? null) ? $reasons[(int) $account->id] : '';
 	require_once DOL_DOCUMENT_ROOT.'/core/class/events.class.php';
 	$langs->load('convomail@convomail');
+	if ($reason === '' && !convomail_read_reason_asked()) {
+		$reason = $langs->transnoentitiesnoconv('ConvomailReadReasonNotAsked');
+	}
 	$event = new Events($db);
 	$event->type = 'CONVOMAIL_READ_OTHER';
 	$event->dateevent = dol_now();
