@@ -94,6 +94,8 @@ class modConvomail extends DolibarrModules
 			11 => array('CONVOMAIL_UNREAD_INDICATOR', 'chaine', '1', 'Unread emails indicator in the top bar', 0, 'current', 0),
 			// Top menu icon: without it the theme draws a generic sticky note over the menu picto
 			12 => array('MAIN_MODULE_CONVOMAIL_ICON', 'chaine', $this->picto, 'Top menu icon of Convomail', 0, 'allentities', 1),
+			// Off is stored as 0, not deleted (setup.php), so a missing constant still asks the reason
+			13 => array('CONVOMAIL_READ_REASON', 'chaine', '1', 'Ask a reason before opening another user\'s mailbox', 0, 'current', 0),
 		);
 
 		// Mail accounts tab on the user card
@@ -385,6 +387,10 @@ class modConvomail extends DolibarrModules
 				if ($onbydefault && version_compare(getDolGlobalString('CONVOMAIL_DB_VERSION', '0'), $since, '<') && !getDolGlobalString($c[0])) {
 					dolibarr_set_const($this->db, $c[0], $c[2], $c[1], 0, $c[3], $conf->entity);
 				}
+			}
+			// Created for installs made before it, so its switch shows on; a stored 0 (turned off) is kept
+			if (getDolGlobalString('CONVOMAIL_READ_REASON') === '') {
+				dolibarr_set_const($this->db, 'CONVOMAIL_READ_REASON', '1', 'chaine', 0, 'Ask a reason before opening another user\'s mailbox', $conf->entity);
 			}
 
 			$this->delete_menus();

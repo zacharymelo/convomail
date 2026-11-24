@@ -91,6 +91,8 @@ Compose page ──> ConvomailTransport ──> user's SMTP server ──> recip
    - *Read the mailboxes of all users* (for supervisors or compliance; each read is logged as a Dolibarr security event)
    - *Read the mailboxes of subordinates* (for managers; each read is logged the same way)
 
+   With either right, opening another user's mailbox first asks why, once per session, and the reason goes into the security event. To open such mailboxes directly, turn off **Ask a reason before opening another user's mailbox** under Convomail setup > Privacy: the opening is still logged, without a reason.
+
 Enabling the module activates the core "Send Email" event type and adds an index on `llx_actioncomm.email_msgid`.
 
 **"Failed to write in directory …/custom" when uploading the zip:** Dolibarr refuses online installs when the web server user cannot write to the `htdocs/custom` folder (it checks this before reading the zip). Give that folder to the web server user, for example:
