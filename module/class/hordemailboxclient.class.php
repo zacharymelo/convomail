@@ -510,6 +510,18 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 	const SORTS = array('date_desc', 'date_asc', 'from_asc', 'from_desc', 'to_asc', 'to_desc', 'subject_asc', 'subject_desc', 'size_desc', 'size_asc');
 
 	/**
+	 * Most messages a list (folder or search result) may have to be sorted on correspondent, subject or size.
+	 * The first such sort of a folder fetches every envelope: about 2 s of CPU per 20,000 messages, more on
+	 * shared hosting. Hidden setting CONVOMAIL_SORT_MAX_MESSAGES, default 50,000.
+	 *
+	 * @return int
+	 */
+	public static function sortMaxMessages()
+	{
+		return getDolGlobalInt('CONVOMAIL_SORT_MAX_MESSAGES', 50000);
+	}
+
+	/**
 	 * UIDs in another order than newest first. Ties keep the newest first. Sender, first recipient, subject and size
 	 * are fetched once per message (envelope and size, not the text) and kept per folder like the arrival times
 	 * (sortCacheFile()), so later sorts of the folder only fetch new messages. Server-side SORT is not used, for
@@ -544,11 +556,21 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			$query = new Horde_Imap_Client_Fetch_Query();
 			$query->envelope();
 			$query->size();
+			$unsaved = 0;
 			foreach (array_chunk($missing, 2000) as $chunk) {
 				$fetched = $imap->fetch($folder, $query, array('ids' => new Horde_Imap_Client_Ids($chunk)));
 				foreach ($chunk as $uid) {
 					$item = $fetched[$uid];
 					$known[$uid] = ($item instanceof Horde_Imap_Client_Data_Fetch) ? self::sortKeys($item) : array('', '', '', 0);
+				}
+				// Saved on the way: a first sort of a big folder that hits the host's time or memory limit keeps
+				// what it fetched, instead of fetching it all again on the next page load
+				$unsaved += count($chunk);
+				if ($unsaved >= 10000 && $file !== '') {
+					$unsaved = 0;
+					if (@file_put_contents($file, json_encode(array('uidvalidity' => $validity, 'keys' => $known))) !== false) {
+						dolChmod($file);
+					}
 				}
 			}
 		}
@@ -569,28 +591,31 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 		global $langs;
 		list($field, $dir) = explode('_', $sort);
 		$col = array('from' => 0, 'to' => 1, 'subject' => 2, 'size' => 3)[$field];
-		$collator = class_exists('Collator') ? new Collator(is_object($langs) ? $langs->defaultlang : 'en_US') : null;
-		$rank = array_flip($uids);	// newest first, for ties
-		usort($uids, function (int $a, int $b) use ($keys, $col, $dir, $collator, $rank): int {
-			$x = $keys[$a][$col];
-			$y = $keys[$b][$col];
-			if (is_int($x) && is_int($y)) {
-				$cmp = $x <=> $y;
-			} else {
-				$x = (string) $x;
-				$y = (string) $y;
+		$collator = ($col !== 3 && class_exists('Collator')) ? new Collator(is_object($langs) ? $langs->defaultlang : 'en_US') : null;
+		// One native sort on collation keys (byte order = the language's order), then the newest first for ties:
+		// a PHP comparison callback costs several times more on a big folder, at every page load
+		$values = array();
+		$rank = array();
+		$sorted = array();
+		$empty = array();
+		foreach ($uids as $i => $uid) {
+			$value = $keys[$uid][$col];
+			if ($col !== 3) {
+				$value = (string) $value;
 				// Empty last whatever the direction
-				if (($x === '') !== ($y === '')) {
-					return $x === '' ? 1 : -1;
+				if ($value === '') {
+					$empty[] = $uid;
+					continue;
 				}
-				$cmp = $collator ? (int) $collator->compare($x, $y) : strcmp($x, $y);
+				$sortkey = $collator ? $collator->getSortKey($value) : false;
+				$value = is_string($sortkey) ? $sortkey : $value;
 			}
-			if ($dir === 'desc') {
-				$cmp = -$cmp;
-			}
-			return $cmp !== 0 ? $cmp : $rank[$a] <=> $rank[$b];
-		});
-		return $uids;
+			$values[] = $value;
+			$rank[] = $i;
+			$sorted[] = $uid;
+		}
+		array_multisort($values, ($dir === 'desc' ? SORT_DESC : SORT_ASC), ($col === 3 ? SORT_NUMERIC : SORT_STRING), $rank, SORT_ASC, SORT_NUMERIC, $sorted);
+		return array_merge($sorted, $empty);
 	}
 
 	/**
@@ -1420,15 +1445,21 @@ class ConvomailHordeMailboxClient implements ConvomailMailboxClient
 			} else {
 				$uids = $this->searchUids($imap, $folder, $searchText, $searchBody);
 			}
+			// Sorting on a header needs the envelope of every message listed: past a limit the list stays newest first
+			$unsorted = false;
 			if ($sort !== '' && $sort !== 'date_desc' && in_array($sort, self::SORTS, true)) {
-				$uids = $this->sortUids($imap, $folder, $uids, $sort, $searchText === '');
+				if ($sort !== 'date_asc' && count($uids) > self::sortMaxMessages()) {
+					$unsorted = true;
+				} else {
+					$uids = $this->sortUids($imap, $folder, $uids, $sort, $searchText === '');
+				}
 			}
 			$total = count($uids);
 			$pageuids = array_slice($uids, max(0, (int) $offset), max(1, (int) $limit));
 
 			// The newest UID of the folder, for new-mail checks (pollFolder()); unknown on a search
 			$maxuid = ($searchText === '') ? ($uids ? max($uids) : 0) : -1;
-			return array('total' => $total, 'maxuid' => $maxuid, 'messages' => $this->summaries($imap, $folder, $pageuids));
+			return array('total' => $total, 'maxuid' => $maxuid, 'unsorted' => $unsorted, 'messages' => $this->summaries($imap, $folder, $pageuids));
 		} catch (Exception $e) {
 			$this->error = $e->getMessage();
 			return false;

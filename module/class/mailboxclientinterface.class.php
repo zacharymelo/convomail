@@ -71,8 +71,9 @@ interface ConvomailMailboxClient
 	 * @param  bool   $searchBody Search the message text too; false = sender, recipients and subject only
 	 * @param  string $sort       Order: '' or date_desc (newest arrival first), date_asc, from_asc, from_desc, to_asc,
 	 *                            to_desc, subject_asc, subject_desc, size_desc, size_asc
-	 * @return array{total:int,maxuid:int,messages:array<int,array<string,mixed>>}|false
-	 *         maxuid: the folder's newest UID (0 when empty, -1 on a search). Each message: uid, msgid,
+	 * @return array{total:int,maxuid:int,unsorted:bool,messages:array<int,array<string,mixed>>}|false
+	 *         maxuid: the folder's newest UID (0 when empty, -1 on a search). unsorted: the list was too big to
+	 *         sort on correspondent, subject or size, and stays newest first. Each message: uid, msgid,
 	 *         subject, date (timestamp), from, to, cc (lists of array{name,email}), seen, answered, flagged,
 	 *         size, has_attachments. false on error.
 	 */

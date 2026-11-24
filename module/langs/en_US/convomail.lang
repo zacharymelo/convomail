@@ -642,6 +642,7 @@ ConvomailSort_subject_asc = Subject, A to Z
 ConvomailSort_subject_desc = Subject, Z to A
 ConvomailSort_size_desc = Size, largest first
 ConvomailSort_size_asc = Size, smallest first
+ConvomailSortTooBig = This list has more than %s messages, too many to sort on another column than the date: it is shown newest first. Search to narrow it down, then sort the results.
 ConvomailListView = Layout
 ConvomailListView_list = List beside the message
 ConvomailListView_table = Table above the message

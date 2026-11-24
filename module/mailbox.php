@@ -228,6 +228,9 @@ $sort = convomail_sort();
 $listsort = $showto ? (string) preg_replace('/^from_/', 'to_', $sort) : $sort;
 $list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody, $listsort);
 $messages = ($list !== false) ? $list['messages'] : array();
+if ($list !== false && !empty($list['unsorted'])) {
+	setEventMessages($langs->trans('ConvomailSortTooBig', ConvomailHordeMailboxClient::sortMaxMessages()), null, 'warnings');
+}
 
 // Who the correspondents are, and which project each message belongs to
 $myemails = ConvomailView::myEmails($db, $user, $account);
