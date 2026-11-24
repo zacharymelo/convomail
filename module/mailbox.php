@@ -228,6 +228,7 @@ $sort = convomail_sort();
 $listsort = $showto ? (string) preg_replace('/^from_/', 'to_', $sort) : $sort;
 $list = $client->listMessages($folder, $page * $limit, $limit, $search, (bool) $searchbody, $listsort);
 $messages = ($list !== false) ? $list['messages'] : array();
+$unsorted = ($list !== false && !empty($list['unsorted']));
 
 // Who the correspondents are, and which project each message belongs to
 $myemails = ConvomailView::myEmails($db, $user, $account);
@@ -469,6 +470,10 @@ foreach ($folders as $f) {
 print ConvomailView::listHead(convomail_folder_label($currentfolder), $total, $search !== '', $selfbase.$listparam.'&refresh=1', $selfbase.$listparam.($openuid > 0 ? '&uid='.$openuid : ''), true);
 // Column headings of the table view: a click sorts on the column, again reverses it
 print ConvomailView::tableHead($selfbase.$searchparam, $showto);
+// A line above the list, not a popup: the order is remembered, so it would pop up at every load of the folder
+if ($unsorted) {
+	print '<div class="cm-list-note" role="note">'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailSortTooBig', (string) ConvomailHordeMailboxClient::sortMaxMessages())).'</div>';
+}
 
 // Notice bar of the new-mail checks: new messages when the list can't update in place, or why checking stopped
 print '<div class="cm-notice" role="status" aria-live="polite" hidden></div>';
