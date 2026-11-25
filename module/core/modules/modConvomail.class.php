@@ -60,7 +60,7 @@ class modConvomail extends DolibarrModules
 			'substitutions' => 0,
 			'menus' => 0,
 			// toprightmenu: the unread indicator of the top bar (ActionsConvomail::printTopRightMenu)
-			'hooks' => array('data' => array('elementproperties', 'thirdpartycard', 'contactcard', 'projectcard', 'actioncard', 'usercard', 'toprightmenu'), 'entity' => '0'),
+			'hooks' => array('data' => array('elementproperties', 'thirdpartycard', 'contactcard', 'projectcard', 'actioncard', 'usercard', 'toprightmenu', 'aimcp'), 'entity' => '0'),
 		);
 
 		$this->dirs = array("/convomail/temp");

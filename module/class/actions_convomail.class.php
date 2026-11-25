@@ -19,7 +19,8 @@
 /**
  * \file    class/actions_convomail.class.php
  * \ingroup convomail
- * \brief   Hooks: element properties, "Send email" on third party / contact / project cards, "Reply" on email events
+ * \brief   Hooks: element properties, "Send email" on third party / contact / project cards, "Reply" on email events,
+ *          MCP tools for the AI module's MCP server
  */
 
 /**
@@ -231,6 +232,36 @@ class ActionsConvomail
 			}
 		}
 
+		return 0;
+	}
+
+	/**
+	 * addMcpTools hook (context 'aimcp'): registers Convomail's MCP tools with the AI module's MCP server (docs/MCP.md).
+	 * Only where that server exists: McpTool ships with it, not with every Dolibarr. The tools check rights and
+	 * account access themselves.
+	 *
+	 * @param  array<string,mixed> $parameters  Hook parameters (db, user, conf)
+	 * @param  CommonObject|null   $object      The McpHandler
+	 * @param  string              $action      Action
+	 * @param  HookManager         $hookmanager Hook manager
+	 * @return int                              0
+	 */
+	public function addMcpTools($parameters, &$object, &$action, $hookmanager)
+	{
+		global $db, $user, $conf;
+
+		if (!isModEnabled('convomail') || !class_exists('McpTool')) {
+			return 0;
+		}
+		dol_include_once('/convomail/class/convomailmcptools.class.php');
+		if (!class_exists('ConvomailMcpTools')) {
+			return 0;
+		}
+		$tooldb = !empty($parameters['db']) ? $parameters['db'] : $db;
+		$tooluser = !empty($parameters['user']) ? $parameters['user'] : $user;
+		$toolconf = !empty($parameters['conf']) ? $parameters['conf'] : $conf;
+		// One list of tools per module: Dolibarr 24.0.x skips a bare tool instance without a word
+		$this->results = array(array(new ConvomailMcpTools($tooldb, $tooluser, $toolconf)));
 		return 0;
 	}
 }
