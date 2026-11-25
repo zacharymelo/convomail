@@ -37,7 +37,7 @@ class ActionsConvomail
 	/** @var string[] */
 	public $errors = array();
 
-	/** @var array<string,mixed> */
+	/** @var array<int|string,mixed> Hook results: an assoc array (element properties) or a list of tool lists (addMcpTools) */
 	public $results = array();
 
 	/** @var string */
