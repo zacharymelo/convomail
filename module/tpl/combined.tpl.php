@@ -301,7 +301,7 @@ if (empty($messages)) {
 }
 $now = dol_now();
 $todaykey = dol_print_date($now, '%Y%m%d', 'tzuserrel');
-$avatars = (convomail_density() !== 'compact') ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails($messages, false), $matched, $user) : array();
+$avatars = (convomail_density() !== 'compact' && convomail_show_pictures()) ? (new ConvomailAvatar($db))->pictures(ConvomailView::rowEmails($messages, false), $matched, $user) : array();
 ConvomailView::$lastDayGroup = '*';
 foreach ($messages as $m) {
 	$id = (int) $m['accountid'];

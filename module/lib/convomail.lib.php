@@ -308,6 +308,27 @@ function convomail_sorts()
 }
 
 /**
+ * Sender pictures in the message list (initials or photo before each row), chosen in the list head (Display) and
+ * remembered for the user. Shown unless turned off: the user parameter stores the hiding, so nothing set means shown.
+ *
+ * @return bool
+ */
+function convomail_show_pictures()
+{
+	return !getDolUserInt('CONVOMAIL_HIDE_PICTURES');
+}
+
+/**
+ * Mark before the sender's name when it is a known contact or third party, chosen like the pictures
+ *
+ * @return bool
+ */
+function convomail_show_contact_mark()
+{
+	return !getDolUserInt('CONVOMAIL_HIDE_CONTACTMARK');
+}
+
+/**
  * Focus mode of the mailbox: Dolibarr's left menu is hidden on the mailbox pages, so the panes get the width
  *
  * @return bool
