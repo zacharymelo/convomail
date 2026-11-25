@@ -121,11 +121,16 @@ class ConvomailMcpTools extends McpTool
 	}
 
 	/**
+	 * Categories for the AI assistant's intent classifier (core's list: billing, commercial, thirdparty, stock,
+	 * project, reporting, global). Email is about a customer or a project, so a question classified 'thirdparty'
+	 * ("emails of client ACME") or 'project' keeps these tools in; 'crm'/'messaging' are not core categories and
+	 * would drop the tools from exactly those questions.
+	 *
 	 * @return array<string> Categories for the intent parser
 	 */
 	public function getCategories(): array
 	{
-		return array('crm', 'messaging');
+		return array('thirdparty', 'project');
 	}
 
 	/**
