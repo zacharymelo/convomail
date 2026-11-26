@@ -31,8 +31,6 @@
 .cm-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cm-count { font-size: .85em; font-weight: 600; min-width: 1.6em; text-align: right; }
 .cm-refresh { color: var(--cm-muted) !important; font-size: .9em; padding: 4px 8px; text-decoration: none; }
-.cm-conversation-switch { margin: 2px 0 0; padding: 4px 8px; font-size: .9em; color: var(--cm-muted); }
-.cm-conversation-switch label { cursor: pointer; }
 
 /* Toolbars */
 .cm-toolbar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--cm-border); background: var(--colorbacktitle1, transparent); }
@@ -138,6 +136,9 @@
 /* Conversation under a message */
 .cm-conv { margin: 4px 16px 16px; border-top: 1px solid var(--cm-border); padding-top: 10px; }
 .cm-conv-title { font-weight: 600; margin-bottom: 8px; }
+/* Show conversation switch: Hide in the title, Show in the line left in its place */
+.cm-conv-title .cm-conv-toggle { float: right; font-weight: normal; font-size: .9em; }
+.cm-conv-offline { margin: 4px 16px 10px; padding-top: 8px; border-top: 1px solid var(--cm-border); font-size: .9em; }
 .cm-conv-item { border: 1px solid var(--cm-border); border-radius: 6px; margin-bottom: 6px; }
 .cm-conv-item[data-body] .cm-conv-head { cursor: pointer; }
 .cm-conv-item.loading { opacity: .6; }
@@ -205,7 +206,7 @@
 	.cm-folder-toggle, .cm-folder-tools, .cm-folder-root { display: none !important; }
 	.cm-folder-short { display: none; }
 	.cm-folder-full { display: inline; }
-	.cm-newfolder, .cm-refresh, .cm-conversation-switch { flex: 0 0 auto; margin: 0; padding: 2px 4px; }
+	.cm-newfolder, .cm-refresh { flex: 0 0 auto; margin: 0; padding: 2px 4px; }
 	.cm-list-toolbar .cm-search { flex: 1 1 100%; order: 5; }
 	/* Message: icons only, bigger to tap */
 	.cm-view-toolbar { gap: 2px; }

@@ -170,7 +170,8 @@ class ConvomailThread
 
 		$h = '<div class="cm-conv">';
 		$h .= '<div class="cm-conv-title">'.img_picto('', 'fa-comments', 'class="pictofixedwidth"').$langs->trans('ConvomailConversation');
-		$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailConversationCount', count($items)).'</span></div>';
+		$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailConversationCount', count($items)).'</span>';
+		$h .= '<a href="#" class="cm-conv-toggle" data-cm-conversation="0" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailShowConversationHelp')).'">'.$langs->trans('ConvomailHideConversation').'</a></div>';
 
 		$aftercurrent = false;
 		$opened = 0;
@@ -212,6 +213,19 @@ class ConvomailThread
 		}
 		$h .= '</div>';
 		return $h;
+	}
+
+	/**
+	 * Line shown where the conversation goes while the user has it turned off, to turn it back on
+	 *
+	 * @return string HTML
+	 */
+	public static function offHtml()
+	{
+		global $langs;
+
+		return '<div class="cm-conv-offline">'.img_picto('', 'fa-comments', 'class="pictofixedwidth opacitymedium"')
+			.'<span class="opacitymedium">'.$langs->trans('ConvomailConversationHidden').'</span> <a href="#" class="cm-conv-toggle" data-cm-conversation="1" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailShowConversationHelp')).'">'.$langs->trans('ConvomailShowConversation').'</a></div>';
 	}
 
 	/**
