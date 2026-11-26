@@ -135,9 +135,10 @@
 .convomail-body { display: block; width: calc(100% - 32px); margin: 8px 16px 16px; min-height: 160px; border: 0; background: #fff; border-radius: 4px; }
 /* Conversation under a message */
 .cm-conv { margin: 4px 16px 16px; border-top: 1px solid var(--cm-border); padding-top: 10px; }
-.cm-conv-title { font-weight: 600; margin-bottom: 8px; }
+.cm-conv-title { font-weight: 600; margin-bottom: 8px; display: flex; align-items: baseline; gap: 4px; }
+.cm-conv-title .cm-conv-label { flex: 1 1 auto; min-width: 0; }
 /* Show conversation switch: Hide in the title, Show in the line left in its place */
-.cm-conv-title .cm-conv-toggle { float: right; font-weight: normal; font-size: .9em; }
+.cm-conv-title .cm-conv-toggle { flex: none; margin-left: auto; white-space: nowrap; font-weight: normal; font-size: .9em; }
 .cm-conv-offline { margin: 4px 16px 10px; padding-top: 8px; border-top: 1px solid var(--cm-border); font-size: .9em; }
 .cm-conv-item { border: 1px solid var(--cm-border); border-radius: 6px; margin-bottom: 6px; }
 .cm-conv-item[data-body] .cm-conv-head { cursor: pointer; }

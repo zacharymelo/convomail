@@ -169,9 +169,10 @@ class ConvomailThread
 		$bodyurl = dol_buildpath('/convomail/ajax/thread.php', 1).'?accountid='.((int) $account->id).'&body=1';
 
 		$h = '<div class="cm-conv">';
-		$h .= '<div class="cm-conv-title">'.img_picto('', 'fa-comments', 'class="pictofixedwidth"').$langs->trans('ConvomailConversation');
-		$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailConversationCount', count($items)).'</span>';
-		$h .= '<a href="#" class="cm-conv-toggle" data-cm-conversation="0" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailShowConversationHelp')).'">'.$langs->trans('ConvomailHideConversation').'</a></div>';
+		// The label wraps inside its own box, so Hide stays on the first line of the title, at the right
+		$h .= '<div class="cm-conv-title"><span class="cm-conv-label">'.img_picto('', 'fa-comments', 'class="pictofixedwidth"').$langs->trans('ConvomailConversation');
+		$h .= ' <span class="opacitymedium">'.$langs->trans('ConvomailConversationCount', count($items)).'</span></span>';
+		$h .= '<a href="#" class="cm-conv-toggle" data-cm-conversation="0" title="'.dol_escape_htmltag($langs->transnoentitiesnoconv('ConvomailHideConversationHelp')).'">'.img_picto('', 'fa-eye-slash', 'class="pictofixedwidth"').$langs->trans('ConvomailHideConversation').'</a></div>';
 
 		$aftercurrent = false;
 		$opened = 0;
