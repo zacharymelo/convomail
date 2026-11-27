@@ -404,6 +404,7 @@ The event label differs ("Reception of Email - From …" from the collector, the
 - Incoming mail is cleaned and sandboxed before display; see [The mailbox](#the-mailbox). Logged copies store the cleaned HTML, with inline images replaced by their names (the files themselves are copied to the event).
 - The mailbox talks to the mail server on every page; Dolibarr does not keep a copy of the mailbox. Two lists are kept a minute per user, in Convomail's temp folder: the unread count of the top bar with its shortlist, and the Combined Inbox's message lists (senders, subjects, dates, flags; no message text).
 - Open tracking compares the address and browser of each image load with your own (to leave your team's views out) and never stores them.
+- **Email privacy tab** on third party and contact cards (admins, with the Agenda module): how many of that third party's or contact's emails are kept in Dolibarr, **Export emails** (a zip, for an access request) and **Erase emails** (for an erasure request). Copies on mail servers are not affected.
 
 ## What the module stores
 
@@ -537,6 +538,7 @@ module/                   Module source (installed as custom/convomail)
   mailbox.php             Three-pane mailbox; files replies to project threads
   tpl/combined.tpl.php    The Combined Inbox (mailbox.php?view=combined)
   project_emails.php      Emails tab of a project
+  personal_emails.php     Email privacy tab of a third party or contact (export, erase)
   message.php             One message on its own page (phones, links) and the full Log to… form
   ajax/                   Reading pane, actions, conversation, folders, new-mail checks, unread indicator, Combined Inbox's
                           Mark all as read, templates, project contacts, address suggestions,

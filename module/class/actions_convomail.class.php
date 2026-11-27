@@ -209,15 +209,6 @@ class ActionsConvomail
 		$contexts = explode(':', isset($parameters['context']) ? $parameters['context'] : '');
 		$langs->load('convomail@convomail');
 
-		// Third party and contact cards: the person's emails kept in Dolibarr, for data protection requests (export,
-		// erase), for admins only, as core's Data privacy module
-		if ((in_array('thirdpartycard', $contexts) && $object instanceof Societe) || (in_array('contactcard', $contexts) && $object instanceof Contact)) {
-			if (isModEnabled('agenda') && !empty($user->admin) && empty($user->socid)) {
-				$url = dol_buildpath('/convomail/personal_emails.php', 1).'?type='.($object instanceof Contact ? 'contact' : 'societe').'&id='.((int) $object->id);
-				print dolGetButtonAction('', $langs->trans('ConvomailPersonalEmails'), 'default', $url, '', true);
-			}
-		}
-
 		if (!$user->hasRight('convomail', 'message', 'send')) {
 			return 0;
 		}

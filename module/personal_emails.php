@@ -46,6 +46,8 @@ if (!$res) {
  * @var User $user
  */
 
+require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/contact.lib.php';
 dol_include_once('/convomail/class/convomailtargets.class.php');
 dol_include_once('/convomail/class/convomailgdpr.class.php');
 
@@ -115,19 +117,39 @@ if ($action === 'confirm_erase' && $confirm === 'yes' && GETPOST('token', 'alpha
 $ids = $gdpr->eventIds($type, (int) $object->id);
 $count = is_array($ids) ? count($ids) : 0;
 
-llxHeader('', $langs->trans('ConvomailPersonalEmails'), '', '', 0, 0, '', '', '', 'mod-convomail page-personalemails');
+llxHeader('', $label.' - '.$langs->trans('ConvomailPersonalEmails'), '', '', 0, 0, '', '', '', 'mod-convomail page-personalemails');
 
 $form = new Form($db);
+
+// Shown as a tab of the card, with its banner, so the user stays on the record
+if ($object instanceof Contact) {
+	$head = contact_prepare_head($object);
+	print dol_get_fiche_head($head, 'convomail_personaldata', $langs->trans('Contact'), -1, 'contact');
+	$linkback = '<a href="'.DOL_URL_ROOT.'/contact/list.php?restore_lastsearch_values=1">'.$langs->trans('BackToList').'</a>';
+	$morehtmlref = '<div class="refidno">';
+	if ($object->socid > 0) {
+		$object->fetch_thirdparty();
+		$morehtmlref .= $object->thirdparty->getNomUrl(1);
+	}
+	$morehtmlref .= '</div>';
+	dol_banner_tab($object, 'id', $linkback, 1, 'rowid', 'ref', $morehtmlref, '&type=contact');
+} else {
+	$head = societe_prepare_head($object);
+	print dol_get_fiche_head($head, 'convomail_personaldata', $langs->trans('ThirdParty'), -1, 'company');
+	$linkback = '<a href="'.DOL_URL_ROOT.'/societe/list.php?restore_lastsearch_values=1">'.$langs->trans('BackToList').'</a>';
+	dol_banner_tab($object, 'id', $linkback, 1, 'rowid', 'nom', '', '&type=societe');
+}
+print '<div class="fichecenter"><div class="underbanner clearboth"></div>';
+print '<table class="border centpercent tableforfield">';
+print '<tr><td class="titlefield">'.$langs->trans('ConvomailGdprCount').'</td><td>'.($ids === null ? '<span class="error">'.dol_escape_htmltag($gdpr->error).'</span>' : $count).'</td></tr>';
+print '</table></div>';
+print '<div class="clearboth"></div>';
+print '<div class="opacitymedium margintoponly">'.$langs->trans($type === 'contact' ? 'ConvomailGdprScopeContact' : 'ConvomailGdprScopeThirdparty').' '.$langs->trans('ConvomailGdprMailServer').'</div>';
+print dol_get_fiche_end();
+
 if ($action === 'erase') {
 	print $form->formconfirm($selfurl, $langs->trans('ConvomailGdprErase'), $langs->trans('ConvomailGdprEraseConfirm', $count, $label), 'confirm_erase', '', '', 1, 0, 500, 0, $langs->trans('Delete'), $langs->trans('Cancel'));
 }
-
-print load_fiche_titre($langs->trans('ConvomailPersonalEmails'), '', 'fa-user-shield');
-print '<div class="fichecenter"><table class="border centpercent tableforfield">';
-print '<tr><td class="titlefield">'.$langs->trans($type === 'contact' ? 'Contact' : 'ThirdParty').'</td><td>'.$object->getNomUrl(1).'</td></tr>';
-print '<tr><td>'.$langs->trans('ConvomailGdprCount').'</td><td>'.($ids === null ? '<span class="error">'.dol_escape_htmltag($gdpr->error).'</span>' : $count).'</td></tr>';
-print '</table></div>';
-print '<div class="opacitymedium margintoponly">'.$langs->trans($type === 'contact' ? 'ConvomailGdprScopeContact' : 'ConvomailGdprScopeThirdparty').' '.$langs->trans('ConvomailGdprMailServer').'</div>';
 
 print '<div class="tabsAction">';
 print '<form method="POST" action="'.dol_escape_htmltag($selfurl).'" class="inline-block">';
