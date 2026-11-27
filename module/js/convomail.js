@@ -130,7 +130,7 @@
 	 */
 	function loadThread(root) {
 		var slot = qs('.cm-conv-slot', root);
-		if (!slot) {
+		if (!slot || slot.classList.contains('cm-conv-off')) {
 			return;
 		}
 		fetch(slot.getAttribute('data-url'), { credentials: 'same-origin' })
@@ -170,7 +170,38 @@
 			});
 	}
 
+	/**
+	 * "Show conversation" switch, in the conversation area (Hide in its title, Show in the line left in its place)
+	 */
+	function setConversation(slot, show) {
+		var fd = new FormData();
+		fd.append('token', slot.getAttribute('data-token'));
+		fd.append('action', 'setconversation');
+		fd.append('show', show ? '1' : '0');
+		fetch(slot.getAttribute('data-url').split('?')[0], { method: 'POST', body: fd, credentials: 'same-origin' })
+			.then(function (r) { return r.json(); })
+			.then(function (res) {
+				if (!res.ok) {
+					notify(res.error || 'Error', false);
+					return;
+				}
+				slot.classList.toggle('cm-conv-off', !show);
+				slot.innerHTML = show ? '' : res.html;
+				slot.parentNode.classList.remove('cm-has-conv');
+				if (show) {
+					loadThread(slot.parentNode);
+				}
+			})
+			.catch(function () { notify('Error', false); });
+	}
+
 	document.addEventListener('click', function (ev) {
+		var toggle = ev.target.closest('.cm-conv-slot [data-cm-conversation]');
+		if (toggle) {
+			ev.preventDefault();
+			setConversation(toggle.closest('.cm-conv-slot'), toggle.getAttribute('data-cm-conversation') === '1');
+			return;
+		}
 		var images = ev.target.closest('[data-cm-conv-images]');
 		if (images) {
 			ev.preventDefault();
@@ -685,10 +716,6 @@
 		var pagesize = qs('form.cm-pagesize select');
 		if (pagesize) {
 			pagesize.addEventListener('change', function () { pagesize.form.submit(); });
-		}
-		var conversation = qs('form.cm-conversation-switch input[type="checkbox"]');
-		if (conversation) {
-			conversation.addEventListener('change', function () { conversation.form.submit(); });
 		}
 
 		var app = qs('.cm-app');

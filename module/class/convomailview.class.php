@@ -31,6 +31,7 @@ dol_include_once('/convomail/class/convomailmatcher.class.php');
 dol_include_once('/convomail/class/convomaillogger.class.php');
 dol_include_once('/convomail/class/convomailprojectresolver.class.php');
 dol_include_once('/convomail/class/convomailfiler.class.php');
+dol_include_once('/convomail/class/convomailthread.class.php');
 dol_include_once('/convomail/class/convomailavatar.class.php');
 dol_include_once('/convomail/class/convomailcreator.class.php');
 dol_include_once('/convomail/class/convomailtracker.class.php');
@@ -1045,10 +1046,13 @@ class ConvomailView
 
 		$h .= '</div>';	// cm-view-main
 
-		// Conversation (earlier messages and replies, including those sent): loaded afterwards, see ajax/thread.php
-		if (!empty($message['msgid']) && convomail_show_conversation()) {
+		// Conversation (earlier messages and replies, including those sent): loaded afterwards, see ajax/thread.php.
+		// Turned off by the user: a line in its place turns it back on (no search on the mail server meanwhile).
+		if (!empty($message['msgid'])) {
+			$showconv = convomail_show_conversation();
 			$h .= '<div class="cm-resize cm-resize-row" role="separator" aria-orientation="horizontal" tabindex="0" title="'.dol_escape_htmltag($langs->trans('ConvomailResizeHelp')).'"></div>';
-			$h .= '<div class="cm-conv-slot" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/thread.php', 1).$base).'"></div>';
+			$h .= '<div class="cm-conv-slot'.($showconv ? '' : ' cm-conv-off').'" data-url="'.dol_escape_htmltag(dol_buildpath('/convomail/ajax/thread.php', 1).$base).'" data-token="'.newToken().'">';
+			$h .= ($showconv ? '' : ConvomailThread::offHtml()).'</div>';
 		}
 		$h .= '</div>';
 
