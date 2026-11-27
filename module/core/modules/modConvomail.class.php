@@ -103,6 +103,10 @@ class modConvomail extends DolibarrModules
 		$this->tabs[] = array('data' => 'user:+convomail:MailAccounts,ConvomailAccount,/convomail/class/convomailaccount.class.php,countForUser:convomail@convomail:$user->hasRight(\'convomail\', \'account\', \'read\'):/convomail/user_accounts.php?id=__ID__');
 		// Emails tab on the project card: the project's email threads
 		$this->tabs[] = array('data' => 'project:+convomail_emails:ProjectEmails,ConvomailMessage,/convomail/class/convomailmessage.class.php,countForProject:convomail@convomail:$user->hasRight(\'convomail\', \'account\', \'read\'):/convomail/project_emails.php?id=__ID__');
+		// Personal data tab on third party and contact cards: their emails kept in Dolibarr, for access and erasure
+		// requests. Admins only, as core's Data privacy module
+		$this->tabs[] = array('data' => 'thirdparty:+convomail_personaldata:ConvomailPersonalEmailsTab:convomail@convomail:$user->admin && isModEnabled(\'agenda\'):/convomail/personal_emails.php?type=societe&id=__ID__');
+		$this->tabs[] = array('data' => 'contact:+convomail_personaldata:ConvomailPersonalEmailsTab:convomail@convomail:$user->admin && isModEnabled(\'agenda\'):/convomail/personal_emails.php?type=contact&id=__ID__');
 		// Tab in Home > Setup > Emails. Shown only once core calls complete_head_from_modules(..., 'email_admin') in add mode:
 		// see patches/dolibarr-email-admin-module-tabs.patch (proposed upstream). Without it, the setup page is reached from the module list.
 		$this->tabs[] = array('data' => 'email_admin:+convomail:ConvomailEmailTab:convomail@convomail:$user->admin:/convomail/admin/setup.php');
@@ -395,6 +399,9 @@ class modConvomail extends DolibarrModules
 
 			$this->delete_menus();
 			$this->insert_menus();
+			// Tabs added by a newer version (core stores them when the module is enabled)
+			$this->delete_tabs();
+			$this->insert_tabs();
 			// Rights added by a newer version, and the read right split from the admin one (1.4.0)
 			$this->insert_permissions(0);
 			$this->migrateReadRights();

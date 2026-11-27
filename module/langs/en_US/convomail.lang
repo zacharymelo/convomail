@@ -662,6 +662,7 @@ ConvomailRecordDocument = Document of %s
 
 # Personal data: a person's emails kept in Dolibarr (personal_emails.php, ConvomailGdpr)
 ConvomailPersonalEmails = Personal data: emails
+ConvomailPersonalEmailsTab = Email privacy
 ConvomailGdprCount = Emails kept in Dolibarr
 ConvomailGdprScopeContact = Emails logged in the agenda with this contact, as attendee or with one of its addresses as sender or recipient.
 ConvomailGdprScopeThirdparty = Emails logged in the agenda on this third party, or with its address as sender or recipient.
