@@ -668,7 +668,8 @@ class ConvomailView
 		$h .= '<span class="cm-list-count">'.dol_escape_htmltag($countlabel).'</span>';
 		$h .= '<span class="cm-list-tools">';
 		$h .= '<a class="cm-btn cm-iconbtn cm-list-refresh" href="'.dol_escape_htmltag($refreshurl).'" title="'.dol_escape_htmltag($langs->trans('ConvomailGetMailNow')).'"><span class="fas fa-sync-alt"></span></a>';
-		// Display: density of the rows and focus mode, remembered for the user (mailbox.php, action setdisplay)
+		// Display: order, layout, density, pictures and contact mark of the rows, focus mode; remembered for the user
+		// (mailbox.php, action setdisplay)
 		$h .= '<form method="POST" action="'.dol_escape_htmltag(dol_buildpath('/convomail/mailbox.php', 1)).'" class="cm-display">';
 		$h .= '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="setdisplay">';
 		$h .= '<input type="hidden" name="backtopage" value="'.dol_escape_htmltag($backtopage).'">';
@@ -689,6 +690,12 @@ class ConvomailView
 		$h .= '<div class="cm-display-title">'.$langs->trans('ConvomailDensity').'</div>';
 		foreach (array('compact', 'normal', 'comfortable') as $d) {
 			$h .= '<label><input type="radio" name="density" value="'.$d.'"'.($d === $density ? ' checked' : '').'> '.$langs->trans('ConvomailDensity_'.$d).'</label>';
+		}
+		// A hidden 0 before each box: an unticked box posts nothing, and the last value of a name wins
+		$h .= '<div class="cm-display-title">'.$langs->trans('ConvomailDisplayShow').'</div>';
+		foreach (array('pictures' => convomail_show_pictures(), 'contactmark' => convomail_show_contact_mark()) as $name => $shown) {
+			$h .= '<input type="hidden" name="'.$name.'" value="0">';
+			$h .= '<label title="'.dol_escape_htmltag($langs->trans('ConvomailDisplayShow_'.$name.'Help')).'"><input type="checkbox" class="cm-display-show" name="'.$name.'" value="1"'.($shown ? ' checked' : '').'> '.$langs->trans('ConvomailDisplayShow_'.$name).'</label>';
 		}
 		$h .= '<noscript><button type="submit" class="button small">'.$langs->trans('Save').'</button></noscript>';
 		$h .= '</div></details>';
