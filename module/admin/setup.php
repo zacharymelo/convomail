@@ -290,6 +290,18 @@ if ($tab === 'settings') {
 	print convomail_setup_row($langs->trans('ConvomailNotifyReadOther'), $langs->trans('ConvomailNotifyReadOtherDesc'), ajax_constantonoff('CONVOMAIL_NOTIFY_READ_OTHER'));
 	print '</table></div><br>';
 
+	// AI assistant tools over MCP: status only, the gate is core's MAIN_FEATURES_LEVEL (docs/MCP.md)
+	print convomail_setup_section($langs->trans('ConvomailSetupMcp'), 'fa-robot', $langs->trans('ConvomailSetupMcpIntro'));
+	if (!isModEnabled('ai') || !dol_include_once('/ai/class/mcptool.class.php') || !class_exists('McpTool')) {
+		$mcpstatus = '<span class="opacitymedium">'.$langs->trans('ConvomailMcpNoServer').'</span>';
+	} elseif (getDolGlobalInt('MAIN_FEATURES_LEVEL') < 1) {
+		$mcpstatus = '<span class="opacitymedium">'.$langs->trans('ConvomailMcpGatedOff').'</span>';
+	} else {
+		$mcpstatus = $langs->trans('ConvomailMcpOn');
+	}
+	print convomail_setup_row($langs->trans('ConvomailMcpTools'), $langs->trans('ConvomailMcpToolsDesc'), $mcpstatus);
+	print '</table></div><br>';
+
 	// Other
 	print convomail_setup_section($langs->trans('Other'), 'technic');
 	print convomail_setup_row($langs->trans('DebugMode'), $langs->trans('DebugModeDesc'), ajax_constantonoff('CONVOMAIL_DEBUG_MODE'));
