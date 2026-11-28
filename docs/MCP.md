@@ -1,6 +1,8 @@
 # Convomail MCP tools
 
-Spec for exposing Convomail to AI assistants (Claude, the Dolibarr assistant, any MCP client) through the MCP server of Dolibarr's AI module. Status: **MVP, for discussion** (branch `mcp-tools-mvp`).
+Spec for exposing Convomail to AI assistants (Claude, the Dolibarr assistant, any MCP client) through the MCP server of Dolibarr's AI module. Status: **experimental MVP, for discussion** (branch `mcp-tools-mvp`).
+
+**Experimental.** Core's MCP side is still moving (tool contract, categories, privacy rules), so these tools stay out of production installs until Dolibarr v26: `addMcpTools()` registers nothing unless `MAIN_FEATURES_LEVEL >= 1`, the same switch core puts its experimental AI options behind. Set *Home → Setup → Other → MAIN_FEATURES_LEVEL* to `1` (experimental) to use them.
 
 - Roadmap item: "Mailbox tools for core's AI assistant" ([ROADMAP.md](ROADMAP.md))
 - Pattern followed: `doli-metamessenger`'s MCP tools (Instagram/Messenger DMs), which run in production on Dolibarr 24.0.3

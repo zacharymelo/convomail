@@ -238,7 +238,8 @@ class ActionsConvomail
 	/**
 	 * addMcpTools hook (context 'aimcp'): registers Convomail's MCP tools with the AI module's MCP server (docs/MCP.md).
 	 * Only where that server exists: McpTool ships with it, not with every Dolibarr. The tools check rights and
-	 * account access themselves.
+	 * account access themselves. Experimental until Dolibarr v26: core's MCP contract is still moving, so the tools
+	 * register only when MAIN_FEATURES_LEVEL >= 1, the same gate core puts its experimental AI options behind.
 	 *
 	 * @param  array<string,mixed> $parameters  Hook parameters (db, user, conf)
 	 * @param  CommonObject|null   $object      The McpHandler
@@ -251,6 +252,9 @@ class ActionsConvomail
 		global $db, $user, $conf;
 
 		if (!isModEnabled('convomail') || !class_exists('McpTool')) {
+			return 0;
+		}
+		if (getDolGlobalInt('MAIN_FEATURES_LEVEL') < 1) {
 			return 0;
 		}
 		dol_include_once('/convomail/class/convomailmcptools.class.php');
