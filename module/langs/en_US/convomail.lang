@@ -707,6 +707,15 @@ ConvomailNotifyReadOtherDesc = When a user opens someone's mailbox through the r
 ConvomailReadNotifySubject = Your mailbox %s was opened in Dolibarr
 ConvomailReadNotifyText = Your mailbox %s was opened in Dolibarr by %s on %s, through the right to read other users' mailboxes. This was recorded in Dolibarr's security events.
 
+# AI assistant tools over MCP, experimental (admin/setup.php, docs/MCP.md)
+ConvomailSetupMcp = AI assistant tools (experimental)
+ConvomailSetupMcpIntro = Read-only tools that let an AI assistant search and read the emails Convomail sent or filed, through the MCP server of the AI module. Experimental while core's MCP side settles (expected with Dolibarr v26): the tools register only when experimental features are on (MAIN_FEATURES_LEVEL 1 or more). Details in the module's docs/MCP.md.
+ConvomailMcpTools = MCP tools
+ConvomailMcpToolsDesc = convomail_list_accounts, convomail_search_emails, convomail_get_thread, convomail_get_email, convomail_get_attachment. Each user sees only the mailboxes they can already read here: their own and the shared ones they were granted. If the MCP server setup keeps an explicit tool list, they must also be ticked there.
+ConvomailMcpNoServer = Not available: this Dolibarr has no MCP server (it comes with the AI module, Dolibarr 24+)
+ConvomailMcpGatedOff = Off: experimental features are disabled (MAIN_FEATURES_LEVEL is 0)
+ConvomailMcpOn = On: the tools register with the AI module's MCP server
+
 # Make shared: a person's named mailbox (accounts.php)
 ConvomailMakeSharedWarnNamed = Shared mailboxes are for role addresses (sales@, support@). If this address names a person, do not use it to let colleagues read or send as them: data protection authorities ask that a departed employee's mailbox be blocked, answered by an auto-reply and deleted after a short period, not given to others. For that, use "Employee leaving".
 ConvomailMakeSharedWarnLeft = %s has left or is disabled. Before sharing, inform them, let them collect their private emails, and set an auto-reply on the mail server saying they no longer work here and whom to contact.
